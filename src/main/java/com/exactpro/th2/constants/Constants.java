@@ -1,8 +1,5 @@
 package com.exactpro.th2.constants;
 
-import java.util.HashSet;
-import java.util.Set;
-
 public class Constants {
 
     //Tags
@@ -27,7 +24,7 @@ public class Constants {
 
 
     //Fields
-    public static final String BEGIN_STRING = BEGIN_STRING_TAG + "="; //todo add first sym soh
+    public static final String BEGIN_STRING = BEGIN_STRING_TAG + "=";
     public static final String BODY_LENGTH = BODY_LENGTH_TAG + "=";
     public static final String MSG_TYPE = MSG_TYPE_TAG + "=";
     public static final String SENDER_COMP_ID = SENDER_COMP_ID_TAG + "=";
@@ -47,22 +44,11 @@ public class Constants {
 
 
     //message types
-    public static final String MSG_TYPE_LOGON = "A"; //put in map
+    public static final String MSG_TYPE_LOGON = "A";
     public static final String MSG_TYPE_LOGOUT = "5";
     public static final String MSG_TYPE_HEARTBEAT = "0";
     public static final String MSG_TYPE_TEST_REQUEST = "1";
     public static final String MSG_TYPE_RESEND_REQUEST = "2";
     public static final String MSG_TYPE_SEQUENCE_RESET = "4";
 
-    //session message types
-    public static Set<String> sessionTypes = new HashSet<>();
-
-    public Constants() {
-        sessionTypes.add(MSG_TYPE_LOGON);
-        sessionTypes.add(MSG_TYPE_LOGOUT);
-        sessionTypes.add(MSG_TYPE_HEARTBEAT);
-        sessionTypes.add(MSG_TYPE_TEST_REQUEST);
-        sessionTypes.add(MSG_TYPE_RESEND_REQUEST);
-        sessionTypes.add(MSG_TYPE_SEQUENCE_RESET);
-    }
 }

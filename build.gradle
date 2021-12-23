@@ -1,42 +1,78 @@
 plugins {
     id 'java'
-    id 'org.jetbrains.kotlin.jvm' version '1.6.10-RC'
+    id 'org.jetbrains.kotlin.jvm' version '1.5.31'
+    id 'com.palantir.docker' version '0.25.0'
 }
 
+apply plugin: 'application'
+apply plugin: 'com.palantir.docker'
+
 group 'com.exactpro.th2'
-version '1.0-SNAPSHOT'
+version release_version
 
 repositories {
     mavenCentral()
+
+    maven {
+        name 'Sonatype_snapshots'
+        url 'https://s01.oss.sonatype.org/content/repositories/snapshots/'
+    }
+
+    maven {
+        name 'Sonatype_releases'
+        url 'https://s01.oss.sonatype.org/content/repositories/releases/'
+    }
 }
 
 dependencies {
     implementation 'org.slf4j:slf4j-api:1.7.32'
 
-    implementation 'io.netty:netty-all:4.1.70.Final'
+    implementation 'com.exactpro.th2:conn-dirty-tcp-core:0.0.1-th2-2785-+'
 
-    implementation 'com.exactpro.th2:common:3.23.0'
+    implementation 'io.netty:netty-all:4.1.72.Final'
+
+    implementation 'com.exactpro.th2:common:3.31.4'
 
     testImplementation 'org.mockito:mockito-all:1.10.19'
 
     testImplementation 'org.junit.platform:junit-platform-commons:1.8.2'
 
+    implementation 'com.google.auto.service:auto-service:1.0.1'
+    annotationProcessor 'com.google.auto.service:auto-service:1.0.1'
+
     testImplementation 'org.junit.jupiter:junit-jupiter-api:5.8.2'
     testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.8.2'
-    implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk8"
+    implementation 'org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.5.31'
 }
 
 test {
     useJUnitPlatform()
 }
 
+application {
+    mainClassName 'com.exactpro.th2.conn.dirty.tcp.core.MainKt'
+}
+applicationName = 'service'
+
+distTar {
+    archiveName "${applicationName}.tar"
+}
+
+dockerPrepare {
+    dependsOn distTar
+}
+
+docker {
+    copySpec.from(tarTree("$buildDir/distributions/${applicationName}.tar"))
+}
+
 compileKotlin {
     kotlinOptions {
-        jvmTarget = "1.8"
+        jvmTarget = "11"
     }
 }
 compileTestKotlin {
     kotlinOptions {
-        jvmTarget = "1.8"
+        jvmTarget = "11"
     }
 }

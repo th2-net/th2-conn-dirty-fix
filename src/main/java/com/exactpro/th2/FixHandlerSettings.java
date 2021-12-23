@@ -1,6 +1,8 @@
 package com.exactpro.th2;
 
-public class FixHandlerSettings implements IProtocolHandlerSettings{
+import com.exactpro.th2.conn.dirty.tcp.core.api.IProtocolHandlerSettings;
+
+public class FixHandlerSettings implements IProtocolHandlerSettings {
 
     private String beginString = "FIXT.1.1";
     private long heartBtInt = 30;

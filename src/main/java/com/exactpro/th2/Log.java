@@ -23,6 +23,7 @@ public class Log {
             int oldTag = log.keySet().iterator().next();
             remove(oldTag);
         }
+
         log.put(tag, message);
     }
 
@@ -59,14 +60,6 @@ public class Log {
     public LinkedHashMap<Integer, ByteBuf> getLog() {
         return log;
     }
-
-    public void setLog(
-            LinkedHashMap<Integer, ByteBuf> log) {
-        this.log = log;
-    }
-
-
-
 }
 
 

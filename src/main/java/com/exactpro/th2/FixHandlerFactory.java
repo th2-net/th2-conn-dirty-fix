@@ -1,25 +1,31 @@
 package com.exactpro.th2;
 
+import com.exactpro.th2.conn.dirty.tcp.core.api.IContext;
+import com.exactpro.th2.conn.dirty.tcp.core.api.IFactory;
+import com.exactpro.th2.conn.dirty.tcp.core.api.IProtocolHandler;
+import com.exactpro.th2.conn.dirty.tcp.core.api.IProtocolHandlerSettings;
 import org.jetbrains.annotations.NotNull;
 
-public class FixHandlerFactory implements IProtocolHandlerFactory{
+import java.util.Objects;
 
-    @NotNull
-    @Override
-    public String getProtocol() {
-        return null;
-    }
+public class FixHandlerFactory implements IFactory<IProtocolHandler, IProtocolHandlerSettings> {
+
 
     @NotNull
     @Override
     public Class<? extends IProtocolHandlerSettings> getSettings() {
-        return null;
+        return FixHandlerSettings.class;
     }
 
     @NotNull
     @Override
-    public IProtocolHandler create(@NotNull IProtocolHandlerContext context) {
-        return null;
+    public String getName() {
+        return FixHandlerFactory.class.getSimpleName();
+    }
+
+    @Override
+    public IProtocolHandler create(@NotNull IContext<IProtocolHandlerSettings> iContext) {
+        return new FixHandler(Objects.requireNonNull(iContext.getChannel()), Objects.requireNonNull(iContext.getSettings()));
     }
 }
 
