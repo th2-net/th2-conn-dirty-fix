@@ -11,6 +11,7 @@ public class FixHandlerSettings implements IProtocolHandlerSettings {
     private String encryptMethod = "0";
     private String username = "username";
     private String password = "pass";
+    private long defaultApplVerID = 9;
 
     private int testRequestDelay = 10;
     private int reconnectDelay = 5;
@@ -95,5 +96,13 @@ public class FixHandlerSettings implements IProtocolHandlerSettings {
 
     public void setDisconnectRequestDelay(int disconnectRequestDelay) {
         this.disconnectRequestDelay = disconnectRequestDelay;
+    }
+
+    public long getDefaultApplVerID() {
+        return defaultApplVerID;
+    }
+
+    public void setDefaultApplVerID(long defaultApplVerID) {
+        this.defaultApplVerID = defaultApplVerID;
     }
 }

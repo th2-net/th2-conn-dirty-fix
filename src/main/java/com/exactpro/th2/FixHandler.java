@@ -3,7 +3,6 @@ package com.exactpro.th2;
 import com.exactpro.th2.conn.dirty.tcp.core.api.IChannel;
 import com.exactpro.th2.conn.dirty.tcp.core.api.IProtocolHandler;
 import com.exactpro.th2.conn.dirty.tcp.core.api.IProtocolHandlerSettings;
-import com.exactpro.th2.constants.Constants;
 import com.exactpro.th2.util.MessageUtil;
 import com.google.auto.service.AutoService;
 import io.netty.buffer.ByteBuf;
@@ -26,7 +25,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import static com.exactpro.th2.constants.Constants.*;
 
-//todo add meta-inf
 //todo parse logout
 //todo gapFillTag
 //todo ring buffer as cache
@@ -204,8 +202,8 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
 
         StringBuilder resendRequest = new StringBuilder();
         setHeader(resendRequest, MSG_TYPE_RESEND_REQUEST);
-        resendRequest.append(Constants.BEGIN_SEQ_NO).append(beginSeqNo).append(SOH);
-        resendRequest.append(Constants.END_SEQ_NO).append(0).append(SOH);
+        resendRequest.append(BEGIN_SEQ_NO).append(beginSeqNo).append(SOH);
+        resendRequest.append(END_SEQ_NO).append(0).append(SOH);
         setChecksumAndBodyLength(resendRequest);
 
         if (enabled.get()) {
@@ -359,7 +357,7 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
 
         StringBuilder testRequest = new StringBuilder();
         setHeader(testRequest, MSG_TYPE_TEST_REQUEST);
-        testRequest.append(Constants.TEST_REQ_ID).append(testReqID.incrementAndGet()).append(SOH);
+        testRequest.append(TEST_REQ_ID).append(testReqID.incrementAndGet()).append(SOH);
         setChecksumAndBodyLength(testRequest);
         if (enabled.get()) {
             client.send(Unpooled.wrappedBuffer(testRequest.toString().getBytes(StandardCharsets.UTF_8)), Collections.emptyMap(), IChannel.SendMode.MANGLE);
@@ -375,10 +373,11 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
         StringBuilder logon = new StringBuilder();// add defaultApplVerID for fix5+
 
         setHeader(logon, MSG_TYPE_LOGON);
-        logon.append(Constants.ENCRYPT_METHOD).append(settings.getEncryptMethod()).append(SOH);
-        logon.append(Constants.HEART_BT_INT).append(settings.getHeartBtInt()).append(SOH);
-        logon.append(Constants.USERNAME).append(settings.getUsername()).append(SOH);
-        logon.append(Constants.PASSWORD).append(settings.getPassword()).append(SOH);
+        logon.append(ENCRYPT_METHOD).append(settings.getEncryptMethod()).append(SOH);
+        logon.append(HEART_BT_INT).append(settings.getHeartBtInt()).append(SOH);
+        logon.append(DEFAULT_APPL_VER_ID).append(settings.getDefaultApplVerID()).append(SOH);
+        logon.append(USERNAME).append(settings.getUsername()).append(SOH);
+        logon.append(PASSWORD).append(settings.getPassword()).append(SOH);
         setChecksumAndBodyLength(logon);
 
         client.send(Unpooled.wrappedBuffer(logon.toString().getBytes(StandardCharsets.UTF_8)), Collections.emptyMap(), IChannel.SendMode.MANGLE);
@@ -414,17 +413,17 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
 
     private void setHeader(StringBuilder stringBuilder, String msgType) {
 
-        stringBuilder.append(Constants.BEGIN_STRING).append(settings.getBeginString()).append(SOH);
-        stringBuilder.append(Constants.MSG_TYPE).append(msgType).append(SOH);
-        stringBuilder.append(Constants.SENDER_COMP_ID).append(settings.getSenderCompID()).append(SOH);
-        stringBuilder.append(Constants.TARGET_COMP_ID).append(settings.getTargetCompID()).append(SOH);
-        stringBuilder.append(Constants.SENDING_TIME).append(getTime()).append(SOH);
+        stringBuilder.append(BEGIN_STRING).append(settings.getBeginString()).append(SOH);
+        stringBuilder.append(MSG_TYPE).append(msgType).append(SOH);
+        stringBuilder.append(SENDER_COMP_ID).append(settings.getSenderCompID()).append(SOH);
+        stringBuilder.append(TARGET_COMP_ID).append(settings.getTargetCompID()).append(SOH);
+        stringBuilder.append(SENDING_TIME).append(getTime()).append(SOH);
     }
 
     private void setChecksumAndBodyLength(StringBuilder stringBuilder) {
-        stringBuilder.append(Constants.CHECKSUM).append("000").append(SOH);
+        stringBuilder.append(CHECKSUM).append("000").append(SOH);
         stringBuilder.insert(stringBuilder.indexOf(SOH + MSG_TYPE) + 1,
-                Constants.BODY_LENGTH + getBodyLength(stringBuilder) + SOH);
+                BODY_LENGTH + getBodyLength(stringBuilder) + SOH);
         stringBuilder.replace(stringBuilder.lastIndexOf("000" + SOH), stringBuilder.lastIndexOf(SOH), getChecksum(stringBuilder));
     }
 
@@ -457,7 +456,7 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
     public int getBodyLength(StringBuilder message) { //do private
 
         int start = message.indexOf(SOH, message.indexOf(SOH + BODY_LENGTH) + 1);
-        int end = message.indexOf(SOH + Constants.CHECKSUM);
+        int end = message.indexOf(SOH + CHECKSUM);
         return end - start;
     }
 

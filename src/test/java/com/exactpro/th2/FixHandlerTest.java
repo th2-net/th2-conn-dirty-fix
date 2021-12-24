@@ -12,6 +12,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.Instant;
@@ -90,8 +91,8 @@ class FixHandlerTest {
 
     @Test
     void sendResendRequestTest() {
-        String expectedLogon = "8=FIXT.1.1\u00019=83\u000135=A\u000149=client\u000156=server\u0001" +         // #1 sent logon
-                "52=2014-12-22T10:15:30Z\u000198=0\u0001108=30\u0001553=username\u0001554=pass\u000110=098\u0001";
+        String expectedLogon = "8=FIXT.1.1\u00019=90\u000135=A\u000149=client\u000156=server\u0001" +         // #1 sent logon
+                "52=2014-12-22T10:15:30Z\u000198=0\u0001108=30\u00011137=9\001553=username\u0001554=pass\u000110=163\u0001";
         String expectedHeartbeat = "8=FIXT.1.1\u00019=49\u000135=0\u000149=client\u000156=server\u0001" +     // #2 sent heartbeat
                 "52=2014-12-22T10:15:30Z\u000110=108\u0001";
         String expectedResendRequest = "8=FIXT.1.1\u00019=58\u000135=2\u000149=client\u000156=server" +       // #3 sent resendRequest
@@ -114,7 +115,7 @@ class FixHandlerTest {
         } catch (InterruptedException e) {
             e.printStackTrace();
         }
-        assertEquals("8=FIXT.1.1\u00019=83\u000135=A\u000149=client\u000156=server\u000152=2014-12-22T10:15:30Z\u000198=0\u0001108=30\u0001553=username\u0001554=pass\u000110=098\u0001",
+        assertEquals("8=FIXT.1.1\u00019=90\u000135=A\u000149=client\u000156=server\u000152=2014-12-22T10:15:30Z\u000198=0\u0001108=30\u00011137=9\001553=username\u0001554=pass\u000110=163\u0001",
                 new String(client.getQueue().get(0).array()));
     }
 
@@ -246,7 +247,6 @@ class FixHandlerTest {
 
 }
 
-
 class Client implements IChannel {
     private final FixHandlerSettings fixHandlerSettings;
     private final MyFixHandler fixHandler;
@@ -255,6 +255,33 @@ class Client implements IChannel {
     Client() {
         this.fixHandlerSettings = new FixHandlerSettings();
         this.fixHandler = new MyFixHandler(this, fixHandlerSettings);
+    }
+
+    @Override
+    public void open() {
+
+    }
+
+    @Override
+    public void open(InetSocketAddress address, boolean secure) {
+
+    }
+
+    @NotNull
+    @Override
+    public MessageID send(@NotNull ByteBuf byteBuf, @NotNull Map<String, String> map, @NotNull IChannel.SendMode sendMode) {
+        queue.add(byteBuf);
+        return null;
+    }
+
+    @Override
+    public boolean isOpen() {
+        return false;
+    }
+
+    @Override
+    public void close() {
+
     }
 
     public FixHandlerSettings getFixHandlerSettings() {
@@ -269,29 +296,17 @@ class Client implements IChannel {
         return queue;
     }
 
-    @Override
-    public boolean isOpen() {
-        return false;
-    }
-
-    @Override
-    public void close() {
-
-    }
-
-    @Override
-    public void open() {
-
-    }
-
     @NotNull
     @Override
-    public MessageID send(@NotNull ByteBuf byteBuf, @NotNull Map<String, String> map, @NotNull IChannel.SendMode sendMode) {
-        queue.add(byteBuf);
+    public InetSocketAddress getAddress() {
         return null;
     }
-}
 
+    @Override
+    public boolean isSecure() {
+        return false;
+    }
+}
 
 class MyFixHandler extends FixHandler {
 
