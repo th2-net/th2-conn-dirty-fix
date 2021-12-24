@@ -1,7 +1,6 @@
 package com.exactpro.th2;
 
 import com.exactpro.th2.conn.dirty.tcp.core.api.IContext;
-import com.exactpro.th2.conn.dirty.tcp.core.api.IFactory;
 import com.exactpro.th2.conn.dirty.tcp.core.api.IProtocolHandler;
 import com.exactpro.th2.conn.dirty.tcp.core.api.IProtocolHandlerFactory;
 import com.exactpro.th2.conn.dirty.tcp.core.api.IProtocolHandlerSettings;
@@ -11,7 +10,7 @@ import org.jetbrains.annotations.NotNull;
 import java.util.Objects;
 
 @AutoService(IProtocolHandlerFactory.class)
-public class FixHandlerFactory implements IFactory<IProtocolHandler, IProtocolHandlerSettings> {
+public class FixHandlerFactory implements IProtocolHandlerFactory {
 
 
     @NotNull
