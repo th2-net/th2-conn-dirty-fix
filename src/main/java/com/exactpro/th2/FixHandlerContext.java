@@ -5,10 +5,12 @@ import com.exactpro.th2.common.schema.dictionary.DictionaryType;
 import com.exactpro.th2.conn.dirty.tcp.core.api.IChannel;
 import com.exactpro.th2.conn.dirty.tcp.core.api.IContext;
 import com.exactpro.th2.conn.dirty.tcp.core.api.IProtocolHandlerSettings;
+import com.google.auto.service.AutoService;
 import org.jetbrains.annotations.NotNull;
 
 import java.io.InputStream;
 
+@AutoService(IContext.class)
 public class FixHandlerContext implements IContext<IProtocolHandlerSettings> {
 
     @NotNull

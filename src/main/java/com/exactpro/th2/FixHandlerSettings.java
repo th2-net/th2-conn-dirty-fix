@@ -1,7 +1,9 @@
 package com.exactpro.th2;
 
 import com.exactpro.th2.conn.dirty.tcp.core.api.IProtocolHandlerSettings;
+import com.google.auto.service.AutoService;
 
+@AutoService(IProtocolHandlerSettings.class)
 public class FixHandlerSettings implements IProtocolHandlerSettings {
 
     private String beginString = "FIXT.1.1";
