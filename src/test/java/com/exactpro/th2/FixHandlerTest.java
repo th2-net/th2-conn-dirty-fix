@@ -2,15 +2,18 @@ package com.exactpro.th2;
 
 import com.exactpro.th2.common.grpc.MessageID;
 import com.exactpro.th2.conn.dirty.tcp.core.api.IChannel;
+import com.exactpro.th2.conn.dirty.tcp.core.api.IContext;
 import com.exactpro.th2.conn.dirty.tcp.core.api.IProtocolHandlerSettings;
 import com.exactpro.th2.constants.Constants;
 import com.exactpro.th2.util.MessageUtil;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import org.jetbrains.annotations.NotNull;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
 
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
@@ -30,15 +33,15 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 class FixHandlerTest {
 
+    private static final Client client = new Client();
     private static ByteBuf buffer;
     private static ByteBuf oneMessageBuffer;
     private static ByteBuf brokenBuffer;
-    private final Client client = new Client();
-    private final FixHandler fixHandler = client.getFixHandler();
+    private static FixHandler fixHandler = client.getFixHandler();
 
     @BeforeAll
     static void init() {
-
+        fixHandler.onOpen();
         oneMessageBuffer = Unpooled.wrappedBuffer("8=FIXT.1.1\0019=13\00135=AE\001552=1\00110=169\001".getBytes(StandardCharsets.US_ASCII));
         buffer = Unpooled.wrappedBuffer(("8=FIXT.1.1\0019=13\00135=AE\001552=1\00110=169\0018=FIXT.1.1\0019=13\00135=NN" +
                 "\001552=2\00110=100\0018=FIXT.1.1\0019=13\00135=NN\001552=2\00110=100\001").getBytes(StandardCharsets.US_ASCII));
@@ -48,6 +51,11 @@ class FixHandlerTest {
     @BeforeEach
     void beforeEach() {
         fixHandler.getEnabled().set(true);
+    }
+
+    @AfterAll
+    static void afterAll(){
+        fixHandler.close();
     }
 
     @Test
@@ -98,10 +106,10 @@ class FixHandlerTest {
         String expectedResendRequest = "8=FIXT.1.1\u00019=58\u000135=2\u000149=client\u000156=server" +       // #3 sent resendRequest
                 "\u000152=2014-12-22T10:15:30Z\u00017=1\u000116=0\u000110=233\u0001";
 
-        fixHandler.onOpen();
+        client.clearQueue();
+        fixHandler.sendLogon();
         fixHandler.sendHeartbeat();
         fixHandler.sendResendRequest(1);
-        fixHandler.close();
         assertEquals(expectedLogon, new String(client.getQueue().get(0).array()));
         assertEquals(expectedHeartbeat, new String(client.getQueue().get(1).array()));
         assertEquals(expectedResendRequest, new String(client.getQueue().get(2).array()));
@@ -109,6 +117,7 @@ class FixHandlerTest {
 
     @Test
     void onConnectionTest() {
+        client.clearQueue();
         fixHandler.onOpen();
         try {
             Thread.sleep(10000);
@@ -163,8 +172,8 @@ class FixHandlerTest {
     @Test
     void sendTestRequestTest() {
         String expected = "8=FIXT.1.1\u00019=55\u000135=1\u000149=client\u000156=server\u000152=2014-12-22T10:15:30Z\u0001112=1\u000110=109\u0001";
+        client.clearQueue();
         fixHandler.sendTestRequest();
-        fixHandler.close();
         assertEquals(expected, new String(client.getQueue().get(0).array()));
     }
 
@@ -254,7 +263,11 @@ class Client implements IChannel {
 
     Client() {
         this.fixHandlerSettings = new FixHandlerSettings();
-        this.fixHandler = new MyFixHandler(this, fixHandlerSettings);
+        IContext<IProtocolHandlerSettings> context = Mockito.mock(IContext.class);
+        Mockito.when(context.getSettings()).thenReturn(fixHandlerSettings);
+        Mockito.when(context.getChannel()).thenReturn(this);
+
+        this.fixHandler = new MyFixHandler(context);
     }
 
     @Override
@@ -296,6 +309,10 @@ class Client implements IChannel {
         return queue;
     }
 
+    public void clearQueue(){
+        this.queue.clear();
+    }
+
     @NotNull
     @Override
     public InetSocketAddress getAddress() {
@@ -310,8 +327,8 @@ class Client implements IChannel {
 
 class MyFixHandler extends FixHandler {
 
-    public MyFixHandler(IChannel client, IProtocolHandlerSettings settings) {
-        super(client, settings);
+    public MyFixHandler(IContext<IProtocolHandlerSettings> context) {
+        super(context);
     }
 
     @Override

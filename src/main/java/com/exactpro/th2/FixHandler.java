@@ -1,6 +1,7 @@
 package com.exactpro.th2;
 
 import com.exactpro.th2.conn.dirty.tcp.core.api.IChannel;
+import com.exactpro.th2.conn.dirty.tcp.core.api.IContext;
 import com.exactpro.th2.conn.dirty.tcp.core.api.IProtocolHandler;
 import com.exactpro.th2.conn.dirty.tcp.core.api.IProtocolHandlerSettings;
 import com.exactpro.th2.util.MessageUtil;
@@ -45,18 +46,16 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
     private final AtomicInteger testReqID = new AtomicInteger(0);
     private final AtomicBoolean enabled = new AtomicBoolean(false);
     private final ScheduledExecutorService executorService;
-    private final IChannel client;
+    private final IContext<IProtocolHandlerSettings> context;
     private Future<?> heartbeatTimer;
     private Future<?> testRequestTimer;
     private Future<?> reconnectRequestTimer;
     private Future<?> disconnectRequest;
-
-
+    private IChannel client;
     protected FixHandlerSettings settings;
 
-    public FixHandler(IChannel client, IProtocolHandlerSettings settings) {
-        this.client = client;
-        this.settings = (FixHandlerSettings) settings;
+    public FixHandler(IContext<IProtocolHandlerSettings> context) {
+        this.context = context;
         executorService = Executors.newScheduledThreadPool(1);
     }
 
@@ -336,6 +335,8 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
 
     @Override
     public void onOpen() {
+        this.client = context.getChannel();
+        this.settings = (FixHandlerSettings) context.getSettings();
         sendLogon();
     }
 
