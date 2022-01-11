@@ -31,7 +31,7 @@ dependencies {
 
     implementation 'io.netty:netty-all:4.1.72.Final'
 
-    implementation 'com.exactpro.th2:common:3.31.4'
+    implementation 'com.exactpro.th2:common:3.31.5'
 
     testImplementation 'org.mockito:mockito-all:1.10.19'
 

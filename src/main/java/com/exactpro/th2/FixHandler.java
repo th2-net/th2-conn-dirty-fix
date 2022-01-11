@@ -4,6 +4,7 @@ import com.exactpro.th2.conn.dirty.tcp.core.api.IChannel;
 import com.exactpro.th2.conn.dirty.tcp.core.api.IContext;
 import com.exactpro.th2.conn.dirty.tcp.core.api.IProtocolHandler;
 import com.exactpro.th2.conn.dirty.tcp.core.api.IProtocolHandlerSettings;
+import com.exactpro.th2.conn.dirty.tcp.core.util.CommonUtil;
 import com.exactpro.th2.util.MessageUtil;
 import com.google.auto.service.AutoService;
 import io.netty.buffer.ByteBuf;
@@ -64,7 +65,6 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
 
         int offset = buffer.readerIndex();
         int beginStringIdx = MessageUtil.findTag(buffer, offset, BEGIN_STRING_TAG);
-
         if (beginStringIdx == -1) {
             if (buffer.writerIndex() > 0) {
                 buffer.readerIndex(buffer.writerIndex());
@@ -105,27 +105,27 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
     @Override
     public Map<String, String> onIncoming(@NotNull ByteBuf message) {
 
-        Map<String, String> meta = new HashMap<>();
+        Map<String, String> metadata = new HashMap<>();
 
         int beginString = MessageUtil.findTag(message, BEGIN_STRING_TAG);
 
         if (beginString == -1) {
-            meta.put(REJECT_REASON, "Not a FIX message");
-            return meta;
+            metadata.put(REJECT_REASON, "Not a FIX message");
+            return metadata;
         }
 
         String msgSeqNumValue = MessageUtil.getTagValue(message, MSG_SEQ_NUM_TAG);
         if (msgSeqNumValue == null) {
-            meta.put(REJECT_REASON, "No msgSeqNum Field");
+            metadata.put(REJECT_REASON, "No msgSeqNum Field");
             LOGGER.error("Invalid message. No MsgSeqNum in message: {}", message.toString(StandardCharsets.US_ASCII));
-            return meta;
+            return metadata;
         }
 
         String msgType = MessageUtil.getTagValue(message, MSG_TYPE_TAG);
         if (msgType == null) {
-            meta.put(REJECT_REASON, "No msgType Field");
+            metadata.put(REJECT_REASON, "No msgType Field");
             LOGGER.error("Invalid message. No MsgType in message: {}", message.toString(StandardCharsets.US_ASCII));
-            return meta;
+            return metadata;
         }
 
         serverMsgSeqNum.incrementAndGet();
@@ -151,6 +151,7 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
                     disconnectRequest.cancel(false);
                 }
                 enabled.set(false);
+                context.send(CommonUtil.toEvent("logout for sender - " + settings.getSenderCompID()));//make more useful
                 break;
             case MSG_TYPE_RESEND_REQUEST:
                 handleResendRequest(message);
@@ -164,9 +165,9 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
             testRequestTimer.cancel(false);
         }
 
-        meta.put(STRING_MSG_TYPE, msgType);
+        metadata.put(STRING_MSG_TYPE, msgType);
 
-        return meta;
+        return metadata;
     }
 
     private void resetSequence(ByteBuf message) {
@@ -268,6 +269,7 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
                 return false;
             }
             serverMsgSeqNum.set(Integer.parseInt(msgSeqNumValue));
+            context.send(CommonUtil.toEvent("successful login"));
             return true;
         }
         return false;
@@ -371,7 +373,7 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
 
     public void sendLogon() {
 
-        StringBuilder logon = new StringBuilder();// add defaultApplVerID for fix5+
+        StringBuilder logon = new StringBuilder();
 
         setHeader(logon, MSG_TYPE_LOGON);
         logon.append(ENCRYPT_METHOD).append(settings.getEncryptMethod()).append(SOH);
