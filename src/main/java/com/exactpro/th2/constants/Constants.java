@@ -2,6 +2,8 @@ package com.exactpro.th2.constants;
 
 public class Constants {
 
+    public static final String SOH = "\001";
+
     //Tags
     public static final String BEGIN_STRING_TAG = "8";
     public static final String BODY_LENGTH_TAG = "9";
@@ -25,24 +27,24 @@ public class Constants {
 
 
     //Fields
-    public static final String BEGIN_STRING = BEGIN_STRING_TAG + "=";
-    public static final String BODY_LENGTH = BODY_LENGTH_TAG + "=";
-    public static final String MSG_TYPE = MSG_TYPE_TAG + "=";
-    public static final String SENDER_COMP_ID = SENDER_COMP_ID_TAG + "=";
-    public static final String TARGET_COMP_ID = TARGET_COMP_ID_TAG + "=";
-    public static final String MSG_SEQ_NUM = MSG_SEQ_NUM_TAG + "=";
-    public static final String SENDING_TIME = SENDING_TIME_TAG + "=";
-    public static final String CHECKSUM = CHECKSUM_TAG + "=";
-    public static final String ENCRYPT_METHOD = ENCRYPT_METHOD_TAG + "=";
-    public static final String HEART_BT_INT = HEART_BT_INT_TAG + "=";
-    public static final String USERNAME = USERNAME_TAG + "=";
-    public static final String PASSWORD = PASSWORD_TAG + "=";
-    public static final String TEST_REQ_ID = TEST_REQ_ID_TAG + "=";
-    public static final String BEGIN_SEQ_NO = BEGIN_SEQ_NO_TAG + "=";
-    public static final String END_SEQ_NO = END_SEQ_NO_TAG + "=";
-    public static final String NEW_SEQ_NO = NEW_SEQ_NO_TAG + "=";
-    public static final String GAP_FILL_FLAG = GAP_FILL_FLAG_TAG + "=";
-    public static final String DEFAULT_APPL_VER_ID = DEFAULT_APPL_VER_ID_TAG + "=";
+    public static final String BEGIN_STRING = SOH + BEGIN_STRING_TAG + "=";
+    public static final String BODY_LENGTH = SOH + BODY_LENGTH_TAG + "=";
+    public static final String MSG_TYPE = SOH + MSG_TYPE_TAG + "=";
+    public static final String SENDER_COMP_ID = SOH + SENDER_COMP_ID_TAG + "=";
+    public static final String TARGET_COMP_ID = SOH + TARGET_COMP_ID_TAG + "=";
+    public static final String MSG_SEQ_NUM = SOH + MSG_SEQ_NUM_TAG + "=";
+    public static final String SENDING_TIME = SOH + SENDING_TIME_TAG + "=";
+    public static final String CHECKSUM = SOH + CHECKSUM_TAG + "=";
+    public static final String ENCRYPT_METHOD = SOH + ENCRYPT_METHOD_TAG + "=";
+    public static final String HEART_BT_INT = SOH + HEART_BT_INT_TAG + "=";
+    public static final String USERNAME = SOH + USERNAME_TAG + "=";
+    public static final String PASSWORD = SOH + PASSWORD_TAG + "=";
+    public static final String TEST_REQ_ID = SOH + TEST_REQ_ID_TAG + "=";
+    public static final String BEGIN_SEQ_NO = SOH + BEGIN_SEQ_NO_TAG + "=";
+    public static final String END_SEQ_NO = SOH + END_SEQ_NO_TAG + "=";
+    public static final String NEW_SEQ_NO = SOH + NEW_SEQ_NO_TAG + "=";
+    public static final String GAP_FILL_FLAG = SOH + GAP_FILL_FLAG_TAG + "=";
+    public static final String DEFAULT_APPL_VER_ID = SOH + DEFAULT_APPL_VER_ID_TAG + "=";
 
 
     //message types

@@ -21,7 +21,6 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -29,6 +28,7 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 
 class FixHandlerTest {
@@ -54,7 +54,7 @@ class FixHandlerTest {
     }
 
     @AfterAll
-    static void afterAll(){
+    static void afterAll() {
         fixHandler.close();
     }
 
@@ -64,25 +64,27 @@ class FixHandlerTest {
         ByteBuf result1 = fixHandler.onReceive(brokenBuffer);
         ByteBuf result2 = fixHandler.onReceive(brokenBuffer);
         String expected0 = "A";
-        String expected1 = "8=FIXT.1.19=1335=AE552=110=1691313";
-        String expected2 = "8=FIXT.1.1\0019=13\00135=AE\001552=1\00110=169\001";
+        String expected1 = "8=FIXT.1.19=1335=AE552=110=16913138=FIXT.1.1\0019=13\00135=AE\001552=1\00110=169\001";
+
 
         assertNotNull(result0);
         assertEquals(expected0, new String(result0.array()));
         assertNotNull(result1);
         assertEquals(expected1, new String(result1.array()));
-        assertNotNull(result2);
-        assertEquals(expected2, new String(result2.array()));
+        assertNull(result2);
     }
 
     @Test
     void onReceiveCorrectMessagesTest() {
 
+        buffer = Unpooled.wrappedBuffer(("8=FIXT.1.1\0019=13\00135=AE\001552=1\00158=11111\00110=169\0018=FIXT.1.1\0019=13\00135=NN" +
+                "\001552=2\00110=100\0018=FIXT.1.1\0019=13\00135=NN\001552=2\00110=100\001").getBytes(StandardCharsets.US_ASCII));
+
         ByteBuf result1 = fixHandler.onReceive(buffer);
         ByteBuf result2 = fixHandler.onReceive(buffer);
         ByteBuf result3 = fixHandler.onReceive(buffer);
 
-        String expected1 = "8=FIXT.1.1\0019=13\00135=AE\001552=1\00110=169\001";
+        String expected1 = "8=FIXT.1.1\0019=13\00135=AE\001552=1\00158=11111\00110=169\001";
         String expected2 = "8=FIXT.1.1\0019=13\00135=NN\001552=2\00110=100\001";
         String expected3 = "8=FIXT.1.1\0019=13\00135=NN\001552=2\00110=100\001";
 
@@ -129,11 +131,20 @@ class FixHandlerTest {
     }
 
     @Test
-    void prepareMessageTest() {
-        ByteBuf bufferForPrepareMessage = Unpooled.wrappedBuffer("8=FIXT.1.1\0019=13\00135=A\u000134=1\001552=1\00110=169\001".getBytes(StandardCharsets.US_ASCII));
+    void onOutgoingMessageTest() {
+        ByteBuf bufferForPrepareMessage = Unpooled.wrappedBuffer("8=FIXT.1.1\0019=13\00135=A\001552=1\00110=169\001".getBytes(StandardCharsets.US_ASCII));
+
+        String expectedMessage = "8=FIXT.1.1\u00019=60\u000135=A\u0001552=1\00149=client\u000156=server\u000152=2014-12-22T10:15:30Z\u000134=1\u000110=087\u0001";
+        String expectedMessage2 = "8=FIXT.1.1\u00019=55\u0001552=1\00149=client\u000156=server\u000152=2014-12-22T10:15:30Z\u000134=2\u000110=117\u0001";
         Map<String, String> expected = new HashMap<>();
         expected.put("MsgType", "A");
-        Map<String, String> actual = fixHandler.onOutgoing(bufferForPrepareMessage, Collections.emptyMap());
+
+        Map<String, String> actual = fixHandler.onOutgoing(bufferForPrepareMessage, new HashMap<String, String>());
+        Map<String, String> actual2 = fixHandler.onOutgoing(Unpooled.wrappedBuffer("552=1\001".getBytes(StandardCharsets.UTF_8)), new HashMap<>());
+        Log log = fixHandler.getOutgoingMessages();
+
+        assertEquals(expectedMessage, new String(log.get(1).array()));
+        assertEquals(expectedMessage2, new String(log.get(2).array()));
         assertEquals(expected, actual);
     }
 
@@ -309,7 +320,7 @@ class Client implements IChannel {
         return queue;
     }
 
-    public void clearQueue(){
+    public void clearQueue() {
         this.queue.clear();
     }
 

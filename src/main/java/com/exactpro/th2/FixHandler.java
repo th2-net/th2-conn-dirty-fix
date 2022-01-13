@@ -4,6 +4,7 @@ import com.exactpro.th2.conn.dirty.tcp.core.api.IChannel;
 import com.exactpro.th2.conn.dirty.tcp.core.api.IContext;
 import com.exactpro.th2.conn.dirty.tcp.core.api.IProtocolHandler;
 import com.exactpro.th2.conn.dirty.tcp.core.api.IProtocolHandlerSettings;
+import com.exactpro.th2.conn.dirty.tcp.core.util.ByteBufUtil;
 import com.exactpro.th2.conn.dirty.tcp.core.util.CommonUtil;
 import com.exactpro.th2.util.MessageUtil;
 import com.google.auto.service.AutoService;
@@ -64,7 +65,8 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
     public ByteBuf onReceive(ByteBuf buffer) {
 
         int offset = buffer.readerIndex();
-        int beginStringIdx = MessageUtil.findTag(buffer, offset, BEGIN_STRING_TAG);
+        if (offset == buffer.writerIndex()) return null;
+        int beginStringIdx = ByteBufUtil.indexOf(buffer,"8=FIX");
         if (beginStringIdx == -1) {
             if (buffer.writerIndex() > 0) {
                 buffer.readerIndex(buffer.writerIndex());
@@ -78,17 +80,17 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
             return buffer.copy(offset, beginStringIdx - offset);
         }
 
-        int nextBeginString = MessageUtil.findTag(buffer, beginStringIdx + 1, BEGIN_STRING_TAG);
-        int checksum = MessageUtil.findTag(buffer, beginStringIdx, CHECKSUM_TAG);
+        int nextBeginString = ByteBufUtil.indexOf(buffer, SOH + "8=FIX") + 1;
+        int checksum = ByteBufUtil.indexOf(buffer, SOH + CHECKSUM, beginStringIdx);
         int endOfMessageIdx = checksum + 7; //checksum is always 3 digits // or we should search next soh?
 
         try {
-            if (checksum == -1 || buffer.getByte(endOfMessageIdx) != BYTE_SOH || (nextBeginString != -1 && nextBeginString < endOfMessageIdx)) {
+            if (checksum == -1 || buffer.getByte(endOfMessageIdx) != BYTE_SOH || (nextBeginString > 0 && nextBeginString < endOfMessageIdx)) {
                 LOGGER.trace("Failed to parse message: {}. No Checksum or no tag separator at the end of the message with index {}", buffer.toString(StandardCharsets.US_ASCII), beginStringIdx);
                 throw new Exception();
             }
         } catch (Exception e) {
-            if (nextBeginString != -1) {
+            if (nextBeginString > 0) {
                 buffer.readerIndex(nextBeginString);
                 return buffer.copy(beginStringIdx, nextBeginString - beginStringIdx);
             } else {
@@ -107,7 +109,7 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
 
         Map<String, String> metadata = new HashMap<>();
 
-        int beginString = MessageUtil.findTag(message, BEGIN_STRING_TAG);
+        int beginString = ByteBufUtil.indexOf(message, "8=FIX");
 
         if (beginString == -1) {
             metadata.put(REJECT_REASON, "Not a FIX message");
@@ -202,8 +204,8 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
 
         StringBuilder resendRequest = new StringBuilder();
         setHeader(resendRequest, MSG_TYPE_RESEND_REQUEST);
-        resendRequest.append(BEGIN_SEQ_NO).append(beginSeqNo).append(SOH);
-        resendRequest.append(END_SEQ_NO).append(0).append(SOH);
+        resendRequest.append(BEGIN_SEQ_NO).append(beginSeqNo);
+        resendRequest.append(END_SEQ_NO).append(0);
         setChecksumAndBodyLength(resendRequest);
 
         if (enabled.get()) {
@@ -277,55 +279,60 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
 
     @NotNull
     @Override
-    public Map<String, String> onOutgoing(@NotNull ByteBuf message, @NotNull Map<String, String> map) {
+    public Map<String, String> onOutgoing(@NotNull ByteBuf message, @NotNull Map<String, String> metadata) {
 
         if (heartbeatTimer != null) {
             heartbeatTimer.cancel(false);
             heartbeatTimer = executorService.scheduleWithFixedDelay(this::sendHeartbeat, settings.getHeartBtInt(), settings.getHeartBtInt(), TimeUnit.SECONDS);
         }
-        Map<String, String> metadata = new HashMap<>();
 
         message.readerIndex(0);
 
-        int beginString = MessageUtil.findTag(message, BEGIN_STRING_TAG);
-        if (beginString == -1) {
+        int beginString = ByteBufUtil.indexOf(message, BEGIN_STRING_TAG + "=");
+        if (beginString < 0) {
             message = MessageUtil.putTag(message, BEGIN_STRING_TAG, settings.getBeginString());
         }
 
-        int bodyLength = MessageUtil.findTag(message, BODY_LENGTH_TAG);
-        if (bodyLength == -1) {
+        int bodyLength = ByteBufUtil.indexOf(message, BODY_LENGTH);
+        if (bodyLength < 0) {
             message = MessageUtil.putTag(message, BODY_LENGTH_TAG, STUBBING_VALUE); //stubbing until finish checking message
         }
 
-        int msgType = MessageUtil.findTag(message, MSG_TYPE_TAG);
-        if (msgType == -1) {
+        int msgType = ByteBufUtil.indexOf(message, MSG_TYPE);
+        if (msgType < 0) {                                                        //should we interrupt sending message?
             LOGGER.error("No msgType in message {}", new String(message.array()));
         } else {
             metadata.put(STRING_MSG_TYPE, MessageUtil.getTagValue(message, MSG_TYPE_TAG));
         }
 
-        int checksum = MessageUtil.findTag(message, CHECKSUM_TAG);
-        if (checksum == -1) {
+        int checksum = ByteBufUtil.indexOf(message, CHECKSUM);
+        if (checksum < 0) {
             message = MessageUtil.putTag(message, CHECKSUM_TAG, STUBBING_VALUE); //stubbing until finish checking message
         }
 
-        int senderCompID = MessageUtil.findTag(message, SENDER_COMP_ID);
-        if (senderCompID == -1) {
+        int senderCompID = ByteBufUtil.indexOf(message, SENDER_COMP_ID);
+        if (senderCompID < 0) {
             message = MessageUtil.putTag(message, SENDER_COMP_ID_TAG, settings.getSenderCompID());
         }
 
-        int targetCompID = MessageUtil.findTag(message, TARGET_COMP_ID_TAG);
-        if (targetCompID == -1) {
+        int targetCompID = ByteBufUtil.indexOf(message, TARGET_COMP_ID);
+        if (targetCompID < 0) {
             message = MessageUtil.putTag(message, TARGET_COMP_ID_TAG, settings.getTargetCompID());
         }
 
-        int sendingTime = MessageUtil.findTag(message, SENDING_TIME_TAG);
-        if (sendingTime == -1) {
+        int sendingTime = ByteBufUtil.indexOf(message, SENDING_TIME);
+        if (sendingTime < 0) {
             message = MessageUtil.putTag(message, SENDING_TIME_TAG, getTime().toString());
         }
 
         int msgSeqNumValue = msgSeqNum.incrementAndGet();
-        MessageUtil.putTag(message, MSG_SEQ_NUM_TAG, Integer.toString(msgSeqNumValue));
+        int msgSeqNum = ByteBufUtil.indexOf(message, MSG_SEQ_NUM);
+        if (msgSeqNum < 0) {
+            message = MessageUtil.putTag(message, MSG_SEQ_NUM_TAG, Integer.toString(msgSeqNumValue));
+        }else {
+            ByteBufUtil.insert(message, Integer.toString(msgSeqNumValue), msgSeqNum);
+            message = MessageUtil.updateTag(message, MSG_SEQ_NUM_TAG, Integer.toString(msgSeqNumValue));
+        }
 
         message = MessageUtil.updateTag(message, BODY_LENGTH_TAG, Integer.toString(getBodyLength(message)));
         message = MessageUtil.updateTag(message, CHECKSUM_TAG, getChecksum(message));
@@ -360,7 +367,7 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
 
         StringBuilder testRequest = new StringBuilder();
         setHeader(testRequest, MSG_TYPE_TEST_REQUEST);
-        testRequest.append(TEST_REQ_ID).append(testReqID.incrementAndGet()).append(SOH);
+        testRequest.append(TEST_REQ_ID).append(testReqID.incrementAndGet());
         setChecksumAndBodyLength(testRequest);
         if (enabled.get()) {
             client.send(Unpooled.wrappedBuffer(testRequest.toString().getBytes(StandardCharsets.UTF_8)), Collections.emptyMap(), IChannel.SendMode.MANGLE);
@@ -376,11 +383,11 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
         StringBuilder logon = new StringBuilder();
 
         setHeader(logon, MSG_TYPE_LOGON);
-        logon.append(ENCRYPT_METHOD).append(settings.getEncryptMethod()).append(SOH);
-        logon.append(HEART_BT_INT).append(settings.getHeartBtInt()).append(SOH);
-        logon.append(DEFAULT_APPL_VER_ID).append(settings.getDefaultApplVerID()).append(SOH);
-        logon.append(USERNAME).append(settings.getUsername()).append(SOH);
-        logon.append(PASSWORD).append(settings.getPassword()).append(SOH);
+        logon.append(ENCRYPT_METHOD).append(settings.getEncryptMethod());
+        logon.append(HEART_BT_INT).append(settings.getHeartBtInt());
+        logon.append(DEFAULT_APPL_VER_ID).append(settings.getDefaultApplVerID());
+        logon.append(USERNAME).append(settings.getUsername());
+        logon.append(PASSWORD).append(settings.getPassword());
         setChecksumAndBodyLength(logon);
 
         client.send(Unpooled.wrappedBuffer(logon.toString().getBytes(StandardCharsets.UTF_8)), Collections.emptyMap(), IChannel.SendMode.MANGLE);
@@ -416,30 +423,30 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
 
     private void setHeader(StringBuilder stringBuilder, String msgType) {
 
-        stringBuilder.append(BEGIN_STRING).append(settings.getBeginString()).append(SOH);
-        stringBuilder.append(MSG_TYPE).append(msgType).append(SOH);
-        stringBuilder.append(SENDER_COMP_ID).append(settings.getSenderCompID()).append(SOH);
-        stringBuilder.append(TARGET_COMP_ID).append(settings.getTargetCompID()).append(SOH);
-        stringBuilder.append(SENDING_TIME).append(getTime()).append(SOH);
+        stringBuilder.append(BEGIN_STRING_TAG).append("=").append(settings.getBeginString());
+        stringBuilder.append(MSG_TYPE).append(msgType);
+        stringBuilder.append(SENDER_COMP_ID).append(settings.getSenderCompID());
+        stringBuilder.append(TARGET_COMP_ID).append(settings.getTargetCompID());
+        stringBuilder.append(SENDING_TIME).append(getTime());
     }
 
     private void setChecksumAndBodyLength(StringBuilder stringBuilder) {
         stringBuilder.append(CHECKSUM).append("000").append(SOH);
-        stringBuilder.insert(stringBuilder.indexOf(SOH + MSG_TYPE) + 1,
-                BODY_LENGTH + getBodyLength(stringBuilder) + SOH);
+        stringBuilder.insert(stringBuilder.indexOf(MSG_TYPE),
+                BODY_LENGTH + getBodyLength(stringBuilder));
         stringBuilder.replace(stringBuilder.lastIndexOf("000" + SOH), stringBuilder.lastIndexOf(SOH), getChecksum(stringBuilder));
     }
 
     public String getChecksum(StringBuilder message) { //do private
 
-        String substring = message.substring(0, message.indexOf(SOH + CHECKSUM) + 1);
+        String substring = message.substring(0, message.indexOf(CHECKSUM) + 1);
         return calculateChecksum(substring.getBytes(StandardCharsets.US_ASCII));
     }
 
     public String getChecksum(ByteBuf message) {
 
-        int checksumIdx = MessageUtil.findTag(message, CHECKSUM_TAG) + 1;
-        if (checksumIdx == 0) {
+        int checksumIdx = ByteBufUtil.indexOf(message, CHECKSUM) + 1;
+        if (checksumIdx <= 0) {
             checksumIdx = message.capacity();
         }
 
@@ -458,15 +465,15 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
 
     public int getBodyLength(StringBuilder message) { //do private
 
-        int start = message.indexOf(SOH, message.indexOf(SOH + BODY_LENGTH) + 1);
-        int end = message.indexOf(SOH + CHECKSUM);
+        int start = message.indexOf(SOH, message.indexOf(BODY_LENGTH) + 1);
+        int end = message.indexOf(CHECKSUM);
         return end - start;
     }
 
     public int getBodyLength(ByteBuf message) {
-        int bodyLengthIdx = MessageUtil.findTag(message, BODY_LENGTH_TAG);
+        int bodyLengthIdx = ByteBufUtil.indexOf(message, BODY_LENGTH);
         int start = MessageUtil.findByte(message, bodyLengthIdx + 1, BYTE_SOH);
-        int end = MessageUtil.findTag(message, CHECKSUM_TAG);
+        int end = ByteBufUtil.indexOf(message, CHECKSUM);
         return end - start;
     }
 
@@ -476,5 +483,9 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
 
     public AtomicBoolean getEnabled() {
         return enabled;
+    }
+
+    public Log getOutgoingMessages() {
+        return outgoingMessages;
     }
 }

@@ -118,7 +118,7 @@ public class MessageUtil {
 
         if (tag.equals(Constants.BEGIN_STRING_TAG)) {
 
-            toInsert = (Constants.BEGIN_STRING + value + SOH).getBytes(StandardCharsets.US_ASCII);
+            toInsert = (Constants.BEGIN_STRING_TAG + "=" + value + SOH).getBytes(StandardCharsets.US_ASCII);
             result = new byte[message.capacity() + toInsert.length];
 
             System.arraycopy(toInsert, 0, result, 0, toInsert.length);
@@ -129,21 +129,21 @@ public class MessageUtil {
 
         if (tag.equals(Constants.BODY_LENGTH_TAG)) {
 
-            toInsert = (Constants.BODY_LENGTH + value + SOH).getBytes(StandardCharsets.US_ASCII);
+            toInsert = (Constants.BODY_LENGTH_TAG + "=" + value + SOH).getBytes(StandardCharsets.US_ASCII);
             result = new byte[message.capacity() + toInsert.length];
             int toIdx = findByte(message, 0, BYTE_SOH) + 1;
             return getSupplementedMessage(message, result, toInsert, toIdx);
         }
 
         if (tag.equals(Constants.CHECKSUM_TAG)) {
-            toInsert = (Constants.CHECKSUM + value + SOH).getBytes(StandardCharsets.US_ASCII);
+            toInsert = (Constants.CHECKSUM_TAG + "=" + value + SOH).getBytes(StandardCharsets.US_ASCII);
             result = new byte[message.capacity() + toInsert.length];
             return getSupplementedMessage(message, result, toInsert, message.readableBytes());
         }
 
         toInsert = (tag + "=" + value + SOH).getBytes(StandardCharsets.US_ASCII);
         result = new byte[message.capacity() + toInsert.length];
-        int toIdx = findTag(message, 0, Constants.CHECKSUM_TAG) - 1;
+        int toIdx = findTag(message, 0, Constants.CHECKSUM_TAG) + 1;
         return getSupplementedMessage(message, result, toInsert, toIdx);
 
     }
