@@ -15,6 +15,7 @@ import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -182,12 +183,7 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
                 break;
             case MSG_TYPE_RESEND_REQUEST:
                 LOGGER.info("Resend_request received - " + message.toString(StandardCharsets.US_ASCII));
-                if (enabled.get()) {
-                    handleResendRequest(message);
-                }
-                else {
-                    sendLogon();
-                }
+                handleResendRequest(message);
                 break;
             case MSG_TYPE_SEQUENCE_RESET: //gap fill
                 LOGGER.info("Sequence_reset received - " + message.toString(StandardCharsets.US_ASCII));
@@ -250,11 +246,11 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
         String strEndSeqNo = MessageUtil.getTagValue(message, END_SEQ_NO_TAG);
 
         if (strBeginSeqNo != null && strEndSeqNo != null) {
-            int beginSeqNo = Integer.parseInt(strBeginSeqNo)+2;
+            int beginSeqNo = Integer.parseInt(strBeginSeqNo);
             int endSeqNo = Integer.parseInt(strEndSeqNo);
 
             try {
-                if (endSeqNo == 0) endSeqNo = msgSeqNum.get()+1;
+                if (endSeqNo == 0) endSeqNo = msgSeqNum.get()-1;
                 LOGGER.info("Returning messages from " + beginSeqNo + " to " + endSeqNo);
                 for (int i = beginSeqNo; i <= endSeqNo; i++) {
                     if (outgoingMessages.get(i) != null) {
@@ -313,7 +309,7 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
     @NotNull
     @Override
     public Map<String, String> onOutgoing(@NotNull ByteBuf message, @NotNull Map<String, String> metadata) {
-
+        
         if (heartbeatTimer != null) {
             heartbeatTimer.cancel(false);
             heartbeatTimer = executorService.scheduleWithFixedDelay(this::sendHeartbeat, settings.getHeartBtInt(), settings.getHeartBtInt(), TimeUnit.SECONDS);
@@ -323,15 +319,16 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
 
         int beginString = ByteBufUtil.indexOf(message, BEGIN_STRING_TAG + "=");
         if (beginString < 0) {
-            message = MessageUtil.putTag(message, BEGIN_STRING_TAG, settings.getBeginString());
+            MessageUtil.putTag(message, BEGIN_STRING_TAG, settings.getBeginString());
         }
 
         int bodyLength = ByteBufUtil.indexOf(message, BODY_LENGTH);
         if (bodyLength < 0) {
-            message = MessageUtil.putTag(message, BODY_LENGTH_TAG, STUBBING_VALUE); //stubbing until finish checking message
+            MessageUtil.putTag(message, BODY_LENGTH_TAG, STUBBING_VALUE); //stubbing until finish checking message
         }
 
         int msgType = ByteBufUtil.indexOf(message, MSG_TYPE);
+
         if (msgType < 0) {                                                        //should we interrupt sending message?
             LOGGER.error("No msgType in message {}", new String(message.array()));
         } else {
@@ -340,28 +337,28 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
 
         int checksum = ByteBufUtil.indexOf(message, CHECKSUM);
         if (checksum < 0) {
-            message = MessageUtil.putTag(message, CHECKSUM_TAG, STUBBING_VALUE); //stubbing until finish checking message
+            MessageUtil.putTag(message, CHECKSUM_TAG, STUBBING_VALUE); //stubbing until finish checking message
         }
 
         int senderCompID = ByteBufUtil.indexOf(message, SENDER_COMP_ID);
         if (senderCompID < 0) {
-            message = MessageUtil.putTag(message, SENDER_COMP_ID_TAG, settings.getSenderCompID());
+            MessageUtil.putTag(message, SENDER_COMP_ID_TAG, settings.getSenderCompID());
         }
 
         int targetCompID = ByteBufUtil.indexOf(message, TARGET_COMP_ID);
         if (targetCompID < 0) {
-            message = MessageUtil.putTag(message, TARGET_COMP_ID_TAG, settings.getTargetCompID());
+            MessageUtil.putTag(message, TARGET_COMP_ID_TAG, settings.getTargetCompID());
         }
 
         int sendingTime = ByteBufUtil.indexOf(message, SENDING_TIME);
         if (sendingTime < 0) {
-            message = MessageUtil.putTag(message, SENDING_TIME_TAG, getTime());
+            MessageUtil.putTag(message, SENDING_TIME_TAG, getTime());
         }
 
         int msgSeqNumValue = msgSeqNum.incrementAndGet();
         int msgSeqNum = ByteBufUtil.indexOf(message, MSG_SEQ_NUM);
         if (msgSeqNum < 0) {
-            message = MessageUtil.putTag(message, MSG_SEQ_NUM_TAG, Integer.toString(msgSeqNumValue));
+            MessageUtil.putTag(message, MSG_SEQ_NUM_TAG, Integer.toString(msgSeqNumValue));
         }else {
             ByteBufUtil.insert(message, Integer.toString(msgSeqNumValue), msgSeqNum);
             message = MessageUtil.updateTag(message, MSG_SEQ_NUM_TAG, Integer.toString(msgSeqNumValue));

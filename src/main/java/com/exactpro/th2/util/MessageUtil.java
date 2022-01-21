@@ -114,47 +114,39 @@ public class MessageUtil {
     }
 
 
-    public static ByteBuf putTag(ByteBuf message, String tag, String value) {
-        byte[] result;
+    public static void putTag(ByteBuf message, String tag, String value) {
         byte[] toInsert;
 
         if (tag.equals(Constants.BEGIN_STRING_TAG)) {
-
             toInsert = (Constants.BEGIN_STRING_TAG + "=" + value + SOH).getBytes(StandardCharsets.US_ASCII);
-            result = new byte[message.capacity() + toInsert.length];
-
-            System.arraycopy(toInsert, 0, result, 0, toInsert.length);
-            message.readerIndex(0);
-            message.readBytes(result, toInsert.length, message.writerIndex());
-            return Unpooled.wrappedBuffer(result);
+            getSupplementedMessage(message, toInsert, 0);
+            return;
         }
 
         if (tag.equals(Constants.BODY_LENGTH_TAG)) {
-
             toInsert = (Constants.BODY_LENGTH_TAG + "=" + value + SOH).getBytes(StandardCharsets.US_ASCII);
-            result = new byte[message.capacity() + toInsert.length];
             int toIdx = findByte(message, 0, BYTE_SOH) + 1;
-            return getSupplementedMessage(message, result, toInsert, toIdx);
+            getSupplementedMessage(message, toInsert, toIdx);
+            return;
         }
 
         if (tag.equals(Constants.CHECKSUM_TAG)) {
             toInsert = (Constants.CHECKSUM_TAG + "=" + value + SOH).getBytes(StandardCharsets.US_ASCII);
-            result = new byte[message.capacity() + toInsert.length];
-            return getSupplementedMessage(message, result, toInsert, message.readableBytes());
+            getSupplementedMessage(message, toInsert, message.readableBytes());
+            return;
         }
 
         toInsert = (tag + "=" + value + SOH).getBytes(StandardCharsets.US_ASCII);
-        result = new byte[message.capacity() + toInsert.length];
         int toIdx = findTag(message, 0, Constants.CHECKSUM_TAG) + 1;
-        return getSupplementedMessage(message, result, toInsert, toIdx);
-
+        getSupplementedMessage(message, toInsert, toIdx);
     }
 
-    private static ByteBuf getSupplementedMessage(ByteBuf message, byte[] result, byte[] toInsert, int toIdx) {
+    private static void getSupplementedMessage(ByteBuf message, byte[] toInsert, int toIdx) {
+        message.capacity(message.readableBytes() + toInsert.length);
+        ByteBuf copyMessage = message.copy(toIdx, message.readableBytes()-toIdx);
+        message.writerIndex(toIdx);
+        message.writeBytes(toInsert);
+        message.writeBytes(copyMessage);
         message.readerIndex(0);
-        message.readBytes(result, 0, toIdx);
-        System.arraycopy(toInsert, 0, result, toIdx, toInsert.length);
-        message.readBytes(result, toIdx + toInsert.length, message.writerIndex() - message.readerIndex());
-        return Unpooled.wrappedBuffer(result);
     }
 }

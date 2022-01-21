@@ -126,27 +126,31 @@ class FixHandlerTest {
         } catch (InterruptedException e) {
             e.printStackTrace();
         }
-        assertEquals("8=FIXT.1.1\u00019=95\u000135=A\u000134=5\u000149=client\u000156=server\u000152=2014-12-22T10:15:30Z\u000198=0\u0001108=30\u00011137=9\001553=username\u0001554=pass\u000110=130\u0001",
+        assertEquals("8=FIXT.1.1\u00019=95\u000135=A\u000134=7\u000149=client\u000156=server\u000152=2014-12-22T10:15:30Z\u000198=0\u0001108=30\u00011137=9\001553=username\u0001554=pass\u000110=132\u0001",
                 new String(client.getQueue().get(0).array()));
     }
 
-//    @Test
-//    void onOutgoingMessageTest() {
-//        ByteBuf bufferForPrepareMessage = Unpooled.wrappedBuffer("8=FIXT.1.1\0019=13\00135=A\001552=1\00110=169\001".getBytes(StandardCharsets.US_ASCII));
-//
-//        String expectedMessage = "8=FIXT.1.1\u00019=60\u000135=A\u0001552=1\00149=client\u000156=server\u000152=2014-12-22T10:15:30Z\u000134=1\u000110=087\u0001";
-//        String expectedMessage2 = "8=FIXT.1.1\u00019=55\u0001552=1\00149=client\u000156=server\u000152=2014-12-22T10:15:30Z\u000134=2\u000110=117\u0001";
-//        Map<String, String> expected = new HashMap<>();
-//        expected.put("MsgType", "A");
-//
-//        Map<String, String> actual = fixHandler.onOutgoing(bufferForPrepareMessage, new HashMap<String, String>());
-//        Map<String, String> actual2 = fixHandler.onOutgoing(Unpooled.wrappedBuffer("552=1\001".getBytes(StandardCharsets.UTF_8)), new HashMap<>());
-//        Log log = fixHandler.getOutgoingMessages();
-//
-//        assertEquals(expectedMessage, new String(log.get(1).array()));
-//        assertEquals(expectedMessage2, new String(log.get(2).array()));
-//        assertEquals(expected, actual);
-//    }
+    @Test
+    void onOutgoingMessageTest() {
+        ByteBuf bufferForPrepareMessage = Unpooled.buffer().writeBytes("8=FIXT.1.1\0019=13\00135=A\001552=1\00110=169\001".getBytes(StandardCharsets.US_ASCII));
+        ByteBuf bufferForPrepareMessage2 = Unpooled.buffer(11).writeBytes("552=1\001".getBytes(StandardCharsets.UTF_8));
+
+        String expectedMessage = "8=FIXT.1.1\u00019=13\u000135=A\u0001552=1\00149=client\u000156=server\u000152=2014-12-22T10:15:30Z\u000134=5\u000110=169\u0001";
+        String expectedMessage2 = "8=FIXT.1.1\u00019=XXX\u0001552=1\00149=client\u000156=server\u000152=2014-12-22T10:15:30Z\u000134=6\u000110=XXX\u0001";
+        Map<String, String> expected = new HashMap<>();
+        expected.put("MsgType", "A");
+        Map<String, String> expected2 = new HashMap<>();
+
+        Map<String, String> actual = fixHandler.onOutgoing(bufferForPrepareMessage, new HashMap<>());
+        Map<String, String> actual2 = fixHandler.onOutgoing(bufferForPrepareMessage2, new HashMap<>());
+
+        bufferForPrepareMessage.readerIndex(0);
+        bufferForPrepareMessage2.readerIndex(0);
+        assertEquals(expectedMessage, bufferForPrepareMessage.toString(StandardCharsets.US_ASCII));
+        assertEquals(expectedMessage2, bufferForPrepareMessage2.toString(StandardCharsets.US_ASCII));
+        assertEquals(expected, actual);
+        assertEquals(expected2, actual2);
+    }
 
     @Test
     void getChecksumTest() {
@@ -234,20 +238,20 @@ class FixHandlerTest {
     @Test
     void putTagTest() {
 
-        ByteBuf buf = Unpooled.wrappedBuffer("552=1\001".getBytes(StandardCharsets.UTF_8));
+        ByteBuf buf = Unpooled.buffer().writeBytes("552=1\001".getBytes(StandardCharsets.UTF_8));
         String expected = "8=FIX.2.2\001552=1\001";
         String expected2 = "8=FIX.2.2\0019=19\001552=1\001";
         String expected3 = "8=FIX.2.2\0019=19\001552=1\00110=009\001";
 
-        buf = MessageUtil.putTag(buf, Constants.BEGIN_STRING_TAG, "FIX.2.2");
+        MessageUtil.putTag(buf, Constants.BEGIN_STRING_TAG, "FIX.2.2");
         assertNotNull(buf);
         assertEquals(expected, new String(buf.array()));
 
-        buf = MessageUtil.putTag(buf, Constants.BODY_LENGTH_TAG, "19");
+        MessageUtil.putTag(buf, Constants.BODY_LENGTH_TAG, "19");
         assertNotNull(buf);
         assertEquals(expected2, new String(buf.array()));
 
-        buf = MessageUtil.putTag(buf, Constants.CHECKSUM_TAG, fixHandler.getChecksum(buf));
+        MessageUtil.putTag(buf, Constants.CHECKSUM_TAG, fixHandler.getChecksum(buf));
         assertNotNull(buf);
         assertEquals(expected3, new String(buf.array()));
     }
