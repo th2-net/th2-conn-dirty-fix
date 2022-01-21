@@ -18,10 +18,10 @@ Parameters:
   + *reconnectDelay* - interval for reconnect
   + *disconnectRequestDelay* - the interval for the shutdown request
 + *mangler*
-#MQ pins
+## MQ pins
 + input queue with `subscribe`, `send` and `raw` attributes for outgoing messages
 + output queue with `publish`, `first` (for incoming messages) or `second` (for outgoing messages) and `raw` attributes
-#Deployment via infra-mgr
+## Deployment via infra-mgr
 Here's an example of `infra-mgr` config required to deploy this service
 ```yaml
 apiVersion: th2.exactpro.com/v1
