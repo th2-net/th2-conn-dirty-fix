@@ -93,15 +93,15 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
         } catch (Exception e) {
             if (nextBeginString > 0) {
                 buffer.readerIndex(nextBeginString);
-                return buffer.copy(beginStringIdx, nextBeginString - beginStringIdx);
+                return buffer.retainedSlice(beginStringIdx, nextBeginString - beginStringIdx);
             } else {
                 buffer.readerIndex(buffer.writerIndex());
-                return buffer.copy(beginStringIdx, buffer.writerIndex() - beginStringIdx);
+                return buffer.retainedSlice(beginStringIdx, buffer.writerIndex() - beginStringIdx);
             }
         }
 
         buffer.readerIndex(endOfMessageIdx + 1);
-        return buffer.copy(beginStringIdx, endOfMessageIdx + 1 - beginStringIdx);
+        return buffer.retainedSlice(beginStringIdx, endOfMessageIdx + 1 - beginStringIdx);
     }
 
     @NotNull
@@ -134,13 +134,9 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
         int receivedMsgSeqNum = Integer.parseInt(msgSeqNumValue);
 
         if (serverMsgSeqNum.get() < receivedMsgSeqNum) {
-            LOGGER.info("Server MsgSeqNum is different from what was sent: " + serverMsgSeqNum.get() + " -> " + receivedMsgSeqNum);
             if (enabled.get()) {
                 sendResendRequest(serverMsgSeqNum.get(), receivedMsgSeqNum);
-            } else {
-                sendLogon();
             }
-
         }
 
         switch (msgType) {
@@ -309,7 +305,7 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
     @NotNull
     @Override
     public Map<String, String> onOutgoing(@NotNull ByteBuf message, @NotNull Map<String, String> metadata) {
-        
+
         if (heartbeatTimer != null) {
             heartbeatTimer.cancel(false);
             heartbeatTimer = executorService.scheduleWithFixedDelay(this::sendHeartbeat, settings.getHeartBtInt(), settings.getHeartBtInt(), TimeUnit.SECONDS);
@@ -427,6 +423,7 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
 
     @Override
     public void onClose() {
+        enabled.set(false);
         if (heartbeatTimer != null) {
             heartbeatTimer.cancel(false);
         }

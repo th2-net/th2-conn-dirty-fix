@@ -68,9 +68,9 @@ class FixHandlerTest {
 
 
         assertNotNull(result0);
-        assertEquals(expected0, new String(result0.array()));
+        assertEquals(expected0, result0.toString(StandardCharsets.US_ASCII));
         assertNotNull(result1);
-        assertEquals(expected1, new String(result1.array()));
+        assertEquals(expected1, result1.toString(StandardCharsets.US_ASCII));
         assertNull(result2);
     }
 
@@ -81,21 +81,24 @@ class FixHandlerTest {
                 "\001552=2\00110=100\0018=FIXT.1.1\0019=13\00135=NN\001552=2\00110=100\001").getBytes(StandardCharsets.US_ASCII));
 
         ByteBuf result1 = fixHandler.onReceive(buffer);
+        System.out.println(buffer.readerIndex());
         ByteBuf result2 = fixHandler.onReceive(buffer);
+        System.out.println(buffer.readerIndex());
         ByteBuf result3 = fixHandler.onReceive(buffer);
+        System.out.println(buffer.readerIndex());
 
         String expected1 = "8=FIXT.1.1\0019=13\00135=AE\001552=1\00158=11111\00110=169\001";
         String expected2 = "8=FIXT.1.1\0019=13\00135=NN\001552=2\00110=100\001";
         String expected3 = "8=FIXT.1.1\0019=13\00135=NN\001552=2\00110=100\001";
 
         assertNotNull(result1);
-        assertEquals(expected1, new String(result1.array()));
+        assertEquals(expected1, result1.toString(StandardCharsets.US_ASCII));
 
         assertNotNull(result2);
-        assertEquals(expected2, new String(result2.array()));
+        assertEquals(expected2, result2.toString(StandardCharsets.US_ASCII));
 
         assertNotNull(result3);
-        assertEquals(expected3, new String(result3.array()));
+        assertEquals(expected3, result3.toString(StandardCharsets.US_ASCII));
     }
 
 
