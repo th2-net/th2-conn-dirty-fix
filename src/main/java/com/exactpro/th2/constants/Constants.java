@@ -24,7 +24,8 @@ public class Constants {
     public static final String END_SEQ_NO_TAG = "16";
     public static final String NEW_SEQ_NO_TAG = "36";
     public static final String GAP_FILL_FLAG_TAG = "123";
-
+    public static final String TEXT_TAG = "58";
+    public static final String RESET_SEQ_NUM_TAG = "141";
 
     //Fields
     public static final String BEGIN_STRING = SOH + BEGIN_STRING_TAG + "=";
@@ -45,6 +46,7 @@ public class Constants {
     public static final String NEW_SEQ_NO = SOH + NEW_SEQ_NO_TAG + "=";
     public static final String GAP_FILL_FLAG = SOH + GAP_FILL_FLAG_TAG + "=";
     public static final String DEFAULT_APPL_VER_ID = SOH + DEFAULT_APPL_VER_ID_TAG + "=";
+    public static final String RESET_SEQ_NUM = SOH + RESET_SEQ_NUM_TAG + "=";
 
 
     //message types

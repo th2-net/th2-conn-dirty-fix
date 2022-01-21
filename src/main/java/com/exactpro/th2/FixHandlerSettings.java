@@ -15,7 +15,7 @@ public class FixHandlerSettings implements IProtocolHandlerSettings {
     private String password = "pass";
     private long defaultApplVerID = 9;
 
-    private int testRequestDelay = 10;
+    private int testRequestDelay = 60;
     private int reconnectDelay = 5;
     private int disconnectRequestDelay = 5;
 

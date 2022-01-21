@@ -10,19 +10,19 @@ import com.exactpro.th2.util.MessageUtil;
 import com.google.auto.service.AutoService;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
+import org.apache.commons.lang3.StringUtils;
 import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.nio.charset.StandardCharsets;
-import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
+import java.util.Objects;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -46,13 +46,14 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
     private final AtomicInteger msgSeqNum = new AtomicInteger(0);
     private final AtomicInteger serverMsgSeqNum = new AtomicInteger(0);
     private final AtomicInteger testReqID = new AtomicInteger(0);
+    private final AtomicInteger resendRequestSeqNum = new AtomicInteger(0);
     private final AtomicBoolean enabled = new AtomicBoolean(false);
     private final ScheduledExecutorService executorService;
     private final IContext<IProtocolHandlerSettings> context;
-    private Future<?> heartbeatTimer;
-    private Future<?> testRequestTimer;
-    private Future<?> reconnectRequestTimer;
-    private Future<?> disconnectRequest;
+    private Future<?> heartbeatTimer = CompletableFuture.completedFuture(null);
+    private Future<?> testRequestTimer = CompletableFuture.completedFuture(null);
+    private Future<?> reconnectRequestTimer = CompletableFuture.completedFuture(null);
+    private Future<?> disconnectRequest = CompletableFuture.completedFuture(null);
     private IChannel client;
     protected FixHandlerSettings settings;
 
@@ -63,7 +64,6 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
 
     @Override
     public ByteBuf onReceive(ByteBuf buffer) {
-
         int offset = buffer.readerIndex();
         if (offset == buffer.writerIndex()) return null;
         int beginStringIdx = ByteBufUtil.indexOf(buffer,"8=FIX");
@@ -132,23 +132,49 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
 
         serverMsgSeqNum.incrementAndGet();
         int receivedMsgSeqNum = Integer.parseInt(msgSeqNumValue);
+
         if (serverMsgSeqNum.get() < receivedMsgSeqNum) {
-            sendResendRequest(serverMsgSeqNum.get(), receivedMsgSeqNum);
+            if (enabled.get()) {
+                sendResendRequest(serverMsgSeqNum.get(), receivedMsgSeqNum);
+            } else {
+                sendLogon();
+            }
         }
 
         switch (msgType) {
             case MSG_TYPE_HEARTBEAT:
                 checkHeartbeat(message);
+                if (testRequestTimer != null) {
+                    testRequestTimer.cancel(false);
+                }
+                testRequestTimer = executorService.schedule(this::sendTestRequest, settings.getTestRequestDelay(), TimeUnit.SECONDS);
+                break;
             case MSG_TYPE_LOGON:
                 boolean connectionSuccessful = checkLogon(message);
                 enabled.set(connectionSuccessful);
                 if (connectionSuccessful) {
+                    if (heartbeatTimer != null) {
+                        heartbeatTimer.cancel(false);
+                    }
                     heartbeatTimer = executorService.scheduleWithFixedDelay(this::sendHeartbeat, settings.getHeartBtInt(), settings.getHeartBtInt(), TimeUnit.SECONDS);
+                    if (testRequestTimer != null) {
+                        testRequestTimer.cancel(false);
+                    }
+                    testRequestTimer = executorService.schedule(this::sendTestRequest, settings.getTestRequestDelay(), TimeUnit.SECONDS);
                 } else {
                     reconnectRequestTimer = executorService.schedule(this::sendLogon, settings.getReconnectDelay(), TimeUnit.SECONDS);
                 }
                 break;
             case MSG_TYPE_LOGOUT: //extract logout reason
+                String text = MessageUtil.getTagValue(message, TEXT_TAG);
+                if (text != null) {
+                    LOGGER.trace("Received Logout has text (58) tag: " + text);
+                    String value = StringUtils.substringBetween(text, "expecting ", " but received");
+                    if (value != null) {
+                        msgSeqNum.getAndSet(Integer.parseInt(value)-2);
+                        serverMsgSeqNum.getAndSet(Integer.parseInt(Objects.requireNonNull(MessageUtil.getTagValue(message, MSG_SEQ_NUM_TAG))));
+                    }
+                }
                 if (disconnectRequest != null && !disconnectRequest.isCancelled()) {
                     disconnectRequest.cancel(false);
                 }
@@ -156,7 +182,12 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
                 context.send(CommonUtil.toEvent("logout for sender - " + settings.getSenderCompID()));//make more useful
                 break;
             case MSG_TYPE_RESEND_REQUEST:
-                handleResendRequest(message);
+                if (enabled.get()) {
+                    handleResendRequest(message);
+                }
+                else {
+                    sendLogon();
+                }
                 break;
             case MSG_TYPE_SEQUENCE_RESET: //gap fill
                 resetSequence(message);
@@ -185,25 +216,19 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
     }
 
     public void sendResendRequest(int beginSeqNo, int endSeqNo) { //do private
-
         StringBuilder resendRequest = new StringBuilder();
-        setHeader(resendRequest, MSG_TYPE_RESEND_REQUEST);
+        setHeader(resendRequest, MSG_TYPE_RESEND_REQUEST, msgSeqNum.incrementAndGet());
         resendRequest.append(BEGIN_SEQ_NO).append(beginSeqNo).append(SOH);
         resendRequest.append(END_SEQ_NO).append(endSeqNo).append(SOH);
         setChecksumAndBodyLength(resendRequest);
-
-        if (enabled.get()) {
-            client.send(Unpooled.wrappedBuffer(resendRequest.toString().getBytes(StandardCharsets.UTF_8)), Collections.emptyMap(), IChannel.SendMode.MANGLE);
-        } else {
-            sendLogon();
-        }
+        client.send(Unpooled.wrappedBuffer(resendRequest.toString().getBytes(StandardCharsets.UTF_8)), Collections.emptyMap(), IChannel.SendMode.MANGLE);
     }
 
 
     void sendResendRequest(int beginSeqNo) { //do private
 
         StringBuilder resendRequest = new StringBuilder();
-        setHeader(resendRequest, MSG_TYPE_RESEND_REQUEST);
+        setHeader(resendRequest, MSG_TYPE_RESEND_REQUEST, msgSeqNum.incrementAndGet());
         resendRequest.append(BEGIN_SEQ_NO).append(beginSeqNo);
         resendRequest.append(END_SEQ_NO).append(0);
         setChecksumAndBodyLength(resendRequest);
@@ -216,7 +241,6 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
     }
 
     private void handleResendRequest(ByteBuf message) {
-
         if (disconnectRequest != null && !disconnectRequest.isCancelled()) {
             disconnectRequest.cancel(false);
         }
@@ -225,13 +249,21 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
         String strEndSeqNo = MessageUtil.getTagValue(message, END_SEQ_NO_TAG);
 
         if (strBeginSeqNo != null && strEndSeqNo != null) {
-            int beginSeqNo = Integer.parseInt(strBeginSeqNo);
-            int endSeqNo = Integer.parseInt(strBeginSeqNo);
+            int beginSeqNo = Integer.parseInt(strBeginSeqNo)+2;
+            int endSeqNo = Integer.parseInt(strEndSeqNo);
 
             try {
+                if (endSeqNo == 0) endSeqNo = msgSeqNum.get()+1;
                 for (int i = beginSeqNo; i <= endSeqNo; i++) {
-                    client.send(outgoingMessages.get(i), Collections.emptyMap(), IChannel.SendMode.MANGLE);
+                    if (outgoingMessages.get(i) != null) {
+                        client.send(outgoingMessages.get(i), Collections.emptyMap(), IChannel.SendMode.MANGLE);
+                    }
+                    else {
+                        resendRequestSeqNum.getAndSet(beginSeqNo);
+                        sendHeartbeat();
+                    }
                 }
+                resendRequestSeqNum.getAndSet(0);
             } catch (Exception e) {
                 sendSequenceReset();
             }
@@ -240,7 +272,7 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
 
     private void sendSequenceReset() {
         StringBuilder sequenceReset = new StringBuilder();
-        setHeader(sequenceReset, MSG_TYPE_SEQUENCE_RESET);
+        setHeader(sequenceReset, MSG_TYPE_SEQUENCE_RESET, msgSeqNum.incrementAndGet());
         sequenceReset.append(NEW_SEQ_NO).append(msgSeqNum.get() + 1).append(SOH);
         setChecksumAndBodyLength(sequenceReset);
 
@@ -263,9 +295,8 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
     }
 
     private boolean checkLogon(ByteBuf message) {
-
         String sessionStatusField = MessageUtil.getTagValue(message, SESSION_STATUS_TAG); //check another options
-        if (sessionStatusField != null && sessionStatusField.equals("0")) {
+        if (sessionStatusField == null || sessionStatusField.equals("0")) {
             String msgSeqNumValue = MessageUtil.getTagValue(message, MSG_SEQ_NUM_TAG);
             if (msgSeqNumValue == null) {
                 return false;
@@ -322,7 +353,7 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
 
         int sendingTime = ByteBufUtil.indexOf(message, SENDING_TIME);
         if (sendingTime < 0) {
-            message = MessageUtil.putTag(message, SENDING_TIME_TAG, getTime().toString());
+            message = MessageUtil.putTag(message, SENDING_TIME_TAG, getTime());
         }
 
         int msgSeqNumValue = msgSeqNum.incrementAndGet();
@@ -350,23 +381,23 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
     }
 
     public void sendHeartbeat() {
-
         StringBuilder heartbeat = new StringBuilder();
-        setHeader(heartbeat, MSG_TYPE_HEARTBEAT);
-        setChecksumAndBodyLength(heartbeat);
+        int seqNum = resendRequestSeqNum.get();
+        if (seqNum==0) seqNum = msgSeqNum.incrementAndGet();
 
+        setHeader(heartbeat, MSG_TYPE_HEARTBEAT, seqNum);
+
+        setChecksumAndBodyLength(heartbeat);
         if (enabled.get()) {
             client.send(Unpooled.wrappedBuffer(heartbeat.toString().getBytes(StandardCharsets.UTF_8)), Collections.emptyMap(), IChannel.SendMode.MANGLE);
         } else {
             sendLogon();
         }
-        testRequestTimer = executorService.schedule(this::sendTestRequest, settings.getTestRequestDelay(), TimeUnit.SECONDS);
     }
 
     public void sendTestRequest() { //do private
-
         StringBuilder testRequest = new StringBuilder();
-        setHeader(testRequest, MSG_TYPE_TEST_REQUEST);
+        setHeader(testRequest, MSG_TYPE_TEST_REQUEST, Integer.parseInt(String.valueOf(msgSeqNum)));
         testRequest.append(TEST_REQ_ID).append(testReqID.incrementAndGet());
         setChecksumAndBodyLength(testRequest);
         if (enabled.get()) {
@@ -379,38 +410,20 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
 
 
     public void sendLogon() {
-
         StringBuilder logon = new StringBuilder();
-
-        setHeader(logon, MSG_TYPE_LOGON);
+        setHeader(logon, MSG_TYPE_LOGON, msgSeqNum.incrementAndGet());
         logon.append(ENCRYPT_METHOD).append(settings.getEncryptMethod());
         logon.append(HEART_BT_INT).append(settings.getHeartBtInt());
+        //logon.append(RESET_SEQ_NUM).append("Y");
         logon.append(DEFAULT_APPL_VER_ID).append(settings.getDefaultApplVerID());
         logon.append(USERNAME).append(settings.getUsername());
         logon.append(PASSWORD).append(settings.getPassword());
         setChecksumAndBodyLength(logon);
-
         client.send(Unpooled.wrappedBuffer(logon.toString().getBytes(StandardCharsets.UTF_8)), Collections.emptyMap(), IChannel.SendMode.MANGLE);
     }
 
     @Override
     public void onClose() {
-
-        sendTestRequest();
-
-        StringBuilder logout = new StringBuilder();
-        setHeader(logout, MSG_TYPE_LOGOUT);
-        setChecksumAndBodyLength(logout);
-
-        if (enabled.get()) {
-            client.send(Unpooled.wrappedBuffer(logout.toString().getBytes(StandardCharsets.UTF_8)), Collections.emptyMap(), IChannel.SendMode.MANGLE);
-        }
-        disconnectRequest = executorService.schedule(() -> enabled.set(false), settings.getDisconnectRequestDelay(), TimeUnit.SECONDS);
-    }
-
-    @Override
-    public void close() {
-
         executorService.shutdown();
         try {
             if (!executorService.awaitTermination(3000, TimeUnit.MILLISECONDS)) {
@@ -421,10 +434,31 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
         }
     }
 
-    private void setHeader(StringBuilder stringBuilder, String msgType) {
+    @Override
+    public void close() {
+        executorService.shutdown();
+        try {
+            if (!executorService.awaitTermination(3000, TimeUnit.MILLISECONDS)) {
+                executorService.shutdownNow();
+            }
+        } catch (InterruptedException e) {
+            executorService.shutdownNow();
+        }
 
+        StringBuilder logout = new StringBuilder();
+        setHeader(logout, MSG_TYPE_LOGOUT, msgSeqNum.incrementAndGet());
+        setChecksumAndBodyLength(logout);
+
+        if (enabled.get()) {
+            client.send(Unpooled.wrappedBuffer(logout.toString().getBytes(StandardCharsets.UTF_8)), Collections.emptyMap(), IChannel.SendMode.MANGLE);
+        }
+        disconnectRequest = executorService.schedule(() -> enabled.set(false), settings.getDisconnectRequestDelay(), TimeUnit.SECONDS);
+    }
+
+    private void setHeader(StringBuilder stringBuilder, String msgType, Integer seqNum) {
         stringBuilder.append(BEGIN_STRING_TAG).append("=").append(settings.getBeginString());
         stringBuilder.append(MSG_TYPE).append(msgType);
+        stringBuilder.append(MSG_SEQ_NUM).append(seqNum);
         stringBuilder.append(SENDER_COMP_ID).append(settings.getSenderCompID());
         stringBuilder.append(TARGET_COMP_ID).append(settings.getTargetCompID());
         stringBuilder.append(SENDING_TIME).append(getTime());
@@ -477,8 +511,10 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
         return end - start;
     }
 
-    public Instant getTime() {
-        return Instant.now();
+    public String getTime() {
+        String FIX_DATE_TIME_FORMAT_MS = "yyyyMMdd-HH:mm:ss.SSS";
+        LocalDateTime datetime = LocalDateTime.now();
+        return DateTimeFormatter.ofPattern(FIX_DATE_TIME_FORMAT_MS).format(datetime);
     }
 
     public AtomicBoolean getEnabled() {

@@ -31,7 +31,9 @@ public class MessageUtil {
         }
         ByteBuf buf = message.copy(start + tag.length() + skipSoh + skipEqualSign, end - start - skipSoh - skipEqualSign - tag.length());
 
-        return new String(buf.array());
+        byte[] result = new byte[buf.readableBytes()];
+        buf.getBytes(0, result);
+        return new String(result);
     }
 
     public static int findTag(ByteBuf message, String tag) {
