@@ -50,7 +50,7 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
     private final AtomicBoolean enabled = new AtomicBoolean(false);
     private final ScheduledExecutorService executorService;
     private final IContext<IProtocolHandlerSettings> context;
-    private Future<?> heartbeatTimer = CompletableFuture.completedFuture(null);
+    Future<?> heartbeatTimer = CompletableFuture.completedFuture(null);
     private Future<?> testRequestTimer = CompletableFuture.completedFuture(null);
     private Future<?> reconnectRequestTimer = CompletableFuture.completedFuture(null);
     private Future<?> disconnectRequest = CompletableFuture.completedFuture(null);
@@ -363,6 +363,8 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
         message = MessageUtil.updateTag(message, CHECKSUM_TAG, getChecksum(message));
 
         outgoingMessages.put(msgSeqNumValue, message);
+
+        LOGGER.info("Outgoing message - " + message.toString(StandardCharsets.US_ASCII));
 
         return metadata;
     }
