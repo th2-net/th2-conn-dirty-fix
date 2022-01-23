@@ -29,7 +29,7 @@ public class MessageUtil {
         if (start == -1 || end == -1) {
             return null;
         }
-        ByteBuf buf = message.copy(start + tag.length() + skipSoh + skipEqualSign, end - start - skipSoh - skipEqualSign - tag.length());
+        ByteBuf buf = message.retainedSlice(start + tag.length() + skipSoh + skipEqualSign, end - start - skipSoh - skipEqualSign - tag.length());
 
         byte[] result = new byte[buf.readableBytes()];
         buf.getBytes(0, result);
@@ -143,7 +143,7 @@ public class MessageUtil {
 
     private static void getSupplementedMessage(ByteBuf message, byte[] toInsert, int toIdx) {
         message.capacity(message.readableBytes() + toInsert.length);
-        ByteBuf copyMessage = message.copy(toIdx, message.readableBytes()-toIdx);
+        ByteBuf copyMessage = message.retainedSlice(toIdx, message.readableBytes()-toIdx);
         message.writerIndex(toIdx);
         message.writeBytes(toInsert);
         message.writeBytes(copyMessage);

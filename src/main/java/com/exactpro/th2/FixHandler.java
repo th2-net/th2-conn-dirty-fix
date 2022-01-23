@@ -15,7 +15,6 @@ import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -327,9 +326,9 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
 
         if (msgType < 0) {                                                        //should we interrupt sending message?
             LOGGER.error("No msgType in message {}", new String(message.array()));
-        } else {
-            metadata.put(STRING_MSG_TYPE, MessageUtil.getTagValue(message, MSG_TYPE_TAG));
-        }
+        } //else {
+//            metadata.put(STRING_MSG_TYPE, MessageUtil.getTagValue(message, MSG_TYPE_TAG));
+//        }
 
         int checksum = ByteBufUtil.indexOf(message, CHECKSUM);
         if (checksum < 0) {

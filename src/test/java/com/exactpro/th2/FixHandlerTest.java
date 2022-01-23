@@ -144,7 +144,7 @@ class FixHandlerTest {
         expected.put("MsgType", "A");
         Map<String, String> expected2 = new HashMap<>();
 
-        Map<String, String> actual = fixHandler.onOutgoing(bufferForPrepareMessage, new HashMap<>());
+        Map<String, String> actual = fixHandler.onOutgoing(bufferForPrepareMessage, expected);
         Map<String, String> actual2 = fixHandler.onOutgoing(bufferForPrepareMessage2, new HashMap<>());
 
         bufferForPrepareMessage.readerIndex(0);
