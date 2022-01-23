@@ -143,7 +143,7 @@ public class MessageUtil {
 
     private static void getSupplementedMessage(ByteBuf message, byte[] toInsert, int toIdx) {
         message.capacity(message.readableBytes() + toInsert.length);
-        ByteBuf copyMessage = message.retainedSlice(toIdx, message.readableBytes()-toIdx);
+        ByteBuf copyMessage = message.copy(toIdx, message.readableBytes()-toIdx);
         message.writerIndex(toIdx);
         message.writeBytes(toInsert);
         message.writeBytes(copyMessage);
