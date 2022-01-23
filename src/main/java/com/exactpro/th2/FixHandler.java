@@ -248,13 +248,13 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
                 if (endSeqNo == 0) endSeqNo = msgSeqNum.get()-1;
                 LOGGER.info("Returning messages from " + beginSeqNo + " to " + endSeqNo);
                 for (int i = beginSeqNo; i <= endSeqNo; i++) {
-                    if (outgoingMessages.get(i) != null) {
-                        client.send(outgoingMessages.get(i), Collections.emptyMap(), IChannel.SendMode.MANGLE);
-                    }
-                    else {
+//                    if (outgoingMessages.get(i) != null) {
+//                        client.send(outgoingMessages.get(i), Collections.emptyMap(), IChannel.SendMode.MANGLE);
+//                    }
+//                    else {
                         resendRequestSeqNum.getAndSet(beginSeqNo);
                         sendHeartbeat();
-                    }
+//                    }
                 }
                 resendRequestSeqNum.getAndSet(0);
             } catch (Exception e) {
