@@ -2,11 +2,19 @@
 
 This microservice allows sending and receiving messages via FIX protocol
 
-## Configuration
+# Configuration
 
-Configuration should be specified in the custom configuration block in schema editor.
++ *autoStart* - enables/disable auto-starting of session on box start (`true` by default)
++ *autoStopAfter* - time in seconds after which session will be automatically stopped (`0` by default = disabled)
++ *totalThreads* - total amount of threads (IO threads included) used by the box (`2` by default)
++ *ioThreads* - amount of IO threads used by the box (`1` by default)
++ *maxBatchSize* - max size of outgoing message batch (`100` by default)
++ *maxFlushTime* - max message batch flush time (`1000` by default)
++ *reconnectDelay* - delay between reconnects (`5000` by default)
++ *publishSentEvents* - enables/disables publish of "message sent" events (`true` by default)
++ *sessions* - list of session settings
 
-Parameters:
+## Session settings
 
 + *sessionAlias* - session alias for incoming/outgoing th2 messages
 + *host* - service host
@@ -14,7 +22,7 @@ Parameters:
 + *handler* - handler settings
 + *mangler* - mangler settings
 
-## Handler configuration
+## Handler settings
 
 + *beginString* - defines the start of a new message and the protocol version
 + *heartBtInt* - message waiting interval
@@ -27,7 +35,7 @@ Parameters:
 + *reconnectDelay* - interval for reconnect
 + *disconnectRequestDelay* - the interval for the shutdown request
 
-## Mangler configuration
+## Mangler settings
 
 Mangler is configured by specifying a list of transformations which it will try to apply to outgoing messages.   
 Each transformation has a list of conditions which message must meet for transformation actions to be applied.
@@ -160,39 +168,48 @@ spec:
   image-version: 0.0.1
   type: th2-conn
   custom-config:
-    sessionAlias: client
-    secure: false
-    host: "<host>"
-    port: "<port>"
-    handler:
-      beginString: FIXT.1.1
-      heartBtInt: 30
-      senderCompID: client
-      targetCompID: FGW
-      encryptMethod: 0
-      username": username
-      password": password
-      testRequestDelay: 60
-      reconnectDelay": 5
-      disconnectRequestDelay: 5
-    mangler:
-      transform:
-        - when:
-            - { tag: 8, matches: FIXT.1.1 }
-            - { tag: 35, matches: D }
-          then:
-            - set: { tag: 1, value: new account }
-            - add: { tag: 15, value: USD }
-              after: { tag: 58, matches: (.*) }
-          update-length: false
-        - when:
-            - { tag: 8, matches: FIXT.1.1 }
-            - { tag: 35, matches: 8 }
-          then:
-            - replace: { tag: 64, matches: (.*) }
-              with: { tag: 63, value: 1 }
-            - remove: { tag: 110, matches: (.*) }
-          update-checksum: false
+    autoStart: true
+    autoStopAfter: 0
+    totalThreads: 2
+    ioThreads: 1
+    maxBatchSize: 100
+    maxFlushTime: 1000
+    reconnectDelay: 5000
+    publishSentEvents: true
+    sessions:
+      - sessionAlias: client
+        secure: false
+        host: "<host>"
+        port: "<port>"
+        handler:
+          beginString: FIXT.1.1
+          heartBtInt: 30
+          senderCompID: client
+          targetCompID: FGW
+          encryptMethod: 0
+          username": username
+          password": password
+          testRequestDelay: 60
+          reconnectDelay": 5
+          disconnectRequestDelay: 5
+        mangler:
+          transform:
+            - when:
+                - { tag: 8, matches: FIXT.1.1 }
+                - { tag: 35, matches: D }
+              then:
+                - set: { tag: 1, value: new account }
+                - add: { tag: 15, value: USD }
+                  after: { tag: 58, matches: (.*) }
+              update-length: false
+            - when:
+                - { tag: 8, matches: FIXT.1.1 }
+                - { tag: 35, matches: 8 }
+              then:
+                - replace: { tag: 64, matches: (.*) }
+                  with: { tag: 63, value: 1 }
+                - remove: { tag: 110, matches: (.*) }
+              update-checksum: false
   pins:
     - name: to_send
       connection-type: mq
