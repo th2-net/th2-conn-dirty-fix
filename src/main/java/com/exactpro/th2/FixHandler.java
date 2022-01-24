@@ -67,7 +67,7 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
         int offset = buffer.readerIndex();
         if (offset == buffer.writerIndex()) return null;
         int beginStringIdx = ByteBufUtil.indexOf(buffer,"8=FIX");
-        if (beginStringIdx == -1) {
+        if (beginStringIdx < 0) {
             if (buffer.writerIndex() > 0) {
                 buffer.readerIndex(buffer.writerIndex());
                 return buffer.copy(offset, buffer.writerIndex() - offset);
@@ -81,7 +81,7 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
         }
 
         int nextBeginString = ByteBufUtil.indexOf(buffer, SOH + "8=FIX") + 1;
-        int checksum = ByteBufUtil.indexOf(buffer, SOH + CHECKSUM, beginStringIdx);
+        int checksum = ByteBufUtil.indexOf(buffer, SOH + CHECKSUM);
         int endOfMessageIdx = checksum + 7; //checksum is always 3 digits // or we should search next soh?
 
         try {
