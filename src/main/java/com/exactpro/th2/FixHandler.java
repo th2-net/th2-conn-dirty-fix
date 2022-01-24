@@ -340,7 +340,7 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
             MessageUtil.putTag(message, MSG_SEQ_NUM_TAG, Integer.toString(msgSeqNumValue));
         }else {
             ByteBufUtil.insert(message, Integer.toString(msgSeqNumValue), msgSeqNum);
-            message = MessageUtil.updateTag(message, MSG_SEQ_NUM_TAG, Integer.toString(msgSeqNumValue));
+            MessageUtil.updateTag(message, MSG_SEQ_NUM_TAG, Integer.toString(msgSeqNumValue));
         }
 
         int senderCompID = ByteBufUtil.indexOf(message, SENDER_COMP_ID);
@@ -367,8 +367,8 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
             MessageUtil.putTag(message, SENDING_TIME_TAG, MessageUtil.getTagValue(message, SENDING_TIME_TAG));
         }
 
-        message = MessageUtil.updateTag(message, BODY_LENGTH_TAG, Integer.toString(getBodyLength(message)));
-        message = MessageUtil.updateTag(message, CHECKSUM_TAG, getChecksum(message));
+        MessageUtil.updateTag(message, BODY_LENGTH_TAG, Integer.toString(getBodyLength(message)));
+        MessageUtil.updateTag(message, CHECKSUM_TAG, getChecksum(message));
 
         outgoingMessages.put(msgSeqNumValue, message);
 

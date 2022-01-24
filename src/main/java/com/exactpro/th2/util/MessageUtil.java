@@ -92,9 +92,8 @@ public class MessageUtil {
         return buffer.indexOf(fromIndex, buffer.writerIndex(), value);
     }
 
-    public static ByteBuf updateTag(ByteBuf message, String tag, String value) {
+    public static void updateTag(ByteBuf message, String tag, String value) {
         byte[] toInsert = value.getBytes(StandardCharsets.US_ASCII);
-        byte[] result = new byte[message.capacity() + toInsert.length - getTagValue(message, tag).length()];
 
         int firstSoh = 1;
 
@@ -102,15 +101,12 @@ public class MessageUtil {
             firstSoh = 0;
         }
 
-        int start = findTag(message, tag) + firstSoh + tag.length() + 1;
+        int start = findTag(message, tag) + firstSoh + tag.length()+1;
         int end = findByte(message, start, BYTE_SOH);
-
-        message.readerIndex(0);
-        message.readBytes(result, 0, start);
-        System.arraycopy(toInsert, 0, result, start, toInsert.length);
-        message.readerIndex(end);
-        message.readBytes(result, start + toInsert.length, message.writerIndex() - message.readerIndex());
-        return Unpooled.wrappedBuffer(result);
+        ByteBuf copyMessage = message.slice(end, message.readableBytes()-end);
+        message.writerIndex(start);
+        message.writeBytes(toInsert);
+        message.writeBytes(copyMessage);
     }
 
 
