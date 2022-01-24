@@ -135,8 +135,8 @@ class FixHandlerTest {
         ByteBuf bufferForPrepareMessage = Unpooled.buffer().writeBytes("8=FIXT.1.1\0019=13\001552=1\00110=169\001".getBytes(StandardCharsets.US_ASCII));
         ByteBuf bufferForPrepareMessage2 = Unpooled.buffer(11).writeBytes("552=1\001".getBytes(StandardCharsets.UTF_8));
 
-        String expectedMessage = "8=FIXT.1.1\u00019=13\u000135=A\u000134=5\00149=client\u000156=server\u000152=2014-12-22T10:15:30Z\u0001552=1\u000110=169\u0001";
-        String expectedMessage2 = "8=FIXT.1.1\u00019=XXX\u000134=6\00149=client\u000156=server\u000152=2014-12-22T10:15:30Z\u0001552=1\u000110=XXX\u0001";
+        String expectedMessage = "8=FIXT.1.1\u00019=60\u000135=A\u000134=5\00149=client\u000156=server\u000152=2014-12-22T10:15:30Z\u0001552=1\u000110=091\u0001";
+        String expectedMessage2 = "8=FIXT.1.1\u00019=55\u000134=6\00149=client\u000156=server\u000152=2014-12-22T10:15:30Z\u0001552=1\u000110=121\u0001";
         Map<String, String> expected = new HashMap<>();
         expected.put("MsgType", "A");
         Map<String, String> expected2 = new HashMap<>();
@@ -258,15 +258,11 @@ class FixHandlerTest {
 
     @Test
     void updateTagTest() {
-        ByteBuf buf = Unpooled.wrappedBuffer("8=FIX.2.2\00135=AE\001".getBytes(StandardCharsets.UTF_8));
-        String expected = "8=FIX.2.2\00135=AEE\001";
-        String expected2 = "8=FIX.2.3\00135=AEE\001";
+        ByteBuf buf = Unpooled.buffer().writeBytes("8=FIX.2.2\00135=AE\001".getBytes(StandardCharsets.UTF_8));
+        String expected = "8=FIX.2.3\00135=AE\001";
 
-        buf = MessageUtil.updateTag(buf, Constants.MSG_TYPE_TAG, "AEE");
-        assertEquals(expected, new String(buf.array()));
-
-        buf = MessageUtil.updateTag(buf, Constants.BEGIN_STRING_TAG, "FIX.2.3");
-        assertEquals(expected2, new String(buf.array()));
+        MessageUtil.updateTag(buf, Constants.BEGIN_STRING_TAG, "FIX.2.3");
+        assertEquals(expected, buf.toString(StandardCharsets.US_ASCII));
     }
 
 }
