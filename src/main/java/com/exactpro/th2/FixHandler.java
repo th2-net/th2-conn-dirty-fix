@@ -81,7 +81,7 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
         }
 
         int nextBeginString = ByteBufUtil.indexOf(buffer, SOH + "8=FIX") + 1;
-        int checksum = ByteBufUtil.indexOf(buffer, SOH + CHECKSUM, beginStringIdx);
+        int checksum = ByteBufUtil.indexOf(buffer, SOH + CHECKSUM);
         int endOfMessageIdx = checksum + 7; //checksum is always 3 digits // or we should search next soh?
 
         try {
@@ -249,6 +249,7 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
                 LOGGER.info("Returning messages from " + beginSeqNo + " to " + endSeqNo);
                 for (int i = beginSeqNo; i <= endSeqNo; i++) {
                     if (outgoingMessages.get(i) != null) {
+                        LOGGER.info("Returning message - " + outgoingMessages.get(i).toString(StandardCharsets.US_ASCII));
                         client.send(outgoingMessages.get(i), Collections.emptyMap(), IChannel.SendMode.MANGLE);
                     }
                     else {
@@ -305,11 +306,6 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
     @Override
     public Map<String, String> onOutgoing(@NotNull ByteBuf message, @NotNull Map<String, String> metadata) {
 
-        if (heartbeatTimer != null) {
-            heartbeatTimer.cancel(false);
-            heartbeatTimer = executorService.scheduleWithFixedDelay(this::sendHeartbeat, settings.getHeartBtInt(), settings.getHeartBtInt(), TimeUnit.SECONDS);
-        }
-
         message.readerIndex(0);
 
         int beginString = ByteBufUtil.indexOf(message, BEGIN_STRING_TAG + "=");
@@ -338,21 +334,6 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
             MessageUtil.putTag(message, CHECKSUM_TAG, STUBBING_VALUE); //stubbing until finish checking message
         }
 
-        int senderCompID = ByteBufUtil.indexOf(message, SENDER_COMP_ID);
-        if (senderCompID < 0) {
-            MessageUtil.putTag(message, SENDER_COMP_ID_TAG, settings.getSenderCompID());
-        }
-
-        int targetCompID = ByteBufUtil.indexOf(message, TARGET_COMP_ID);
-        if (targetCompID < 0) {
-            MessageUtil.putTag(message, TARGET_COMP_ID_TAG, settings.getTargetCompID());
-        }
-
-        int sendingTime = ByteBufUtil.indexOf(message, SENDING_TIME);
-        if (sendingTime < 0) {
-            MessageUtil.putTag(message, SENDING_TIME_TAG, getTime());
-        }
-
         int msgSeqNumValue = msgSeqNum.incrementAndGet();
         int msgSeqNum = ByteBufUtil.indexOf(message, MSG_SEQ_NUM);
         if (msgSeqNum < 0) {
@@ -360,6 +341,30 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
         }else {
             ByteBufUtil.insert(message, Integer.toString(msgSeqNumValue), msgSeqNum);
             message = MessageUtil.updateTag(message, MSG_SEQ_NUM_TAG, Integer.toString(msgSeqNumValue));
+        }
+
+        int senderCompID = ByteBufUtil.indexOf(message, SENDER_COMP_ID);
+        if (senderCompID < 0) {
+            MessageUtil.putTag(message, SENDER_COMP_ID_TAG, settings.getSenderCompID());
+        }
+        else {
+            MessageUtil.putTag(message, SENDER_COMP_ID_TAG, MessageUtil.getTagValue(message, SENDER_COMP_ID_TAG));
+        }
+
+        int targetCompID = ByteBufUtil.indexOf(message, TARGET_COMP_ID);
+        if (targetCompID < 0) {
+            MessageUtil.putTag(message, TARGET_COMP_ID_TAG, settings.getTargetCompID());
+        }
+        else {
+            MessageUtil.putTag(message, TARGET_COMP_ID_TAG, MessageUtil.getTagValue(message, TARGET_COMP_ID_TAG));
+        }
+
+        int sendingTime = ByteBufUtil.indexOf(message, SENDING_TIME);
+        if (sendingTime < 0) {
+            MessageUtil.putTag(message, SENDING_TIME_TAG, getTime());
+        }
+        else {
+            MessageUtil.putTag(message, SENDING_TIME_TAG, MessageUtil.getTagValue(message, SENDING_TIME_TAG));
         }
 
         message = MessageUtil.updateTag(message, BODY_LENGTH_TAG, Integer.toString(getBodyLength(message)));

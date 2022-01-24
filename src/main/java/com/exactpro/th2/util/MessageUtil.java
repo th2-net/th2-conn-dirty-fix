@@ -151,6 +151,30 @@ public class MessageUtil {
             return;
         }
 
+        if (tag.equals(Constants.SENDER_COMP_ID_TAG)) {
+            toInsert = (Constants.SENDER_COMP_ID_TAG + "=" + value + SOH).getBytes(StandardCharsets.US_ASCII);
+            int start = findTag(message, 0, Constants.MSG_SEQ_NUM_TAG) + 1;
+            int toIdx = message.indexOf(start, message.readableBytes(), BYTE_SOH) + 1;
+            getSupplementedMessage(message, toInsert, toIdx);
+            return;
+        }
+
+        if (tag.equals(Constants.TARGET_COMP_ID_TAG)) {
+            toInsert = (Constants.TARGET_COMP_ID_TAG + "=" + value + SOH).getBytes(StandardCharsets.US_ASCII);
+            int start = findTag(message, 0, Constants.SENDER_COMP_ID_TAG) + 1;
+            int toIdx = message.indexOf(start, message.readableBytes(), BYTE_SOH) + 1;
+            getSupplementedMessage(message, toInsert, toIdx);
+            return;
+        }
+
+        if (tag.equals(Constants.SENDING_TIME_TAG)) {
+            toInsert = (Constants.SENDING_TIME_TAG + "=" + value + SOH).getBytes(StandardCharsets.US_ASCII);
+            int start = findTag(message, 0, Constants.TARGET_COMP_ID_TAG) + 1;
+            int toIdx = message.indexOf(start, message.readableBytes(), BYTE_SOH) + 1;
+            getSupplementedMessage(message, toInsert, toIdx);
+            return;
+        }
+
         if (tag.equals(Constants.CHECKSUM_TAG)) {
             toInsert = (Constants.CHECKSUM_TAG + "=" + value + SOH).getBytes(StandardCharsets.US_ASCII);
             getSupplementedMessage(message, toInsert, message.readableBytes());
