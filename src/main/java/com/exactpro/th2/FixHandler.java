@@ -50,7 +50,7 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
     private final AtomicBoolean enabled = new AtomicBoolean(false);
     private final ScheduledExecutorService executorService;
     private final IContext<IProtocolHandlerSettings> context;
-    Future<?> heartbeatTimer = CompletableFuture.completedFuture(null);
+    private Future<?> heartbeatTimer = CompletableFuture.completedFuture(null);
     private Future<?> testRequestTimer = CompletableFuture.completedFuture(null);
     private Future<?> reconnectRequestTimer = CompletableFuture.completedFuture(null);
     private Future<?> disconnectRequest = CompletableFuture.completedFuture(null);
@@ -248,13 +248,13 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
                 if (endSeqNo == 0) endSeqNo = msgSeqNum.get()-1;
                 LOGGER.info("Returning messages from " + beginSeqNo + " to " + endSeqNo);
                 for (int i = beginSeqNo; i <= endSeqNo; i++) {
-//                    if (outgoingMessages.get(i) != null) {
-//                        client.send(outgoingMessages.get(i), Collections.emptyMap(), IChannel.SendMode.MANGLE);
-//                    }
-//                    else {
-                        resendRequestSeqNum.getAndSet(beginSeqNo);
+                    if (outgoingMessages.get(i) != null) {
+                        client.send(outgoingMessages.get(i), Collections.emptyMap(), IChannel.SendMode.MANGLE);
+                    }
+                    else {
+                        resendRequestSeqNum.getAndSet(i);
                         sendHeartbeat();
-//                    }
+                    }
                 }
                 resendRequestSeqNum.getAndSet(0);
             } catch (Exception e) {
@@ -326,6 +326,9 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
 
         if (msgType < 0) {                                                        //should we interrupt sending message?
             LOGGER.error("No msgType in message {}", new String(message.array()));
+            if (metadata.get("MsgType")!=null) {
+                MessageUtil.putTag(message, MSG_TYPE_TAG, metadata.get("MsgType"));
+            }
         } //else {
 //            metadata.put(STRING_MSG_TYPE, MessageUtil.getTagValue(message, MSG_TYPE_TAG));
 //        }

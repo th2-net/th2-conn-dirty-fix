@@ -132,7 +132,7 @@ class FixHandlerTest {
 
     @Test
     void onOutgoingMessageTest() {
-        ByteBuf bufferForPrepareMessage = Unpooled.buffer().writeBytes("8=FIXT.1.1\0019=13\00135=A\001552=1\00110=169\001".getBytes(StandardCharsets.US_ASCII));
+        ByteBuf bufferForPrepareMessage = Unpooled.buffer().writeBytes("8=FIXT.1.1\0019=13\001552=1\00110=169\001".getBytes(StandardCharsets.US_ASCII));
         ByteBuf bufferForPrepareMessage2 = Unpooled.buffer(11).writeBytes("552=1\001".getBytes(StandardCharsets.UTF_8));
 
         String expectedMessage = "8=FIXT.1.1\u00019=13\u000135=A\u0001552=1\00149=client\u000156=server\u000152=2014-12-22T10:15:30Z\u000134=5\u000110=169\u0001";

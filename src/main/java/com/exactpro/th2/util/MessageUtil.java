@@ -130,6 +130,13 @@ public class MessageUtil {
             return;
         }
 
+        if (tag.equals(Constants.MSG_TYPE_TAG)) {
+            toInsert = (Constants.MSG_TYPE_TAG + "=" + value + SOH).getBytes(StandardCharsets.US_ASCII);
+            int toIdx = message.indexOf(findTag(message, 0, Constants.BODY_LENGTH_TAG) + 1, message.readableBytes(), BYTE_SOH) + 1;
+            getSupplementedMessage(message, toInsert, toIdx);
+            return;
+        }
+
         if (tag.equals(Constants.CHECKSUM_TAG)) {
             toInsert = (Constants.CHECKSUM_TAG + "=" + value + SOH).getBytes(StandardCharsets.US_ASCII);
             getSupplementedMessage(message, toInsert, message.readableBytes());
