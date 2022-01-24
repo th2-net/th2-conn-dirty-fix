@@ -81,7 +81,7 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
         }
 
         int nextBeginString = ByteBufUtil.indexOf(buffer, SOH + "8=FIX") + 1;
-        int checksum = ByteBufUtil.indexOf(buffer, SOH + CHECKSUM);
+        int checksum = ByteBufUtil.indexOf(buffer, SOH + CHECKSUM, beginStringIdx);
         int endOfMessageIdx = checksum + 7; //checksum is always 3 digits // or we should search next soh?
 
         try {
