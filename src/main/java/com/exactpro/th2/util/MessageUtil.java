@@ -101,9 +101,9 @@ public class MessageUtil {
             firstSoh = 0;
         }
 
-        int start = findTag(message, tag) + firstSoh + tag.length()+1;
+        int start = findTag(message, tag) + firstSoh + tag.length() + 1;
         int end = findByte(message, start, BYTE_SOH);
-        ByteBuf copyMessage = message.slice(end, message.readableBytes()-end);
+        ByteBuf copyMessage = message.copy(end, message.readableBytes()-end);
         message.writerIndex(start);
         message.writeBytes(toInsert);
         message.writeBytes(copyMessage);

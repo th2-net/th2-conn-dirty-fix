@@ -77,15 +77,16 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
 
         if (beginStringIdx > offset) {
             buffer.readerIndex(beginStringIdx);
-            return buffer.copy(offset, beginStringIdx - offset);
+            return buffer.retainedSlice(offset, beginStringIdx - offset);
         }
 
         int nextBeginString = ByteBufUtil.indexOf(buffer, SOH + "8=FIX") + 1;
         int checksum = ByteBufUtil.indexOf(buffer, SOH + CHECKSUM);
-        int endOfMessageIdx = checksum + 7; //checksum is always 3 digits // or we should search next soh?
+        int endOfMessageIdx = MessageUtil.findTag(buffer, checksum + 1, SOH);
 
         try {
-            if (checksum == -1 || buffer.getByte(endOfMessageIdx) != BYTE_SOH || (nextBeginString > 0 && nextBeginString < endOfMessageIdx)) {
+            if (checksum == -1 || endOfMessageIdx == -1
+                    || (nextBeginString > 0 && nextBeginString < endOfMessageIdx)) {
                 LOGGER.trace("Failed to parse message: {}. No Checksum or no tag separator at the end of the message with index {}", buffer.toString(StandardCharsets.US_ASCII), beginStringIdx);
                 throw new Exception();
             }
