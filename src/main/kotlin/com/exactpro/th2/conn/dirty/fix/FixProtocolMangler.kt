@@ -18,25 +18,29 @@ package com.exactpro.th2.conn.dirty.fix
 
 import com.exactpro.th2.common.event.Event
 import com.exactpro.th2.common.event.Event.Status.PASSED
-import com.exactpro.th2.common.event.EventUtils
+import com.exactpro.th2.common.event.EventUtils.createMessageBean
 import com.exactpro.th2.conn.dirty.tcp.core.api.IContext
 import com.exactpro.th2.conn.dirty.tcp.core.api.IProtocolMangler
 import com.exactpro.th2.conn.dirty.tcp.core.api.IProtocolManglerFactory
 import com.exactpro.th2.conn.dirty.tcp.core.api.IProtocolManglerSettings
 import com.google.auto.service.AutoService
 import io.netty.buffer.ByteBuf
+import io.netty.buffer.ByteBufUtil
 
 class FixProtocolMangler(context: IContext<IProtocolManglerSettings>) : IProtocolMangler {
     private val transform = (context.settings as FixProtocolManglerSettings).transform
 
     override fun onOutgoing(message: ByteBuf, metadata: Map<String, String>): Event? {
+        val original = message.copy()
         val executed = MessageTransformer.transform(message, transform).ifEmpty { return null }
 
         return Event.start().apply {
             name("Message mangled")
             type("Mangle")
             status(PASSED)
-            executed.forEach { bodyData(EventUtils.createMessageBean(it.toString())) }
+            executed.forEach { bodyData(createMessageBean(it.toString())) }
+            bodyData(createMessageBean("Original message:"))
+            bodyData(createMessageBean(ByteBufUtil.prettyHexDump(original)))
         }
     }
 }
