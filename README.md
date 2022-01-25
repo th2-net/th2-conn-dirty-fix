@@ -2,7 +2,7 @@
 
 This microservice allows sending and receiving messages via FIX protocol
 
-# Configuration
+## Configuration
 
 + *autoStart* - enables/disable auto-starting of session on box start (`true` by default)
 + *autoStopAfter* - time in seconds after which session will be automatically stopped (`0` by default = disabled)
