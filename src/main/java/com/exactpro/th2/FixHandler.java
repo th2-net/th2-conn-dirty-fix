@@ -85,18 +85,17 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
         int endOfMessageIdx = MessageUtil.findByte(buffer, checksum + 1, BYTE_SOH);
 
         try {
-            if (checksum == -1 || endOfMessageIdx == -1 || endOfMessageIdx - checksum != 7 || (nextBeginString > 0 && nextBeginString > checksum && nextBeginString < endOfMessageIdx)) {
+            if (checksum == -1 || endOfMessageIdx == -1 || endOfMessageIdx - checksum != 7) {
                 LOGGER.trace("Failed to parse message: {}. No Checksum or no tag separator at the end of the message with index {}", buffer.toString(StandardCharsets.US_ASCII), beginStringIdx);
                 throw new Exception();
             }
         } catch (Exception e) {
             if (nextBeginString > 0) {
                 buffer.readerIndex(nextBeginString);
-                return buffer.retainedSlice(beginStringIdx, nextBeginString - beginStringIdx);
             } else {
                 buffer.readerIndex(buffer.writerIndex());
-                return buffer.retainedSlice(beginStringIdx, buffer.writerIndex() - beginStringIdx);
             }
+            return null;
         }
 
         buffer.readerIndex(endOfMessageIdx + 1);
@@ -307,7 +306,6 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
     @NotNull
     @Override
     public Map<String, String> onOutgoing(@NotNull ByteBuf message, @NotNull Map<String, String> metadata) {
-
         message.readerIndex(0);
 
         int beginString = ByteBufUtil.indexOf(message, BEGIN_STRING_TAG + "=");

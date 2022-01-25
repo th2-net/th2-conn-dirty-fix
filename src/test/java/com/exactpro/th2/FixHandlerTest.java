@@ -69,8 +69,7 @@ class FixHandlerTest {
 
         assertNotNull(result0);
         assertEquals(expected0, result0.toString(StandardCharsets.US_ASCII));
-        assertNotNull(result1);
-        assertEquals(expected1, result1.toString(StandardCharsets.US_ASCII));
+        assertNull(result1);
         assertNull(result2);
     }
 
@@ -234,7 +233,6 @@ class FixHandlerTest {
         assertEquals(expected2, actual2);
     }
 
-
     @Test
     void putTagTest() {
 
@@ -259,10 +257,14 @@ class FixHandlerTest {
     @Test
     void updateTagTest() {
         ByteBuf buf = Unpooled.buffer().writeBytes("8=FIX.2.2\00135=AE\001".getBytes(StandardCharsets.UTF_8));
-        String expected = "8=FIX.2.3\00135=AE\001";
+        String expected = "8=FIX.2.2\00135=AEE\001";
+        String expected2 = "8=FIX.2.3\00135=AEE\001";
+
+        MessageUtil.updateTag(buf, Constants.MSG_TYPE_TAG, "AEE");
+        assertEquals(expected, buf.toString(StandardCharsets.US_ASCII));
 
         MessageUtil.updateTag(buf, Constants.BEGIN_STRING_TAG, "FIX.2.3");
-        assertEquals(expected, buf.toString(StandardCharsets.US_ASCII));
+        assertEquals(expected2, buf.toString(StandardCharsets.US_ASCII));
     }
 
 }
