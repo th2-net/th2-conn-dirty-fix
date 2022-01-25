@@ -66,7 +66,7 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
     public ByteBuf onReceive(ByteBuf buffer) {
         int offset = buffer.readerIndex();
         if (offset == buffer.writerIndex()) return null;
-        int beginStringIdx = ByteBufUtil.indexOf(buffer,"8=FIX");
+        int beginStringIdx = ByteBufUtil.indexOf(buffer, "8=FIX");
         if (beginStringIdx < 0) {
             if (buffer.writerIndex() > 0) {
                 buffer.readerIndex(buffer.writerIndex());
@@ -81,25 +81,29 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
         }
 
         int nextBeginString = ByteBufUtil.indexOf(buffer, SOH + "8=FIX") + 1;
+        int checksum = ByteBufUtil.indexOf(buffer, CHECKSUM);
+        int endOfMessageIdx = MessageUtil.findByte(buffer, checksum + 1, BYTE_SOH);
 
-        int checksum = ByteBufUtil.indexOf(buffer, SOH + CHECKSUM);
-        int endOfMessageIdx = MessageUtil.findTag(buffer, checksum + 1, SOH);
-
-
-        if (checksum < 0 || endOfMessageIdx < 0) {
-            LOGGER.trace("Failed to parse message: {}. No Checksum or no tag separator at the end of the message with index {}", buffer.toString(StandardCharsets.US_ASCII), beginStringIdx);
-
+        try {
+            if (checksum == -1 || endOfMessageIdx == -1 || endOfMessageIdx - checksum != 7 || (nextBeginString > 0 && nextBeginString > checksum && nextBeginString < endOfMessageIdx)) {
+                LOGGER.trace("Failed to parse message: {}. No Checksum or no tag separator at the end of the message with index {}", buffer.toString(StandardCharsets.US_ASCII), beginStringIdx);
+                throw new Exception();
+            }
+        } catch (Exception e) {
+            if (nextBeginString > 0) {
+                buffer.readerIndex(nextBeginString);
+                return buffer.retainedSlice(beginStringIdx, nextBeginString - beginStringIdx);
+            } else {
+                buffer.readerIndex(buffer.writerIndex());
+                return buffer.retainedSlice(beginStringIdx, buffer.writerIndex() - beginStringIdx);
+            }
         }
-        if(nextBeginString > 0) {
-            buffer.readerIndex(nextBeginString);
-            return buffer.retainedSlice(beginStringIdx, nextBeginString - beginStringIdx);
 
-        } else {
-            buffer.readerIndex(buffer.writerIndex());
-            return buffer.retainedSlice(beginStringIdx, buffer.writerIndex() - beginStringIdx);
-        }
+        buffer.readerIndex(endOfMessageIdx + 1);
+        return buffer.retainedSlice(beginStringIdx, endOfMessageIdx + 1 - beginStringIdx);
 
     }
+
 
     @NotNull
     @Override
