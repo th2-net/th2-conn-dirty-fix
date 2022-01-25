@@ -81,27 +81,24 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
         }
 
         int nextBeginString = ByteBufUtil.indexOf(buffer, SOH + "8=FIX") + 1;
+
         int checksum = ByteBufUtil.indexOf(buffer, SOH + CHECKSUM);
         int endOfMessageIdx = MessageUtil.findTag(buffer, checksum + 1, SOH);
 
-        try {
-            if (checksum == -1 || endOfMessageIdx == -1
-                    || (nextBeginString > 0 && nextBeginString < endOfMessageIdx)) {
-                LOGGER.trace("Failed to parse message: {}. No Checksum or no tag separator at the end of the message with index {}", buffer.toString(StandardCharsets.US_ASCII), beginStringIdx);
-                throw new Exception();
-            }
-        } catch (Exception e) {
-            if (nextBeginString > 0) {
-                buffer.readerIndex(nextBeginString);
-                return buffer.retainedSlice(beginStringIdx, nextBeginString - beginStringIdx);
-            } else {
-                buffer.readerIndex(buffer.writerIndex());
-                return buffer.retainedSlice(beginStringIdx, buffer.writerIndex() - beginStringIdx);
-            }
+
+        if (checksum < 0 || endOfMessageIdx < 0) {
+            LOGGER.trace("Failed to parse message: {}. No Checksum or no tag separator at the end of the message with index {}", buffer.toString(StandardCharsets.US_ASCII), beginStringIdx);
+
+        }
+        if(nextBeginString > 0) {
+            buffer.readerIndex(nextBeginString);
+            return buffer.retainedSlice(beginStringIdx, nextBeginString - beginStringIdx);
+
+        } else {
+            buffer.readerIndex(buffer.writerIndex());
+            return buffer.retainedSlice(beginStringIdx, buffer.writerIndex() - beginStringIdx);
         }
 
-        buffer.readerIndex(endOfMessageIdx + 1);
-        return buffer.retainedSlice(beginStringIdx, endOfMessageIdx + 1 - beginStringIdx);
     }
 
     @NotNull
