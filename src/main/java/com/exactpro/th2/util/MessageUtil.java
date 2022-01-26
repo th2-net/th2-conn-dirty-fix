@@ -2,7 +2,6 @@ package com.exactpro.th2.util;
 
 import com.exactpro.th2.constants.Constants;
 import io.netty.buffer.ByteBuf;
-import io.netty.buffer.Unpooled;
 
 import java.nio.charset.StandardCharsets;
 
@@ -148,26 +147,17 @@ public class MessageUtil {
         }
 
         if (tag.equals(Constants.SENDER_COMP_ID_TAG)) {
-            toInsert = (Constants.SENDER_COMP_ID_TAG + "=" + value + SOH).getBytes(StandardCharsets.US_ASCII);
-            int start = findTag(message, 0, Constants.MSG_SEQ_NUM_TAG) + 1;
-            int toIdx = message.indexOf(start, message.readableBytes(), BYTE_SOH) + 1;
-            getSupplementedMessage(message, toInsert, toIdx);
+            putAddTag(message, value, Constants.SENDER_COMP_ID_TAG, Constants.MSG_SEQ_NUM_TAG);
             return;
         }
 
         if (tag.equals(Constants.TARGET_COMP_ID_TAG)) {
-            toInsert = (Constants.TARGET_COMP_ID_TAG + "=" + value + SOH).getBytes(StandardCharsets.US_ASCII);
-            int start = findTag(message, 0, Constants.SENDER_COMP_ID_TAG) + 1;
-            int toIdx = message.indexOf(start, message.readableBytes(), BYTE_SOH) + 1;
-            getSupplementedMessage(message, toInsert, toIdx);
+            putAddTag(message, value, Constants.TARGET_COMP_ID_TAG, Constants.SENDER_COMP_ID_TAG);
             return;
         }
 
         if (tag.equals(Constants.SENDING_TIME_TAG)) {
-            toInsert = (Constants.SENDING_TIME_TAG + "=" + value + SOH).getBytes(StandardCharsets.US_ASCII);
-            int start = findTag(message, 0, Constants.TARGET_COMP_ID_TAG) + 1;
-            int toIdx = message.indexOf(start, message.readableBytes(), BYTE_SOH) + 1;
-            getSupplementedMessage(message, toInsert, toIdx);
+            putAddTag(message, value, Constants.SENDING_TIME_TAG, Constants.TARGET_COMP_ID_TAG);
             return;
         }
 
@@ -182,6 +172,13 @@ public class MessageUtil {
         getSupplementedMessage(message, toInsert, toIdx);
     }
 
+    private static void putAddTag(ByteBuf message, String value, String tag, String previousTag){
+        byte[] toInsert = (tag + "=" + value + SOH).getBytes(StandardCharsets.US_ASCII);
+        int start = findTag(message, 0, previousTag) + 1;
+        int toIdx = message.indexOf(start, message.readableBytes(), BYTE_SOH) + 1;
+        getSupplementedMessage(message, toInsert, toIdx);
+    }
+
     private static void getSupplementedMessage(ByteBuf message, byte[] toInsert, int toIdx) {
         message.capacity(message.readableBytes() + toInsert.length);
         ByteBuf copyMessage = message.copy(toIdx, message.readableBytes()-toIdx);
@@ -189,5 +186,13 @@ public class MessageUtil {
         message.writeBytes(toInsert);
         message.writeBytes(copyMessage);
         message.readerIndex(0);
+    }
+
+    public static void moveTag(ByteBuf message, int fromIdx, String tag, String value){
+        int start = MessageUtil.findByte(message, fromIdx, BYTE_SOH)+1;
+        int end = message.readableBytes()-start;
+        message.writerIndex(fromIdx);
+        message.writeBytes(message.copy(start, end));
+        MessageUtil.putTag(message, tag, value);
     }
 }

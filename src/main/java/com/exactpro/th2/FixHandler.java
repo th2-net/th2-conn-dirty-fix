@@ -335,36 +335,39 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
         }
 
         int msgSeqNumValue = msgSeqNum.incrementAndGet();
-        int msgSeqNum = ByteBufUtil.indexOf(message, MSG_SEQ_NUM);
+        int msgSeqNum = ByteBufUtil.indexOf(message, MSG_SEQ_NUM_TAG);
         if (msgSeqNum < 0) {
             MessageUtil.putTag(message, MSG_SEQ_NUM_TAG, Integer.toString(msgSeqNumValue));
         }else {
             ByteBufUtil.insert(message, Integer.toString(msgSeqNumValue), msgSeqNum);
-            MessageUtil.updateTag(message, MSG_SEQ_NUM_TAG, Integer.toString(msgSeqNumValue));
+            MessageUtil.moveTag(message, msgSeqNum, MSG_SEQ_NUM_TAG, Integer.toString(msgSeqNumValue));
         }
 
-        int senderCompID = ByteBufUtil.indexOf(message, SENDER_COMP_ID);
+        int senderCompID = ByteBufUtil.indexOf(message, SOH + SENDER_COMP_ID_TAG);
         if (senderCompID < 0) {
             MessageUtil.putTag(message, SENDER_COMP_ID_TAG, settings.getSenderCompID());
         }
         else {
-            MessageUtil.putTag(message, SENDER_COMP_ID_TAG, MessageUtil.getTagValue(message, SENDER_COMP_ID_TAG));
+            String value = MessageUtil.getTagValue(message, SENDER_COMP_ID_TAG);
+            MessageUtil.moveTag(message, senderCompID + 1, SENDER_COMP_ID_TAG, value);
         }
 
-        int targetCompID = ByteBufUtil.indexOf(message, TARGET_COMP_ID);
+        int targetCompID = ByteBufUtil.indexOf(message,SOH + TARGET_COMP_ID_TAG);
         if (targetCompID < 0) {
             MessageUtil.putTag(message, TARGET_COMP_ID_TAG, settings.getTargetCompID());
         }
         else {
-            MessageUtil.putTag(message, TARGET_COMP_ID_TAG, MessageUtil.getTagValue(message, TARGET_COMP_ID_TAG));
+            String value = MessageUtil.getTagValue(message, TARGET_COMP_ID_TAG);
+            MessageUtil.moveTag(message, targetCompID + 1, TARGET_COMP_ID_TAG, value);
         }
 
-        int sendingTime = ByteBufUtil.indexOf(message, SENDING_TIME);
+        int sendingTime = ByteBufUtil.indexOf(message, SOH + SENDING_TIME_TAG);
         if (sendingTime < 0) {
             MessageUtil.putTag(message, SENDING_TIME_TAG, getTime());
         }
         else {
-            MessageUtil.putTag(message, SENDING_TIME_TAG, MessageUtil.getTagValue(message, SENDING_TIME_TAG));
+            String value = MessageUtil.getTagValue(message, SENDING_TIME_TAG);
+            MessageUtil.moveTag(message, sendingTime + 1, SENDING_TIME_TAG, value);
         }
 
         MessageUtil.updateTag(message, BODY_LENGTH_TAG, Integer.toString(getBodyLength(message)));
