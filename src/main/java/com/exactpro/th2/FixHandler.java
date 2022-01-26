@@ -93,7 +93,7 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
             if (nextBeginString > 0) {
                 buffer.readerIndex(nextBeginString);
             } else {
-                buffer.readerIndex(buffer.writerIndex());
+                buffer.readerIndex(beginStringIdx);
             }
             return null;
         }
