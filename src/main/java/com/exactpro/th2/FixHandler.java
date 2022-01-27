@@ -349,7 +349,7 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
         }
         else {
             String value = MessageUtil.getTagValue(message, SENDER_COMP_ID_TAG);
-            if (!Objects.equals(value, "null")) {
+            if (!Objects.equals(value, "null") && !Objects.equals(value, "") && !Objects.equals(value, null)) {
                 MessageUtil.moveTag(message, senderCompID + 1, SENDER_COMP_ID_TAG, value);
             }
             else{
@@ -363,7 +363,7 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
         }
         else {
             String value = MessageUtil.getTagValue(message, TARGET_COMP_ID_TAG);
-            if (!Objects.equals(value, "null")) {
+            if (!Objects.equals(value, "null") && !Objects.equals(value, "") && !Objects.equals(value, null)) {
                 MessageUtil.moveTag(message, targetCompID + 1, TARGET_COMP_ID_TAG, value);
             }
             else{
@@ -377,7 +377,7 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
         }
         else {
             String value = MessageUtil.getTagValue(message, SENDING_TIME_TAG);
-            if (!Objects.equals(value, "null")) {
+            if (!Objects.equals(value, "null") && !Objects.equals(value, "") && !Objects.equals(value, null)) {
                 MessageUtil.moveTag(message, sendingTime + 1, SENDING_TIME_TAG, value);
             }
             else {
