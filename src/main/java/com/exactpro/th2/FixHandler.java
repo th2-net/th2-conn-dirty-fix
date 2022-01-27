@@ -349,7 +349,12 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
         }
         else {
             String value = MessageUtil.getTagValue(message, SENDER_COMP_ID_TAG);
-            MessageUtil.moveTag(message, senderCompID + 1, SENDER_COMP_ID_TAG, value);
+            if (!Objects.equals(value, "null")) {
+                MessageUtil.moveTag(message, senderCompID + 1, SENDER_COMP_ID_TAG, value);
+            }
+            else{
+                MessageUtil.moveTag(message, senderCompID + 1, SENDER_COMP_ID_TAG, settings.getSenderCompID());
+            }
         }
 
         int targetCompID = ByteBufUtil.indexOf(message,SOH + TARGET_COMP_ID_TAG);
@@ -358,7 +363,12 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
         }
         else {
             String value = MessageUtil.getTagValue(message, TARGET_COMP_ID_TAG);
-            MessageUtil.moveTag(message, targetCompID + 1, TARGET_COMP_ID_TAG, value);
+            if (!Objects.equals(value, "null")) {
+                MessageUtil.moveTag(message, targetCompID + 1, TARGET_COMP_ID_TAG, value);
+            }
+            else{
+                MessageUtil.moveTag(message, targetCompID + 1, TARGET_COMP_ID_TAG, settings.getTargetCompID());
+            }
         }
 
         int sendingTime = ByteBufUtil.indexOf(message, SOH + SENDING_TIME_TAG);
@@ -367,7 +377,12 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
         }
         else {
             String value = MessageUtil.getTagValue(message, SENDING_TIME_TAG);
-            MessageUtil.moveTag(message, sendingTime + 1, SENDING_TIME_TAG, value);
+            if (!Objects.equals(value, "null")) {
+                MessageUtil.moveTag(message, sendingTime + 1, SENDING_TIME_TAG, value);
+            }
+            else {
+                MessageUtil.moveTag(message, sendingTime + 1, SENDING_TIME_TAG, getTime());
+            }
         }
 
         MessageUtil.updateTag(message, BODY_LENGTH_TAG, Integer.toString(getBodyLength(message)));
