@@ -25,6 +25,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import static com.exactpro.th2.constants.Constants.*;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -251,15 +252,15 @@ class FixHandlerTest {
         String expected2 = "8=FIX.2.2\0019=19\001552=1\001";
         String expected3 = "8=FIX.2.2\0019=19\001552=1\00110=009\001";
 
-        MessageUtil.putTag(buf, Constants.BEGIN_STRING_TAG, "FIX.2.2");
+        MessageUtil.putTag(buf, BEGIN_STRING_TAG.toString(), "FIX.2.2");
         assertNotNull(buf);
         assertEquals(expected, new String(buf.array()));
 
-        MessageUtil.putTag(buf, Constants.BODY_LENGTH_TAG, "19");
+        MessageUtil.putTag(buf, BODY_LENGTH_TAG.toString(), "19");
         assertNotNull(buf);
         assertEquals(expected2, new String(buf.array()));
 
-        MessageUtil.putTag(buf, Constants.CHECKSUM_TAG, fixHandler.getChecksum(buf));
+        MessageUtil.putTag(buf, CHECKSUM_TAG.toString(), fixHandler.getChecksum(buf));
         assertNotNull(buf);
         assertEquals(expected3, new String(buf.array()));
     }
@@ -270,13 +271,13 @@ class FixHandlerTest {
         String expected = "8=FIX.2.2\00135=AEE\001";
         String expected2 = "8=FIX.2.3\00135=AEE\001";
 
-        MessageUtil.updateTag(buf, Constants.MSG_TYPE_TAG, "AEE");
+        MessageUtil.updateTag(buf, MSG_TYPE_TAG.toString(), "AEE");
         assertEquals(expected, buf.toString(StandardCharsets.US_ASCII));
 
-        MessageUtil.updateTag(buf, Constants.BEGIN_STRING_TAG, "FIX.2.3");
+        MessageUtil.updateTag(buf, BEGIN_STRING_TAG.toString(), "FIX.2.3");
         assertEquals(expected2, buf.toString(StandardCharsets.US_ASCII));
 
-        MessageUtil.updateTag(buf, Constants.DEFAULT_APPL_VER_ID_TAG, "1");
+        MessageUtil.updateTag(buf, DEFAULT_APPL_VER_ID_TAG.toString(), "1");
         assertEquals(expected2, buf.toString(StandardCharsets.US_ASCII));
     }
 

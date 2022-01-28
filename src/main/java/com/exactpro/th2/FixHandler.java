@@ -5,9 +5,7 @@ import com.exactpro.th2.conn.dirty.tcp.core.api.IChannel;
 import com.exactpro.th2.conn.dirty.tcp.core.api.IContext;
 import com.exactpro.th2.conn.dirty.tcp.core.api.IProtocolHandler;
 import com.exactpro.th2.conn.dirty.tcp.core.api.IProtocolHandlerSettings;
-import com.exactpro.th2.conn.dirty.tcp.core.util.ByteBufUtil;
 import com.exactpro.th2.conn.dirty.tcp.core.util.CommonUtil;
-import com.exactpro.th2.util.MessageUtil;
 import com.google.auto.service.AutoService;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
@@ -28,7 +26,9 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static com.exactpro.th2.conn.dirty.fix.FixByteBufUtilKt.*;
+import static com.exactpro.th2.conn.dirty.tcp.core.util.ByteBufUtil.indexOf;
 import static com.exactpro.th2.constants.Constants.*;
+import static com.exactpro.th2.util.MessageUtil.findByte;
 
 //todo parse logout
 //todo gapFillTag
@@ -68,7 +68,8 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
     public ByteBuf onReceive(ByteBuf buffer) {
         int offset = buffer.readerIndex();
         if (offset == buffer.writerIndex()) return null;
-        int beginStringIdx = ByteBufUtil.indexOf(buffer, "8=FIX");
+
+        int beginStringIdx = indexOf(buffer, "8=FIX");
         if (beginStringIdx < 0) {
             if (buffer.writerIndex() > 0) {
                 buffer.readerIndex(buffer.writerIndex());
@@ -82,9 +83,9 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
             return buffer.retainedSlice(offset, beginStringIdx - offset);
         }
 
-        int nextBeginString = ByteBufUtil.indexOf(buffer, SOH + "8=FIX") + 1;
-        int checksum = ByteBufUtil.indexOf(buffer, CHECKSUM);
-        int endOfMessageIdx = MessageUtil.findByte(buffer, checksum + 1, BYTE_SOH);
+        int nextBeginString = indexOf(buffer, SOH + "8=FIX") + 1;
+        int checksum = indexOf(buffer, CHECKSUM);
+        int endOfMessageIdx = findByte(buffer, checksum + 1, BYTE_SOH);
 
         try {
             if (checksum == -1 || endOfMessageIdx == -1 || endOfMessageIdx - checksum != 7) {
@@ -102,7 +103,6 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
 
         buffer.readerIndex(endOfMessageIdx + 1);
         return buffer.retainedSlice(beginStringIdx, endOfMessageIdx + 1 - beginStringIdx);
-
     }
 
 
@@ -111,21 +111,21 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
     public Map<String, String> onIncoming(@NotNull ByteBuf message) {
         Map<String, String> metadata = new HashMap<>();
 
-        int beginString = ByteBufUtil.indexOf(message, "8=FIX");
+        int beginString = indexOf(message, "8=FIX");
 
         if (beginString == -1) {
             metadata.put(REJECT_REASON, "Not a FIX message");
             return metadata;
         }
 
-        String msgSeqNumValue = MessageUtil.getTagValue(message, MSG_SEQ_NUM_TAG);
+        FixField msgSeqNumValue = findField(message, MSG_SEQ_NUM_TAG);
         if (msgSeqNumValue == null) {
             metadata.put(REJECT_REASON, "No msgSeqNum Field");
             LOGGER.error("Invalid message. No MsgSeqNum in message: {}", message.toString(StandardCharsets.US_ASCII));
             return metadata;
         }
 
-        String msgType = MessageUtil.getTagValue(message, MSG_TYPE_TAG);
+        FixField msgType = findField(message, MSG_TYPE_TAG);
         if (msgType == null) {
             metadata.put(REJECT_REASON, "No msgType Field");
             LOGGER.error("Invalid message. No MsgType in message: {}", message.toString(StandardCharsets.US_ASCII));
@@ -133,7 +133,7 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
         }
 
         serverMsgSeqNum.incrementAndGet();
-        int receivedMsgSeqNum = Integer.parseInt(msgSeqNumValue);
+        int receivedMsgSeqNum = Integer.parseInt(Objects.requireNonNull(msgSeqNumValue.getValue()));
 
         if (serverMsgSeqNum.get() < receivedMsgSeqNum) {
             if (enabled.get()) {
@@ -141,7 +141,8 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
             }
         }
 
-        switch (msgType) {
+        String msgTypeValue = Objects.requireNonNull(msgType.getValue());
+        switch (msgTypeValue) {
             case MSG_TYPE_HEARTBEAT:
                 LOGGER.info("Heartbeat received - " + message.toString(StandardCharsets.US_ASCII));
                 checkHeartbeat(message);
@@ -164,13 +165,13 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
                 break;
             case MSG_TYPE_LOGOUT: //extract logout reason
                 LOGGER.info("Logout received - " + message.toString(StandardCharsets.US_ASCII));
-                String text = MessageUtil.getTagValue(message, TEXT_TAG);
+                String text = Objects.requireNonNull(findField(message, TEXT_TAG)).getValue();
                 if (text != null) {
                     LOGGER.warn("Received Logout has text (58) tag: " + text);
                     String value = StringUtils.substringBetween(text, "expecting ", " but received");
                     if (value != null) {
                         msgSeqNum.getAndSet(Integer.parseInt(value)-2);
-                        serverMsgSeqNum.getAndSet(Integer.parseInt(Objects.requireNonNull(MessageUtil.getTagValue(message, MSG_SEQ_NUM_TAG))));
+                        serverMsgSeqNum.getAndSet(Integer.parseInt(msgSeqNumValue.getValue()));
                     }
                 }
                 if (disconnectRequest != null && !disconnectRequest.isCancelled()) {
@@ -193,18 +194,18 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
             testRequestTimer.cancel(false);
         }
 
-        metadata.put(STRING_MSG_TYPE, msgType);
+        metadata.put(STRING_MSG_TYPE, msgTypeValue);
 
         return metadata;
     }
 
     private void resetSequence(ByteBuf message) {
 
-        String gapFillFlagValue = MessageUtil.getTagValue(message, GAP_FILL_FLAG_TAG);
-        String seqNumValue = MessageUtil.getTagValue(message, NEW_SEQ_NO_TAG);
+        FixField gapFillFlagValue = findField(message, GAP_FILL_FLAG_TAG);
+        FixField seqNumValue = findField(message, NEW_SEQ_NO_TAG);
 
-        if (seqNumValue != null && (gapFillFlagValue == null || gapFillFlagValue.equals("N"))) {
-            serverMsgSeqNum.set(Integer.parseInt(seqNumValue));
+        if (seqNumValue != null && (gapFillFlagValue == null || Objects.requireNonNull(gapFillFlagValue.getValue()).equals("N"))) {
+            serverMsgSeqNum.set(Integer.parseInt(Objects.requireNonNull(seqNumValue.getValue())));
         } else {
             LOGGER.trace("Failed to reset servers MsgSeqNum. No such tag in message: {}", message.toString(StandardCharsets.US_ASCII));
         }
@@ -240,15 +241,15 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
             disconnectRequest.cancel(false);
         }
 
-        String strBeginSeqNo = MessageUtil.getTagValue(message, BEGIN_SEQ_NO_TAG);
-        String strEndSeqNo = MessageUtil.getTagValue(message, END_SEQ_NO_TAG);
+        FixField strBeginSeqNo = findField(message, BEGIN_SEQ_NO_TAG);
+        FixField strEndSeqNo = findField(message, END_SEQ_NO_TAG);
 
         if (strBeginSeqNo != null && strEndSeqNo != null) {
-            int beginSeqNo = Integer.parseInt(strBeginSeqNo);
-            int endSeqNo = Integer.parseInt(strEndSeqNo);
+            int beginSeqNo = Integer.parseInt(Objects.requireNonNull(strBeginSeqNo.getValue()));
+            int endSeqNo = Integer.parseInt(Objects.requireNonNull(strEndSeqNo.getValue()));
 
             try {
-                if (endSeqNo == 0) endSeqNo = msgSeqNum.get()-1;
+                if (endSeqNo == 0) endSeqNo = msgSeqNum.get() - 1;
                 LOGGER.info("Returning messages from " + beginSeqNo + " to " + endSeqNo);
                 for (int i = beginSeqNo; i <= endSeqNo; i++) {
                     if (outgoingMessages.get(i) != null) {
@@ -282,23 +283,23 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
 
     private void checkHeartbeat(ByteBuf message) {
 
-        String receivedTestReqID = MessageUtil.getTagValue(message, TEST_REQ_ID_TAG);
+        FixField receivedTestReqID = findField(message, TEST_REQ_ID_TAG);
 
         if (receivedTestReqID != null) {
-            if (receivedTestReqID.equals(Integer.toString(testReqID.get()))) {
+            if (Objects.equals(receivedTestReqID.getValue(), Integer.toString(testReqID.get()))) {
                 reconnectRequestTimer.cancel(false);
             }
         }
     }
 
     private boolean checkLogon(ByteBuf message) {
-        String sessionStatusField = MessageUtil.getTagValue(message, SESSION_STATUS_TAG); //check another options
-        if (sessionStatusField == null || sessionStatusField.equals("0")) {
-            String msgSeqNumValue = MessageUtil.getTagValue(message, MSG_SEQ_NUM_TAG);
+        FixField sessionStatusField = findField(message, SESSION_STATUS_TAG); //check another options
+        if (sessionStatusField == null || Objects.requireNonNull(sessionStatusField.getValue()).equals("0")) {
+            FixField msgSeqNumValue = findField(message, MSG_SEQ_NUM_TAG);
             if (msgSeqNumValue == null) {
                 return false;
             }
-            serverMsgSeqNum.set(Integer.parseInt(msgSeqNumValue));
+            serverMsgSeqNum.set(Integer.parseInt(Objects.requireNonNull(msgSeqNumValue.getValue())));
             context.send(CommonUtil.toEvent("successful login"));
             return true;
         }
@@ -310,91 +311,90 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
     public Map<String, String> onOutgoing(@NotNull ByteBuf message, @NotNull Map<String, String> metadata) {
         message.readerIndex(0);
 
-        FixField beginString = findField(message, Integer.parseInt(BEGIN_STRING_TAG));
+        FixField beginString = findField(message, BEGIN_STRING_TAG);
         if (beginString == null) {
-            addFieldBefore(message, Integer.parseInt(BEGIN_STRING_TAG), settings.getBeginString());
+            addFieldBefore(message, BEGIN_STRING_TAG, settings.getBeginString());
         }
 
-        FixField bodyLength = findField(message, Integer.parseInt(BODY_LENGTH_TAG));
+        FixField bodyLength = findField(message, BODY_LENGTH_TAG);
         if (bodyLength == null) {
-            addFieldByField(message, Integer.parseInt(BODY_LENGTH_TAG), STUBBING_VALUE, Integer.parseInt(BEGIN_STRING_TAG)); //stubbing until finish checking message
+            addFieldAfter(message, BODY_LENGTH_TAG, STUBBING_VALUE, BEGIN_STRING_TAG); //stubbing until finish checking message
         }
 
-        FixField msgType = findField(message, Integer.parseInt(MSG_TYPE_TAG));
+        FixField msgType = findField(message, MSG_TYPE_TAG);
         if (msgType == null) {                                                        //should we interrupt sending message?
             LOGGER.error("No msgType in message {}", new String(message.array()));
             if (metadata.get("MsgType")!=null) {
-                addFieldByField(message, Integer.parseInt(MSG_TYPE_TAG), metadata.get("MsgType"), Integer.parseInt(BODY_LENGTH_TAG));
+                addFieldAfter(message, MSG_TYPE_TAG, metadata.get("MsgType"), BODY_LENGTH_TAG);
             }
         } //else {
 //            metadata.put(STRING_MSG_TYPE, MessageUtil.getTagValue(message, MSG_TYPE_TAG));
 //        }
 
-        FixField checksum = findField(message, Integer.parseInt(CHECKSUM_TAG));
+        FixField checksum = findField(message, CHECKSUM_TAG);
         if (checksum == null) {
-            addFieldAfter(message, Integer.parseInt(CHECKSUM_TAG), STUBBING_VALUE); //stubbing until finish checking message
+            addFieldAfter(message, CHECKSUM_TAG, STUBBING_VALUE); //stubbing until finish checking message
         }
 
         int msgSeqNumValue = msgSeqNum.incrementAndGet();
-        FixField msgSeqNum = findField(message, Integer.parseInt(MSG_SEQ_NUM_TAG));
+        FixField msgSeqNum = findField(message, MSG_SEQ_NUM_TAG);
         if (msgSeqNum == null) {
-            if (findField(message, Integer.parseInt(MSG_TYPE_TAG))!=null) {
-                addFieldByField(message, Integer.parseInt(MSG_SEQ_NUM_TAG), Integer.toString(msgSeqNumValue), Integer.parseInt(MSG_TYPE_TAG));
+            if (findField(message, MSG_TYPE_TAG)!=null) {
+                addFieldAfter(message, MSG_SEQ_NUM_TAG, Integer.toString(msgSeqNumValue),MSG_TYPE_TAG);
             }
             else {
-                addFieldByField(message, Integer.parseInt(MSG_SEQ_NUM_TAG), Integer.toString(msgSeqNumValue), Integer.parseInt(BODY_LENGTH_TAG));
+                addFieldAfter(message, MSG_SEQ_NUM_TAG, Integer.toString(msgSeqNumValue), BODY_LENGTH_TAG);
             }
         } else {
-            replaceAndMoveFieldValue(message, msgSeqNum, Integer.toString(msgSeqNumValue), Integer.parseInt(MSG_TYPE_TAG));
+            replaceAndMoveFieldValue(message, msgSeqNum, Integer.toString(msgSeqNumValue), MSG_TYPE_TAG);
         }
 
-        FixField senderCompID = findField(message, Integer.parseInt(SENDER_COMP_ID_TAG));
+        FixField senderCompID = findField(message, SENDER_COMP_ID_TAG);
         if (senderCompID == null) {
-            addFieldByField(message, Integer.parseInt(SENDER_COMP_ID_TAG), settings.getSenderCompID(), Integer.parseInt(MSG_SEQ_NUM_TAG));
+            addFieldAfter(message, SENDER_COMP_ID_TAG, settings.getSenderCompID(), MSG_SEQ_NUM_TAG);
         }
         else {
-            String value = MessageUtil.getTagValue(message, SENDER_COMP_ID_TAG);
+            String value = senderCompID.getValue();
             if (!Objects.equals(value, "null") && !Objects.equals(value, "") && !Objects.equals(value, null)) {
-                replaceAndMoveFieldValue(message, senderCompID, value, Integer.parseInt(MSG_SEQ_NUM_TAG));
+                replaceAndMoveFieldValue(message, senderCompID, value, MSG_SEQ_NUM_TAG);
             }
             else{
-                replaceAndMoveFieldValue(message, senderCompID, settings.getSenderCompID(), Integer.parseInt(MSG_TYPE_TAG));
+                replaceAndMoveFieldValue(message, senderCompID, settings.getSenderCompID(), MSG_TYPE_TAG);
             }
         }
 
-        FixField targetCompID = findField(message, Integer.parseInt(TARGET_COMP_ID_TAG));
+        FixField targetCompID = findField(message, TARGET_COMP_ID_TAG);
         if (targetCompID == null) {
-            addFieldByField(message, Integer.parseInt(TARGET_COMP_ID_TAG), settings.getTargetCompID(), Integer.parseInt(SENDER_COMP_ID_TAG));
+            addFieldAfter(message, TARGET_COMP_ID_TAG, settings.getTargetCompID(), SENDER_COMP_ID_TAG);
         }
         else {
-            String value = MessageUtil.getTagValue(message, TARGET_COMP_ID_TAG);
+            String value = targetCompID.getValue();
             if (!Objects.equals(value, "null") && !Objects.equals(value, "") && !Objects.equals(value, null)) {
-                replaceAndMoveFieldValue(message, targetCompID, value, Integer.parseInt(SENDER_COMP_ID_TAG));
+                replaceAndMoveFieldValue(message, targetCompID, value, SENDER_COMP_ID_TAG);
             }
             else{
-                replaceAndMoveFieldValue(message, targetCompID, settings.getTargetCompID(), Integer.parseInt(SENDER_COMP_ID_TAG));
+                replaceAndMoveFieldValue(message, targetCompID, settings.getTargetCompID(), SENDER_COMP_ID_TAG);
             }
         }
 
-        FixField sendingTime = findField(message, Integer.parseInt(SENDING_TIME_TAG));
+        FixField sendingTime = findField(message, SENDING_TIME_TAG);
         if (sendingTime == null) {
-            addFieldByField(message, Integer.parseInt(SENDING_TIME_TAG), getTime(), Integer.parseInt(TARGET_COMP_ID_TAG));
+            addFieldAfter(message, SENDING_TIME_TAG, getTime(), TARGET_COMP_ID_TAG);
         }
         else {
-            String value = MessageUtil.getTagValue(message, SENDING_TIME_TAG);
+            String value = sendingTime.getValue();
             if (!Objects.equals(value, "null") && !Objects.equals(value, "") && !Objects.equals(value, null)) {
-                replaceAndMoveFieldValue(message, sendingTime, value, Integer.parseInt(TARGET_COMP_ID_TAG));
+                replaceAndMoveFieldValue(message, sendingTime, value, TARGET_COMP_ID_TAG);
             }
             else {
-                replaceAndMoveFieldValue(message, sendingTime, getTime(), Integer.parseInt(TARGET_COMP_ID_TAG));
+                replaceAndMoveFieldValue(message, sendingTime, getTime(), TARGET_COMP_ID_TAG);
             }
         }
 
-        MessageUtil.updateTag(message, BODY_LENGTH_TAG, Integer.toString(getBodyLength(message)));
-        MessageUtil.updateTag(message, CHECKSUM_TAG, getChecksum(message));
+        replaceFieldValue(message, BODY_LENGTH_TAG, bodyLength != null ? bodyLength.getValue() : STUBBING_VALUE, Integer.toString(getBodyLength(message)));
+        updateChecksum(message);
 
         outgoingMessages.put(msgSeqNumValue, message);
-
         LOGGER.info("Outgoing message - " + message.toString(StandardCharsets.US_ASCII));
 
         return metadata;
@@ -425,7 +425,7 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
 
     public void sendTestRequest() { //do private
         StringBuilder testRequest = new StringBuilder();
-        setHeader(testRequest, MSG_TYPE_TEST_REQUEST, Integer.parseInt(String.valueOf(msgSeqNum)));
+        setHeader(testRequest, MSG_TYPE_TEST_REQUEST, msgSeqNum.get());
         testRequest.append(TEST_REQ_ID).append(testReqID.incrementAndGet());
         setChecksumAndBodyLength(testRequest);
         if (enabled.get()) {
@@ -509,7 +509,7 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
 
     public String getChecksum(ByteBuf message) {
 
-        int checksumIdx = ByteBufUtil.indexOf(message, CHECKSUM) + 1;
+        int checksumIdx = indexOf(message, CHECKSUM) + 1;
         if (checksumIdx <= 0) {
             checksumIdx = message.capacity();
         }
@@ -535,9 +535,9 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
     }
 
     public int getBodyLength(ByteBuf message) {
-        int bodyLengthIdx = ByteBufUtil.indexOf(message, BODY_LENGTH);
-        int start = MessageUtil.findByte(message, bodyLengthIdx + 1, BYTE_SOH);
-        int end = ByteBufUtil.indexOf(message, CHECKSUM);
+        int bodyLengthIdx = indexOf(message, BODY_LENGTH);
+        int start = findByte(message, bodyLengthIdx + 1, BYTE_SOH);
+        int end = indexOf(message, CHECKSUM);
         return end - start;
     }
 

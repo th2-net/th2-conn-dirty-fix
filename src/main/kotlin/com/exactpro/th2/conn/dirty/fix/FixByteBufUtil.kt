@@ -122,19 +122,18 @@ fun ByteBuf.addFieldAfter(
 ): FixField = field.insertNext(tag, value)
 
 @JvmOverloads
+fun ByteBuf.addFieldAfter(
+    tag: Int?,
+    value: String?,
+    beforeTag: Int?,
+): FixField = findField(beforeTag)?.insertNext(tag, value) ?: error("in message no tag: $beforeTag")
+
+@JvmOverloads
 fun ByteBuf.addFieldBefore(
     tag: Int?,
     value: String?,
     field: FixField = firstField() ?: error("message is empty"),
 ): FixField = field.insertPrevious(tag, value)
-
-@JvmOverloads
-fun ByteBuf.addFieldByField(
-    tag: Int?,
-    value: String?,
-    beforeTag: Int?,
-    field: FixField = findField(beforeTag) ?: error("message is empty"),
-): FixField = field.insertNext(tag, value)
 
 @JvmOverloads
 fun ByteBuf.replaceFieldValue(
@@ -151,11 +150,10 @@ fun ByteBuf.replaceAndMoveFieldValue(
     field: FixField,
     newValue: String?,
     beforeTag: Int?,
-    beforeField: FixField = findField(beforeTag) ?: error("message is empty")
 ) {
     val tag = field.tag
     field.clear()
-    beforeField.insertNext(tag, newValue)
+    findField(beforeTag)?.insertNext(tag, newValue)?: error("in message no tag: $beforeTag")
 }
 
 @JvmOverloads

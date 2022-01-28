@@ -117,32 +117,32 @@ public class MessageUtil {
     public static void putTag(ByteBuf message, String tag, String value) {
         byte[] toInsert;
 
-        if (tag.equals(BEGIN_STRING_TAG)) {
+        if (tag.equals(BEGIN_STRING_TAG.toString())) {
             toInsert = (BEGIN_STRING_TAG + "=" + value + SOH).getBytes(StandardCharsets.US_ASCII);
             getSupplementedMessage(message, toInsert, 0);
             return;
         }
 
-        if (tag.equals(BODY_LENGTH_TAG)) {
+        if (tag.equals(BODY_LENGTH_TAG.toString())) {
             toInsert = (BODY_LENGTH_TAG + "=" + value + SOH).getBytes(StandardCharsets.US_ASCII);
             int toIdx = findByte(message, 0, BYTE_SOH) + 1;
             getSupplementedMessage(message, toInsert, toIdx);
             return;
         }
 
-        if (tag.equals(MSG_TYPE_TAG)) {
+        if (tag.equals(MSG_TYPE_TAG.toString())) {
             toInsert = (MSG_TYPE_TAG + "=" + value + SOH).getBytes(StandardCharsets.US_ASCII);
-            int toIdx = message.indexOf(findTag(message, 0, BODY_LENGTH_TAG) + 1, message.readableBytes(), BYTE_SOH) + 1;
+            int toIdx = message.indexOf(findTag(message, 0, BODY_LENGTH_TAG.toString()) + 1, message.readableBytes(), BYTE_SOH) + 1;
             getSupplementedMessage(message, toInsert, toIdx);
             return;
         }
 
-        if (tag.equals(MSG_SEQ_NUM_TAG)) {
+        if (tag.equals(MSG_SEQ_NUM_TAG.toString())) {
             toInsert = (MSG_SEQ_NUM_TAG + "=" + value + SOH).getBytes(StandardCharsets.US_ASCII);
-            int start = findTag(message, 0, MSG_TYPE_TAG)+1;
+            int start = findTag(message, 0, MSG_TYPE_TAG.toString())+1;
             int toIdx;
             if (start == 0){
-                toIdx = message.indexOf(findTag(message, 0, BODY_LENGTH_TAG) + 1, message.readableBytes(), BYTE_SOH) + 1;
+                toIdx = message.indexOf(findTag(message, 0, BODY_LENGTH_TAG.toString()) + 1, message.readableBytes(), BYTE_SOH) + 1;
             }
             else{
                 toIdx = message.indexOf(start, message.readableBytes(), BYTE_SOH) + 1;
@@ -151,36 +151,36 @@ public class MessageUtil {
             return;
         }
 
-        if (tag.equals(SENDER_COMP_ID_TAG)) {
-            putAddTag(message, value, SENDER_COMP_ID_TAG, Constants.MSG_SEQ_NUM_TAG);
+        if (tag.equals(SENDER_COMP_ID_TAG.toString())) {
+            putAddTag(message, value, SENDER_COMP_ID_TAG.toString(), MSG_SEQ_NUM_TAG);
             return;
         }
 
-        if (tag.equals(TARGET_COMP_ID_TAG)) {
-            putAddTag(message, value, TARGET_COMP_ID_TAG, SENDER_COMP_ID_TAG);
+        if (tag.equals(TARGET_COMP_ID_TAG.toString())) {
+            putAddTag(message, value, TARGET_COMP_ID_TAG.toString(), SENDER_COMP_ID_TAG);
             return;
         }
 
-        if (tag.equals(SENDING_TIME_TAG)) {
-            putAddTag(message, value, SENDING_TIME_TAG, TARGET_COMP_ID_TAG);
+        if (tag.equals(SENDING_TIME_TAG.toString())) {
+            putAddTag(message, value, SENDING_TIME_TAG.toString(), TARGET_COMP_ID_TAG);
             return;
         }
 
-        if (tag.equals(CHECKSUM_TAG)) {
+        if (tag.equals(CHECKSUM_TAG.toString())) {
             toInsert = (CHECKSUM_TAG + "=" + value + SOH).getBytes(StandardCharsets.US_ASCII);
             getSupplementedMessage(message, toInsert, message.readableBytes());
             return;
         }
 
         toInsert = (tag + "=" + value + SOH).getBytes(StandardCharsets.US_ASCII);
-        int toIdx = findTag(message, 0, CHECKSUM_TAG) + 1;
+        int toIdx = findTag(message, 0, CHECKSUM_TAG.toString()) + 1;
 
         getSupplementedMessage(message, toInsert, toIdx);
     }
 
-    private static void putAddTag(ByteBuf message, String value, String tag, String previousTag){
+    private static void putAddTag(ByteBuf message, String value, String tag, Integer previousTag){
         byte[] toInsert = (tag + "=" + value + SOH).getBytes(StandardCharsets.US_ASCII);
-        int start = findTag(message, 0, previousTag) + 1;
+        int start = findTag(message, 0, previousTag.toString()) + 1;
         int toIdx = message.indexOf(start, message.readableBytes(), BYTE_SOH) + 1;
 
         getSupplementedMessage(message, toInsert, toIdx);
