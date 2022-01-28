@@ -129,6 +129,14 @@ fun ByteBuf.addFieldBefore(
 ): FixField = field.insertPrevious(tag, value)
 
 @JvmOverloads
+fun ByteBuf.addFieldByField(
+    tag: Int?,
+    value: String?,
+    beforeTag: Int?,
+    field: FixField = findField(beforeTag) ?: error("message is empty"),
+): FixField = field.insertNext(tag, value)
+
+@JvmOverloads
 fun ByteBuf.replaceFieldValue(
     tag: Int?,
     oldValue: String?,
@@ -136,6 +144,18 @@ fun ByteBuf.replaceFieldValue(
     charset: Charset = UTF_8,
 ): Boolean {
     return modifyField({ it.tag == tag && it.value == oldValue }, charset) { it.value = newValue }
+}
+
+@JvmOverloads
+fun ByteBuf.replaceAndMoveFieldValue(
+    field: FixField,
+    newValue: String?,
+    beforeTag: Int?,
+    beforeField: FixField = findField(beforeTag) ?: error("message is empty")
+) {
+    val tag = field.tag
+    field.clear()
+    beforeField.insertNext(tag, newValue)
 }
 
 @JvmOverloads

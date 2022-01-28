@@ -1,5 +1,6 @@
 package com.exactpro.th2;
 
+import com.exactpro.th2.conn.dirty.fix.FixField;
 import com.exactpro.th2.conn.dirty.tcp.core.api.IChannel;
 import com.exactpro.th2.conn.dirty.tcp.core.api.IContext;
 import com.exactpro.th2.conn.dirty.tcp.core.api.IProtocolHandler;
@@ -26,6 +27,7 @@ import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import static com.exactpro.th2.conn.dirty.fix.FixByteBufUtilKt.*;
 import static com.exactpro.th2.constants.Constants.*;
 
 //todo parse logout
@@ -308,80 +310,83 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
     public Map<String, String> onOutgoing(@NotNull ByteBuf message, @NotNull Map<String, String> metadata) {
         message.readerIndex(0);
 
-        int beginString = ByteBufUtil.indexOf(message, BEGIN_STRING_TAG + "=");
-        if (beginString < 0) {
-            MessageUtil.putTag(message, BEGIN_STRING_TAG, settings.getBeginString());
+        FixField beginString = findField(message, Integer.parseInt(BEGIN_STRING_TAG));
+        if (beginString == null) {
+            addFieldBefore(message, Integer.parseInt(BEGIN_STRING_TAG), settings.getBeginString());
         }
 
-        int bodyLength = ByteBufUtil.indexOf(message, BODY_LENGTH);
-        if (bodyLength < 0) {
-            MessageUtil.putTag(message, BODY_LENGTH_TAG, STUBBING_VALUE); //stubbing until finish checking message
+        FixField bodyLength = findField(message, Integer.parseInt(BODY_LENGTH_TAG));
+        if (bodyLength == null) {
+            addFieldByField(message, Integer.parseInt(BODY_LENGTH_TAG), STUBBING_VALUE, Integer.parseInt(BEGIN_STRING_TAG)); //stubbing until finish checking message
         }
 
-        int msgType = ByteBufUtil.indexOf(message, MSG_TYPE);
-
-        if (msgType < 0) {                                                        //should we interrupt sending message?
+        FixField msgType = findField(message, Integer.parseInt(MSG_TYPE_TAG));
+        if (msgType == null) {                                                        //should we interrupt sending message?
             LOGGER.error("No msgType in message {}", new String(message.array()));
             if (metadata.get("MsgType")!=null) {
-                MessageUtil.putTag(message, MSG_TYPE_TAG, metadata.get("MsgType"));
+                addFieldByField(message, Integer.parseInt(MSG_TYPE_TAG), metadata.get("MsgType"), Integer.parseInt(BODY_LENGTH_TAG));
             }
         } //else {
 //            metadata.put(STRING_MSG_TYPE, MessageUtil.getTagValue(message, MSG_TYPE_TAG));
 //        }
 
-        int checksum = ByteBufUtil.indexOf(message, CHECKSUM);
-        if (checksum < 0) {
-            MessageUtil.putTag(message, CHECKSUM_TAG, STUBBING_VALUE); //stubbing until finish checking message
+        FixField checksum = findField(message, Integer.parseInt(CHECKSUM_TAG));
+        if (checksum == null) {
+            addFieldAfter(message, Integer.parseInt(CHECKSUM_TAG), STUBBING_VALUE); //stubbing until finish checking message
         }
 
         int msgSeqNumValue = msgSeqNum.incrementAndGet();
-        int msgSeqNum = ByteBufUtil.indexOf(message, MSG_SEQ_NUM_TAG);
-        if (msgSeqNum < 0) {
-            MessageUtil.putTag(message, MSG_SEQ_NUM_TAG, Integer.toString(msgSeqNumValue));
-        }else {
-            ByteBufUtil.insert(message, Integer.toString(msgSeqNumValue), msgSeqNum);
-            MessageUtil.moveTag(message, msgSeqNum, MSG_SEQ_NUM_TAG, Integer.toString(msgSeqNumValue));
+        FixField msgSeqNum = findField(message, Integer.parseInt(MSG_SEQ_NUM_TAG));
+        if (msgSeqNum == null) {
+            if (findField(message, Integer.parseInt(MSG_TYPE_TAG))!=null) {
+                addFieldByField(message, Integer.parseInt(MSG_SEQ_NUM_TAG), Integer.toString(msgSeqNumValue), Integer.parseInt(MSG_TYPE_TAG));
+            }
+            else {
+                addFieldByField(message, Integer.parseInt(MSG_SEQ_NUM_TAG), Integer.toString(msgSeqNumValue), Integer.parseInt(BODY_LENGTH_TAG));
+            }
+        } else {
+            replaceAndMoveFieldValue(message, msgSeqNum, Integer.toString(msgSeqNumValue), Integer.parseInt(MSG_TYPE_TAG));
         }
 
-        int senderCompID = ByteBufUtil.indexOf(message, SOH + SENDER_COMP_ID_TAG);
-        if (senderCompID < 0) {
-            MessageUtil.putTag(message, SENDER_COMP_ID_TAG, settings.getSenderCompID());
+        FixField senderCompID = findField(message, Integer.parseInt(SENDER_COMP_ID_TAG));
+        if (senderCompID == null) {
+            addFieldByField(message, Integer.parseInt(SENDER_COMP_ID_TAG), settings.getSenderCompID(), Integer.parseInt(MSG_SEQ_NUM_TAG));
         }
         else {
             String value = MessageUtil.getTagValue(message, SENDER_COMP_ID_TAG);
             if (!Objects.equals(value, "null") && !Objects.equals(value, "") && !Objects.equals(value, null)) {
-                MessageUtil.moveTag(message, senderCompID + 1, SENDER_COMP_ID_TAG, value);
+                replaceAndMoveFieldValue(message, senderCompID, value, Integer.parseInt(MSG_SEQ_NUM_TAG));
             }
             else{
-                MessageUtil.moveTag(message, senderCompID + 1, SENDER_COMP_ID_TAG, settings.getSenderCompID());
+                replaceAndMoveFieldValue(message, senderCompID, settings.getSenderCompID(), Integer.parseInt(MSG_TYPE_TAG));
             }
         }
 
-        int targetCompID = ByteBufUtil.indexOf(message,SOH + TARGET_COMP_ID_TAG);
-        if (targetCompID < 0) {
-            MessageUtil.putTag(message, TARGET_COMP_ID_TAG, settings.getTargetCompID());
+        FixField targetCompID = findField(message, Integer.parseInt(TARGET_COMP_ID_TAG));
+        if (targetCompID == null) {
+            addFieldByField(message, Integer.parseInt(TARGET_COMP_ID_TAG), settings.getTargetCompID(), Integer.parseInt(SENDER_COMP_ID_TAG));
         }
         else {
             String value = MessageUtil.getTagValue(message, TARGET_COMP_ID_TAG);
             if (!Objects.equals(value, "null") && !Objects.equals(value, "") && !Objects.equals(value, null)) {
-                MessageUtil.moveTag(message, targetCompID + 1, TARGET_COMP_ID_TAG, value);
+                replaceAndMoveFieldValue(message, targetCompID, value, Integer.parseInt(SENDER_COMP_ID_TAG));
             }
             else{
-                MessageUtil.moveTag(message, targetCompID + 1, TARGET_COMP_ID_TAG, settings.getTargetCompID());
+                replaceAndMoveFieldValue(message, targetCompID, settings.getTargetCompID(), Integer.parseInt(SENDER_COMP_ID_TAG));
             }
         }
 
-        int sendingTime = ByteBufUtil.indexOf(message, SOH + SENDING_TIME_TAG);
-        if (sendingTime < 0) {
-            MessageUtil.putTag(message, SENDING_TIME_TAG, getTime());
+        FixField sendingTime = findField(message, Integer.parseInt(SENDING_TIME_TAG));
+        if (sendingTime == null) {
+            addFieldByField(message, Integer.parseInt(SENDING_TIME_TAG), getTime(), Integer.parseInt(TARGET_COMP_ID_TAG));
         }
         else {
             String value = MessageUtil.getTagValue(message, SENDING_TIME_TAG);
             if (!Objects.equals(value, "null") && !Objects.equals(value, "") && !Objects.equals(value, null)) {
-                MessageUtil.moveTag(message, sendingTime + 1, SENDING_TIME_TAG, value);
+                replaceAndMoveFieldValue(message, sendingTime, value, Integer.parseInt(TARGET_COMP_ID_TAG));
             }
             else {
-                MessageUtil.moveTag(message, sendingTime + 1, SENDING_TIME_TAG, getTime());
+                replaceAndMoveFieldValue(message, sendingTime, getTime(), Integer.parseInt(TARGET_COMP_ID_TAG));
             }
         }
 
