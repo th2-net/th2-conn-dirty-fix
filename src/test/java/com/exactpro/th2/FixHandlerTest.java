@@ -4,7 +4,6 @@ import com.exactpro.th2.common.grpc.MessageID;
 import com.exactpro.th2.conn.dirty.tcp.core.api.IChannel;
 import com.exactpro.th2.conn.dirty.tcp.core.api.IContext;
 import com.exactpro.th2.conn.dirty.tcp.core.api.IProtocolHandlerSettings;
-import com.exactpro.th2.constants.Constants;
 import com.exactpro.th2.util.MessageUtil;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
@@ -20,10 +19,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneId;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 import static com.exactpro.th2.constants.Constants.*;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
@@ -65,8 +61,6 @@ class FixHandlerTest {
         ByteBuf result1 = fixHandler.onReceive(brokenBuffer);
         ByteBuf result2 = fixHandler.onReceive(brokenBuffer);
         String expected0 = "A";
-        String expected1 = "8=FIXT.1.19=1335=AE552=110=16913138=FIXT.1.1\0019=13\00135=AE\001552=1\00110=169\001";
-
 
         assertNotNull(result0);
         assertEquals(expected0, result0.toString(StandardCharsets.US_ASCII));
@@ -126,7 +120,7 @@ class FixHandlerTest {
         } catch (InterruptedException e) {
             e.printStackTrace();
         }
-        assertEquals("8=FIXT.1.1\u00019=95\u000135=A\u000134=9\u000149=client\u000156=server\u000152=2014-12-22T10:15:30Z\u000198=0\u0001108=30\u00011137=9\001553=username\u0001554=pass\u000110=134\u0001",
+        assertEquals("8=FIXT.1.1\u00019=95\u000135=A\u000134=8\u000149=client\u000156=server\u000152=2014-12-22T10:15:30Z\u000198=0\u0001108=30\u00011137=9\001553=username\u0001554=pass\u000110=133\u0001",
                 new String(client.getQueue().get(0).array()));
     }
 
@@ -139,16 +133,23 @@ class FixHandlerTest {
 
         String expectedMessage1 = "8=FIXT.1.1\u00019=60\u000135=A\u000134=5\00149=client\u000156=server\u000152=2014-12-22T10:15:30Z\u0001552=1\u000110=091\u0001";
         String expectedMessage2 = "8=FIXT.1.1\u00019=55\u000134=6\00149=client\u000156=server\u000152=2014-12-22T10:15:30Z\u0001552=1\u000110=121\u0001";
-        String expectedMessage3 = "8=FIXT.1.1\u00019=233\u000135=A\u000134=7\u000149=client\u000156=server\u000152=20220127-12:00:40.775\u000111=9977764\u000122=8\u000138=100\u000140=2\u000144=55\u000148=INSTR2\u000154=2\u000159=3\u000160=20220127-15:00:36\u0001528=A\u0001581=1\u0001453=4\u0001448=DEMO-CONN2\u0001447=D\u0001452=76\u0001448=0\u0001447=P\u0001452=3\u0001448=0\u0001447=P\u0001452=122\u0001448=3\u0001447=P\u0001452=12\u000110=084\u0001";
-        String expectedMessage4 = "8=FIXT.1.1\u00019=240\u000135=A\u000134=8\u000149=client\u000156=server\u000152=2014-12-22T10:15:30Z\u000111=3428785\00122=8\00138=30\00140=2\00144=55\00148=INSTR1\00154=1\00159=0\00160=20220127-18:38:35\001526=11111\001528=A\001581=1\001453=4\001448=DEMO-CONN1\001447=D\001452=76\001448=0\001447=P\001452=3\001448=0\00147=P\001452=122\001448=3\001447=P\001452=12\00110=199\001";
+        String expectedMessage3 = "8=FIXT.1.1\u00019=233\u000135=A\u000134=7\u000149=client\u000156=server\u000152=20220127-12:00:40.775\u000111=9977764\u000122=8\u000138=100\u000140=2\u000144=55\u000148=INSTR2\u000154=2\u000159=3\u000160=20220127-15:00:36\u0001528=A\u0001581=1\u0001453=4\u0001448=DEMO-CONN2\u0001447=D\u0001452=76\u0001448=0\u0001447=P\u0001452=3\u0001448=0\u0001447=P\u0001452=122\u0001448=3\u0001447=P\u0001452=12\u000110=157\u0001";
+        String expectedMessage4 = "8=FIXT.1.1\0019=192\00135=A\00111=3428785\00122=8\00138=30\00140=2\00144=55\00148=INSTR1\00154=1\00159=0\00160=20220127-18:38:35\001526=11111\001528=A\001581=1\001453=4\001448=DEMO-CONN1\001447=D\001452=76\001448=0\001447=P\001452=3\001448=0\00147=P\001452=122\001448=3\001447=P\001452=12\00110=228\001";
         Map<String, String> expected = new HashMap<>();
         expected.put("MsgType", "A");
+        expected.put("send-mode", "");
         Map<String, String> expected2 = new HashMap<>();
+        Map<String, String> expected3 = new HashMap<>();
+        expected3.put("MsgType", "A");
+        expected3.put("send-mode", "semi-manual");
+        Map<String, String> expected4 = new HashMap<>();
+        expected4.put("MsgType", "A");
+        expected4.put("send-mode", "manual");
 
         Map<String, String> actual = fixHandler.onOutgoing(bufferForPrepareMessage1, expected);
         Map<String, String> actual2 = fixHandler.onOutgoing(bufferForPrepareMessage2, new HashMap<>());
-        fixHandler.onOutgoing(bufferForPrepareMessage3, expected);
-        fixHandler.onOutgoing(bufferForPrepareMessage4, expected);
+        fixHandler.onOutgoing(bufferForPrepareMessage3, expected3);
+        fixHandler.onOutgoing(bufferForPrepareMessage4, expected4);
 
         bufferForPrepareMessage1.readerIndex(0);
         bufferForPrepareMessage2.readerIndex(0);
@@ -290,6 +291,19 @@ class Client implements IChannel {
 
     Client() {
         this.fixHandlerSettings = new FixHandlerSettings();
+        fixHandlerSettings.setBeginString("FIXT.1.1");
+        fixHandlerSettings.setHeartBtInt(30);
+        fixHandlerSettings.setSenderCompID("client");
+        fixHandlerSettings.setTargetCompID("server");
+        fixHandlerSettings.setEncryptMethod("0");
+        fixHandlerSettings.setUsername("username");
+        fixHandlerSettings.setPassword("pass");
+        fixHandlerSettings.setTestRequestDelay(10);
+        fixHandlerSettings.setReconnectDelay(5);
+        fixHandlerSettings.setDisconnectRequestDelay(5);
+        fixHandlerSettings.setResetSeqNumFlag(false);
+        fixHandlerSettings.setResetOnLogon(false);
+        fixHandlerSettings.setDefaultApplVerID(9);
         IContext<IProtocolHandlerSettings> context = Mockito.mock(IContext.class);
         Mockito.when(context.getSettings()).thenReturn(fixHandlerSettings);
         Mockito.when(context.getChannel()).thenReturn(this);

@@ -6,22 +6,21 @@ import com.google.auto.service.AutoService;
 @AutoService(IProtocolHandlerSettings.class)
 public class FixHandlerSettings implements IProtocolHandlerSettings {
 
-    private String beginString = "FIXT.1.1";
-    private long heartBtInt = 30;
-    private String senderCompID = "client";
-    private String targetCompID = "server";
-    private String encryptMethod = "0";
-    private String username = "username";
-    private String password = "pass";
-    private Boolean resetSeqNumFlag = false;
-    private Boolean resetOnLogon = false;
+    private String beginString;
+    private long heartBtInt;
+    private String senderCompID;
+    private String targetCompID;
+    private String encryptMethod;
+    private String username;
+    private String password;
+    private Boolean resetSeqNumFlag;
+    private Boolean resetOnLogon;
 
-    private long defaultApplVerID = 9;
+    private long defaultApplVerID;
 
-    private int testRequestDelay = 60;
-    private int reconnectDelay = 5;
-    private int disconnectRequestDelay = 5;
-
+    private int testRequestDelay;
+    private int reconnectDelay;
+    private int disconnectRequestDelay;
 
     public String getBeginString() {
         return beginString;

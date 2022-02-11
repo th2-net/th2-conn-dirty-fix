@@ -313,92 +313,141 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
     @NotNull
     @Override
     public Map<String, String> onOutgoing(@NotNull ByteBuf message, @NotNull Map<String, String> metadata) {
-        message.readerIndex(0);
-
-        FixField beginString = findField(message, BEGIN_STRING_TAG);
-        if (beginString == null) {
-            addFieldBefore(message, BEGIN_STRING_TAG, settings.getBeginString());
-        }
-
+        String sendMode = metadata.get("send-mode");
         FixField bodyLength = findField(message, BODY_LENGTH_TAG);
-        if (bodyLength == null) {
-            addFieldAfter(message, BODY_LENGTH_TAG, STUBBING_VALUE, BEGIN_STRING_TAG); //stubbing until finish checking message
-        }
-
-        FixField msgType = findField(message, MSG_TYPE_TAG);
-        if (msgType == null) {                                                        //should we interrupt sending message?
-            LOGGER.error("No msgType in message {}", new String(message.array()));
-            if (metadata.get("MsgType")!=null) {
-                addFieldAfter(message, MSG_TYPE_TAG, metadata.get("MsgType"), BODY_LENGTH_TAG);
-            }
-        } //else {
-//            metadata.put(STRING_MSG_TYPE, MessageUtil.getTagValue(message, MSG_TYPE_TAG));
-//        }
-
         FixField checksum = findField(message, CHECKSUM_TAG);
-        if (checksum == null) {
-            addFieldAfter(message, CHECKSUM_TAG, STUBBING_VALUE); //stubbing until finish checking message
-        }
+        if (Objects.equals(sendMode, "semi-manual") || Objects.equals(sendMode, "") || Objects.equals(sendMode, null)){
+            message.readerIndex(0);
+            FixField beginString = findField(message, BEGIN_STRING_TAG);
+            if (beginString == null) {
+                addFieldBefore(message, BEGIN_STRING_TAG, settings.getBeginString());
+            }
 
-        int msgSeqNumValue = msgSeqNum.incrementAndGet();
-        FixField msgSeqNum = findField(message, MSG_SEQ_NUM_TAG);
-        if (msgSeqNum == null) {
-            if (findField(message, MSG_TYPE_TAG)!=null) {
-                addFieldAfter(message, MSG_SEQ_NUM_TAG, Integer.toString(msgSeqNumValue),MSG_TYPE_TAG);
+            if (bodyLength == null) {
+                addFieldAfter(message, BODY_LENGTH_TAG, STUBBING_VALUE, BEGIN_STRING_TAG); //stubbing until finish checking message
+            }
+
+            FixField msgType = findField(message, MSG_TYPE_TAG);
+            if (msgType == null) {                                                        //should we interrupt sending message?
+                LOGGER.error("No msgType in message {}", new String(message.array()));
+                if (metadata.get("MsgType")!=null) {
+                    addFieldAfter(message, MSG_TYPE_TAG, metadata.get("MsgType"), BODY_LENGTH_TAG);
+                }
+            }
+
+            if (checksum == null) {
+                addFieldAfter(message, CHECKSUM_TAG, STUBBING_VALUE); //stubbing until finish checking message
+            }
+
+        }
+        if (sendMode == null || Objects.equals(sendMode, "")){
+
+            int msgSeqNumValue = msgSeqNum.incrementAndGet();
+            FixField msgSeqNum = findField(message, MSG_SEQ_NUM_TAG);
+            if (msgSeqNum == null) {
+                if (findField(message, MSG_TYPE_TAG)!=null) {
+                    addFieldAfter(message, MSG_SEQ_NUM_TAG, Integer.toString(msgSeqNumValue),MSG_TYPE_TAG);
+                }
+                else {
+                    addFieldAfter(message, MSG_SEQ_NUM_TAG, Integer.toString(msgSeqNumValue), BODY_LENGTH_TAG);
+                }
+            } else {
+                replaceAndMoveFieldValue(message, msgSeqNum, Integer.toString(msgSeqNumValue), MSG_TYPE_TAG);
+            }
+
+            FixField senderCompID = findField(message, SENDER_COMP_ID_TAG);
+            if (senderCompID == null) {
+                addFieldAfter(message, SENDER_COMP_ID_TAG, settings.getSenderCompID(), MSG_SEQ_NUM_TAG);
             }
             else {
-                addFieldAfter(message, MSG_SEQ_NUM_TAG, Integer.toString(msgSeqNumValue), BODY_LENGTH_TAG);
+                String value = senderCompID.getValue();
+                if (!Objects.equals(value, "null") && !Objects.equals(value, "") && !Objects.equals(value, null)) {
+                    replaceAndMoveFieldValue(message, senderCompID, value, MSG_SEQ_NUM_TAG);
+                }
+                else{
+                    replaceAndMoveFieldValue(message, senderCompID, settings.getSenderCompID(), MSG_TYPE_TAG);
+                }
             }
-        } else {
-            replaceAndMoveFieldValue(message, msgSeqNum, Integer.toString(msgSeqNumValue), MSG_TYPE_TAG);
-        }
 
-        FixField senderCompID = findField(message, SENDER_COMP_ID_TAG);
-        if (senderCompID == null) {
-            addFieldAfter(message, SENDER_COMP_ID_TAG, settings.getSenderCompID(), MSG_SEQ_NUM_TAG);
-        }
-        else {
-            String value = senderCompID.getValue();
-            if (!Objects.equals(value, "null") && !Objects.equals(value, "") && !Objects.equals(value, null)) {
-                replaceAndMoveFieldValue(message, senderCompID, value, MSG_SEQ_NUM_TAG);
-            }
-            else{
-                replaceAndMoveFieldValue(message, senderCompID, settings.getSenderCompID(), MSG_TYPE_TAG);
-            }
-        }
-
-        FixField targetCompID = findField(message, TARGET_COMP_ID_TAG);
-        if (targetCompID == null) {
-            addFieldAfter(message, TARGET_COMP_ID_TAG, settings.getTargetCompID(), SENDER_COMP_ID_TAG);
-        }
-        else {
-            String value = targetCompID.getValue();
-            if (!Objects.equals(value, "null") && !Objects.equals(value, "") && !Objects.equals(value, null)) {
-                replaceAndMoveFieldValue(message, targetCompID, value, SENDER_COMP_ID_TAG);
-            }
-            else{
-                replaceAndMoveFieldValue(message, targetCompID, settings.getTargetCompID(), SENDER_COMP_ID_TAG);
-            }
-        }
-
-        FixField sendingTime = findField(message, SENDING_TIME_TAG);
-        if (sendingTime == null) {
-            addFieldAfter(message, SENDING_TIME_TAG, getTime(), TARGET_COMP_ID_TAG);
-        }
-        else {
-            String value = sendingTime.getValue();
-            if (!Objects.equals(value, "null") && !Objects.equals(value, "") && !Objects.equals(value, null)) {
-                replaceAndMoveFieldValue(message, sendingTime, value, TARGET_COMP_ID_TAG);
+            FixField targetCompID = findField(message, TARGET_COMP_ID_TAG);
+            if (targetCompID == null) {
+                addFieldAfter(message, TARGET_COMP_ID_TAG, settings.getTargetCompID(), SENDER_COMP_ID_TAG);
             }
             else {
-                replaceAndMoveFieldValue(message, sendingTime, getTime(), TARGET_COMP_ID_TAG);
+                String value = targetCompID.getValue();
+                if (!Objects.equals(value, "null") && !Objects.equals(value, "") && !Objects.equals(value, null)) {
+                    replaceAndMoveFieldValue(message, targetCompID, value, SENDER_COMP_ID_TAG);
+                }
+                else{
+                    replaceAndMoveFieldValue(message, targetCompID, settings.getTargetCompID(), SENDER_COMP_ID_TAG);
+                }
             }
+
+            FixField sendingTime = findField(message, SENDING_TIME_TAG);
+            if (sendingTime == null) {
+                addFieldAfter(message, SENDING_TIME_TAG, getTime(), TARGET_COMP_ID_TAG);
+            }
+            else {
+                String value = sendingTime.getValue();
+                if (!Objects.equals(value, "null") && !Objects.equals(value, "") && !Objects.equals(value, null)) {
+                    replaceAndMoveFieldValue(message, sendingTime, value, TARGET_COMP_ID_TAG);
+                }
+                else {
+                    replaceAndMoveFieldValue(message, sendingTime, getTime(), TARGET_COMP_ID_TAG);
+                }
+            }
+
+            replaceFieldValue(message, BODY_LENGTH_TAG, bodyLength != null ? bodyLength.getValue() : STUBBING_VALUE, Integer.toString(getBodyLength(message)));
+            updateChecksum(message);
         }
+        else if (Objects.equals(sendMode, "semi-manual")){
 
-        replaceFieldValue(message, BODY_LENGTH_TAG, bodyLength != null ? bodyLength.getValue() : STUBBING_VALUE, Integer.toString(getBodyLength(message)));
-        updateChecksum(message);
+            int msgSeqNumValue = msgSeqNum.incrementAndGet();
+            FixField msgSeqNum = findField(message, MSG_SEQ_NUM_TAG);
+            if (msgSeqNum == null) {
+                if (findField(message, MSG_TYPE_TAG)!=null) {
+                    addFieldAfter(message, MSG_SEQ_NUM_TAG, Integer.toString(msgSeqNumValue),MSG_TYPE_TAG);
+                }
+                else {
+                    addFieldAfter(message, MSG_SEQ_NUM_TAG, Integer.toString(msgSeqNumValue), BODY_LENGTH_TAG);
+                }
+            } else {
+                moveFieldValue(message, msgSeqNum, MSG_TYPE_TAG);
+            }
 
-        outgoingMessages.put(msgSeqNumValue, message);
+            FixField senderCompID = findField(message, SENDER_COMP_ID_TAG);
+            if (senderCompID == null) {
+                addFieldAfter(message, SENDER_COMP_ID_TAG, settings.getSenderCompID(), MSG_SEQ_NUM_TAG);
+            }
+            else {
+                moveFieldValue(message, senderCompID, MSG_TYPE_TAG);
+            }
+
+            FixField targetCompID = findField(message, TARGET_COMP_ID_TAG);
+            if (targetCompID == null) {
+                addFieldAfter(message, TARGET_COMP_ID_TAG, settings.getTargetCompID(), SENDER_COMP_ID_TAG);
+            }
+            else {
+                moveFieldValue(message, targetCompID, SENDER_COMP_ID_TAG);
+            }
+
+            FixField sendingTime = findField(message, SENDING_TIME_TAG);
+            if (sendingTime == null) {
+                addFieldAfter(message, SENDING_TIME_TAG, getTime(), TARGET_COMP_ID_TAG);
+            }
+            else {
+                moveFieldValue(message, sendingTime, TARGET_COMP_ID_TAG);
+            }
+
+            if (bodyLength == null){
+                replaceFieldValue(message, BODY_LENGTH_TAG, bodyLength != null ? bodyLength.getValue() : STUBBING_VALUE, Integer.toString(getBodyLength(message)));
+            }
+            if(checksum == null){
+                updateChecksum(message);
+            }
+
+            outgoingMessages.put(msgSeqNumValue, message);
+        }
         LOGGER.info("Outgoing message - " + message.toString(StandardCharsets.US_ASCII));
 
         return metadata;

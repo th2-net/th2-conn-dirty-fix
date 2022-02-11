@@ -157,6 +157,17 @@ fun ByteBuf.replaceAndMoveFieldValue(
 }
 
 @JvmOverloads
+fun ByteBuf.moveFieldValue(
+    field: FixField,
+    beforeTag: Int?,
+) {
+    val tag = field.tag
+    val value = field.value
+    field.clear()
+    findField(beforeTag)?.insertNext(tag, value)?: error("in message no tag: $beforeTag")
+}
+
+@JvmOverloads
 fun ByteBuf.replaceLastFieldValue(
     tag: Int?,
     oldValue: String?,
