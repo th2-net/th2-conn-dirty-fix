@@ -34,6 +34,8 @@ This microservice allows sending and receiving messages via FIX protocol
 + *testRequestDelay* - interval for test request
 + *reconnectDelay* - interval for reconnect
 + *disconnectRequestDelay* - the interval for the shutdown request
++ *resetSeqNumFlag* - resetting sequence number in initial Logon message (when conn started)
++ *resetOnLogon* - resetting the sequence number in Logon in other cases (e.g. disconnect)
 
 ## Mangler settings
 
@@ -187,8 +189,10 @@ spec:
           senderCompID: client
           targetCompID: FGW
           encryptMethod: 0
-          username": username
-          password": password
+          username: username
+          password: password
+          resetSeqNumFlag: false
+          resetOnLogon: false
           testRequestDelay: 60
           reconnectDelay": 5
           disconnectRequestDelay: 5

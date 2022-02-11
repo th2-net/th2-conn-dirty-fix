@@ -50,6 +50,7 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
     private final AtomicInteger testReqID = new AtomicInteger(0);
     private final AtomicInteger resendRequestSeqNum = new AtomicInteger(0);
     private final AtomicBoolean enabled = new AtomicBoolean(false);
+    private final AtomicBoolean connStarted = new AtomicBoolean(false);
     private final ScheduledExecutorService executorService;
     private final IContext<IProtocolHandlerSettings> context;
     private Future<?> heartbeatTimer = CompletableFuture.completedFuture(null);
@@ -105,7 +106,6 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
         return buffer.retainedSlice(beginStringIdx, endOfMessageIdx + 1 - beginStringIdx);
     }
 
-
     @NotNull
     @Override
     public Map<String, String> onIncoming(@NotNull ByteBuf message) {
@@ -153,6 +153,10 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
                 boolean connectionSuccessful = checkLogon(message);
                 enabled.set(connectionSuccessful);
                 if (connectionSuccessful) {
+                    if (!connStarted.get()){
+                        connStarted.set(true);
+                    }
+
                     if (heartbeatTimer != null) {
                         heartbeatTimer.cancel(false);
                     }
@@ -443,7 +447,12 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
         setHeader(logon, MSG_TYPE_LOGON, msgSeqNum.incrementAndGet());
         logon.append(ENCRYPT_METHOD).append(settings.getEncryptMethod());
         logon.append(HEART_BT_INT).append(settings.getHeartBtInt());
-        //logon.append(RESET_SEQ_NUM).append("Y");
+        if (!connStarted.get()) {
+            if (settings.getResetSeqNumFlag()) logon.append(RESET_SEQ_NUM).append("Y");
+        }
+        else {
+            if (settings.getResetOnLogon()) logon.append(RESET_SEQ_NUM).append("Y");
+        }
         logon.append(DEFAULT_APPL_VER_ID).append(settings.getDefaultApplVerID());
         logon.append(USERNAME).append(settings.getUsername());
         logon.append(PASSWORD).append(settings.getPassword());

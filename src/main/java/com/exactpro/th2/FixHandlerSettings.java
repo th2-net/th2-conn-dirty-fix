@@ -13,6 +13,9 @@ public class FixHandlerSettings implements IProtocolHandlerSettings {
     private String encryptMethod = "0";
     private String username = "username";
     private String password = "pass";
+    private Boolean resetSeqNumFlag = false;
+    private Boolean resetOnLogon = false;
+
     private long defaultApplVerID = 9;
 
     private int testRequestDelay = 60;
@@ -68,6 +71,10 @@ public class FixHandlerSettings implements IProtocolHandlerSettings {
         return password;
     }
 
+    public Boolean getResetSeqNumFlag() { return resetSeqNumFlag; }
+
+    public Boolean getResetOnLogon() { return resetOnLogon; }
+
     public int getTestRequestDelay() {
         return testRequestDelay;
     }
@@ -83,6 +90,10 @@ public class FixHandlerSettings implements IProtocolHandlerSettings {
     public void setPassword(String password) {
         this.password = password;
     }
+
+    public void setResetSeqNumFlag(Boolean resetSeqNumFlag) { this.resetSeqNumFlag = resetSeqNumFlag; }
+
+    public void setResetOnLogon(Boolean resetOnLogon) { this.resetOnLogon = resetOnLogon; }
 
     public void setTestRequestDelay(int testRequestDelay) {
         this.testRequestDelay = testRequestDelay;
