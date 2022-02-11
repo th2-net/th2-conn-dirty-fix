@@ -56,6 +56,18 @@ class FixHandlerTest {
     }
 
     @Test
+    void test3188(){
+        String body1 = "8=F";
+        String body2 = "IXT.1.1\0019=13\00135=AE\001552=1\00158=11111\00110=169\001";
+        ByteBuf byteBuf1 = Unpooled.buffer().writeBytes(body1.getBytes(StandardCharsets.UTF_8));
+        fixHandler.onReceive(byteBuf1);
+        assertEquals("8=F", byteBuf1.toString(StandardCharsets.US_ASCII));
+        byteBuf1.writeBytes(body2.getBytes(StandardCharsets.UTF_8));
+        fixHandler.onReceive(byteBuf1);
+        assertEquals("", byteBuf1.toString(StandardCharsets.US_ASCII));
+    }
+
+    @Test
     void onDataBrokenMessageTest() {
         ByteBuf result0 = fixHandler.onReceive(brokenBuffer);
         ByteBuf result1 = fixHandler.onReceive(brokenBuffer);
