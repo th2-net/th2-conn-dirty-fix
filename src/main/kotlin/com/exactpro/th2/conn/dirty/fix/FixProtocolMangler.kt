@@ -23,16 +23,17 @@ import com.exactpro.th2.conn.dirty.tcp.core.api.IContext
 import com.exactpro.th2.conn.dirty.tcp.core.api.IProtocolMangler
 import com.exactpro.th2.conn.dirty.tcp.core.api.IProtocolManglerFactory
 import com.exactpro.th2.conn.dirty.tcp.core.api.IProtocolManglerSettings
+import com.fasterxml.jackson.annotation.JsonAlias
 import com.google.auto.service.AutoService
 import io.netty.buffer.ByteBuf
 import io.netty.buffer.ByteBufUtil
 
 class FixProtocolMangler(context: IContext<IProtocolManglerSettings>) : IProtocolMangler {
-    private val transform = (context.settings as FixProtocolManglerSettings).transform
+    private val rules = (context.settings as FixProtocolManglerSettings).rule
 
     override fun onOutgoing(message: ByteBuf, metadata: Map<String, String>): Event? {
         val original = message.copy()
-        val executed = MessageTransformer.transform(message, transform).ifEmpty { return null }
+        val executed = MessageTransformer.transform(message, rules).ifEmpty { return null }
 
         return Event.start().apply {
             name("Message mangled")
@@ -52,4 +53,4 @@ class FixProtocolManglerFactory : IProtocolManglerFactory {
     override fun create(context: IContext<IProtocolManglerSettings>) = FixProtocolMangler(context)
 }
 
-class FixProtocolManglerSettings(val transform: List<Transform> = emptyList()) : IProtocolManglerSettings
+class FixProtocolManglerSettings(@JsonAlias("rules") val rule: List<Rule> = emptyList()) : IProtocolManglerSettings

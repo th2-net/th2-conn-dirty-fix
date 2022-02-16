@@ -23,15 +23,28 @@ import mu.KotlinLogging
 import java.util.regex.Pattern
 import kotlin.text.Charsets.UTF_8
 
+typealias RuleID = Int
+
 object MessageTransformer {
     private val logger = KotlinLogging.logger {}
 
-    fun transform(message: ByteBuf, transform: List<Transform>): List<Action> {
+    fun transform(message: ByteBuf, rules: List<Rule>): List<Action> {
         logger.debug { "Processing message: ${message.toString(UTF_8)}" }
 
         val executed = mutableListOf<Action>()
 
-        for ((conditions, actions) in transform) {
+        val targetRule = rules.filter { rule ->
+            rule.transform.any { transform ->
+                transform.conditions.any { it.matches(message) }
+            }
+        }.randomOrNull()
+
+        if (targetRule == null) {
+            logger.debug { "No transformation were applied" }
+            return executed
+        }
+
+        for ((conditions, actions) in targetRule.transform) {
             if (!conditions.all { it.matches(message) }) {
                 continue
             }
@@ -69,19 +82,14 @@ object MessageTransformer {
             }
         }
 
-        if (executed.isEmpty()) {
-            logger.debug { "No transformation were applied" }
-            return executed
-        }
-
         executed.forEach { logger.debug { "Applied transformation: $it" } }
 
-        if (transform.any(Transform::updateLength)) {
+        if (targetRule.transform.any(Transform::updateLength)) {
             message.updateLength()
             logger.debug { "Recalculated length" }
         }
 
-        if (transform.any(Transform::updateChecksum)) {
+        if (targetRule.transform.any(Transform::updateChecksum)) {
             message.updateChecksum()
             logger.debug { "Recalculated checksum" }
         }
@@ -162,6 +170,7 @@ data class Action(
     }
 }
 
+
 data class Transform(
     @JsonAlias("when") val conditions: List<FieldSelector>,
     @JsonAlias("then") val actions: List<Action>,
@@ -178,5 +187,20 @@ data class Transform(
         conditions.forEach { appendLine("    $it") }
         appendLine("then")
         actions.forEach { appendLine("    $it") }
+    }
+}
+
+data class Rule(
+    val ruleID: RuleID,
+    val transform: List<Transform>
+) {
+    init {
+        require(transform.isNotEmpty()) { "Rule must have at least one transform" }
+    }
+
+    override fun toString() = buildString {
+        appendLine("id: $ruleID")
+        appendLine("transforms: ")
+        transform.forEach { appendLine("    $it") }
     }
 }
