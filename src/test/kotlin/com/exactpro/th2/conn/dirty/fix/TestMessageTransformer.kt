@@ -88,7 +88,7 @@ class TestMessageTransformer {
         private fun String.toBuffer() = Unpooled.buffer().writeBytes(replace('|', SOH_CHAR).toByteArray(UTF_8))
         private fun ByteBuf.asString() = toString(UTF_8).replace(SOH_CHAR, '|')
         private fun field(tag: Int, value: String) = FieldDefinition(tag, value, null, null)
-        private fun select(tag: Int, pattern: String) = FieldSelector(tag, pattern.toPattern())
+        private fun select(tag: Int, pattern: String) = FieldSelector(tag, null, pattern.toPattern())
         private infix fun Int.eq(value: String) = field(this, value)
         private infix fun Int.to(value: String) = field(this, value)
         private infix fun Int.oneOf(value: List<String>) =  FieldDefinition(this, null, null, value)

@@ -121,19 +121,40 @@ fun FieldDefinition.getSingleValue(): String {
 }
 
 data class FieldSelector(
-    val tag: Tag,
+    val tag: Tag?,
+    val tagOneOf: List<Tag>?,
     val matches: Pattern,
 ) {
+
+    init {
+        require(tag != null || tagOneOf != null && tagOneOf.isNotEmpty()) { "Tag must be defined" }
+    }
+
     @JsonIgnore private val predicate = matches.asMatchPredicate()
 
     fun matches(message: ByteBuf): Boolean = find(message) != null
 
-    fun find(message: ByteBuf): FixField? = message.findField {
-        it.tag == this.tag && it.value?.run(this.predicate::test) ?: false
+    fun find(message: ByteBuf): FixField? {
+         when {
+             tag != null -> return message.findField {
+                 it.tag == this.tag && it.value?.run(this.predicate::test) ?: false
+             }
+             tagOneOf != null -> {
+                 val foundFields = message.findAll {
+                     tagOneOf.contains(it.tag) && it.value?.run(this.predicate::test) ?: false
+                 }
+                 if (foundFields.isEmpty()) {
+                     return null
+                 }
+                 return foundFields.random()
+             }
+        }
+        return null
     }
 
     override fun toString() = buildString {
-        append("tag $tag")
+        tag?.apply { append("tag $tag") }
+        tagOneOf?.apply { append("one of tags $tag") }
         append(" ~= /$matches/")
     }
 }

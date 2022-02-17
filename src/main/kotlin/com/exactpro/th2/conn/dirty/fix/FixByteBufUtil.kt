@@ -65,6 +65,13 @@ inline fun ByteBuf.findField(charset: Charset = UTF_8, predicate: (FixField) -> 
 }
 
 @JvmOverloads
+inline fun ByteBuf.findAll(charset: Charset = UTF_8, predicate: (FixField) -> Boolean): List<FixField> {
+    return mutableListOf<FixField>().apply {
+        forEachField(charset) { if (predicate(it)) add(it) }
+    }
+}
+
+@JvmOverloads
 inline fun ByteBuf.findLastField(charset: Charset = UTF_8, predicate: (FixField) -> Boolean): FixField? {
     forEachFieldDesc(charset) { if (predicate(it)) return it }
     return null
