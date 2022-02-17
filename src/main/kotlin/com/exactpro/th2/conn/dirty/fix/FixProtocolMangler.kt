@@ -33,13 +33,15 @@ class FixProtocolMangler(context: IContext<IProtocolManglerSettings>) : IProtoco
 
     override fun onOutgoing(message: ByteBuf, metadata: MutableMap<String, String>): Event? {
         val original = message.copy()
-        val executed = MessageTransformer.transform(message, rules).ifEmpty { return null }
+        val (id, actions) = MessageTransformer.transform(message, rules) ?: return null
+
+        metadata["rule"] = id.toString()
 
         return Event.start().apply {
             name("Message mangled")
             type("Mangle")
             status(PASSED)
-            executed.forEach { bodyData(createMessageBean(it.toString())) }
+            actions.forEach { bodyData(createMessageBean(it.toString())) }
             bodyData(createMessageBean("Original message:"))
             bodyData(createMessageBean(ByteBufUtil.prettyHexDump(original)))
         }

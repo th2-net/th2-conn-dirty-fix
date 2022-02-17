@@ -29,7 +29,7 @@ typealias Tag = Int
 object MessageTransformer {
     private val logger = KotlinLogging.logger {}
 
-    fun transform(message: ByteBuf, rules: List<Rule>): List<Action> {
+    fun transform(message: ByteBuf, rules: List<Rule>): TransformResult? {
         logger.debug { "Processing message: ${message.toString(UTF_8)}" }
 
         val executed = mutableListOf<Action>()
@@ -42,7 +42,7 @@ object MessageTransformer {
 
         if (targetRule == null) {
             logger.debug { "No transformation were applied" }
-            return executed
+            return null
         }
 
         for ((conditions, actions) in targetRule.transform) {
@@ -95,7 +95,7 @@ object MessageTransformer {
             logger.debug { "Recalculated checksum" }
         }
 
-        return executed
+        return TransformResult(targetRule.ruleID, executed)
     }
 }
 
@@ -233,3 +233,5 @@ data class Rule(
         transform.forEach { appendLine("    $it") }
     }
 }
+
+data class TransformResult(val rule: RuleID, val actions: List<Action>)
