@@ -219,7 +219,7 @@ spec:
                     - { tag: 35, matches: D }
                   then:
                     - set: { tag: 1, value: new account }
-                    - add: { tag: 15, value: USD }
+                    - add: { tag: 15, valueOneOf: ["USD", "EUR"] }
                       after: { tag: 58, matches: (.*) }
                   update-length: false
                 - when:

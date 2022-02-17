@@ -24,6 +24,7 @@ import java.util.regex.Pattern
 import kotlin.text.Charsets.UTF_8
 
 typealias RuleID = Int
+typealias Tag = Int
 
 object MessageTransformer {
     private val logger = KotlinLogging.logger {}
@@ -58,12 +59,12 @@ object MessageTransformer {
 
                 action.add?.also { field ->
                     action.before?.find(message)?.let { next ->
-                        next.insertPrevious(field.tag, field.value)
+                        next.insertPrevious(field.getSingleTag(), field.getSingleValue())
                         executed += action
                     }
 
                     action.after?.find(message)?.let { previous ->
-                        previous.insertNext(field.tag, field.value)
+                        previous.insertNext(field.getSingleTag(), field.getSingleValue())
                         executed += action
                     }
                 }
@@ -75,8 +76,8 @@ object MessageTransformer {
 
                 action.replace?.find(message)?.let { field ->
                     val with = action.with!!
-                    field.tag = with.tag
-                    field.value = with.value
+                    field.tag = with.getSingleTag()
+                    field.value = with.getSingleValue()
                     executed += action
                 }
             }
@@ -98,8 +99,22 @@ object MessageTransformer {
     }
 }
 
+fun FieldDefinition.getSingleTag(): Tag {
+    if (tag != null) {
+        return tag
+    }
+    return checkNotNull(tagOneOf) { "At last one tag need to be defined" }.random()
+}
+
+fun FieldDefinition.getSingleValue(): String {
+    if (value != null) {
+        return value
+    }
+    return checkNotNull(valueOneOf) { "At last one value need to be defined" }.random()
+}
+
 data class FieldSelector(
-    val tag: Int,
+    val tag: Tag,
     val matches: Pattern,
 ) {
     @JsonIgnore private val predicate = matches.asMatchPredicate()
@@ -117,10 +132,24 @@ data class FieldSelector(
 }
 
 data class FieldDefinition(
-    val tag: Int,
-    val value: String,
+    val tag: Tag?,
+    val value: String?,
+    val tagOneOf: List<Tag>?,
+    val valueOneOf: List<String>?
 ) {
-    override fun toString() = "tag $tag = '$value'"
+
+    init {
+        require(tag != null || tagOneOf != null && tagOneOf.isNotEmpty()) { "Tag must be defined" }
+        require(value != null || valueOneOf != null && valueOneOf.isNotEmpty()) { "Transformation must have at least one action" }
+    }
+
+    override fun toString() = buildString {
+        tag?.apply { append("tag $tag") }
+        tagOneOf?.apply { append("one of tags $tagOneOf") }
+        append(" = ")
+        value?.apply { append("'$value'") }
+        valueOneOf?.apply { append("one of $valueOneOf") }
+    }
 }
 
 data class Action(
