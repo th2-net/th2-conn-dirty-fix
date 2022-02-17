@@ -35,7 +35,12 @@ class FixProtocolMangler(context: IContext<IProtocolManglerSettings>) : IProtoco
         val original = message.copy()
         val (id, actions) = MessageTransformer.transform(message, rules) ?: return null
 
-        metadata["rule"] = id.toString()
+
+        //FIXME: Replace metadata info to event info of transforms
+        metadata["CorruptionType"] = id.toString()
+        metadata["CorruptedTag"] = actions[0].tag.toString()
+        actions[0].value?.let { metadata["CorruptedValue"] = it }
+
 
         return Event.start().apply {
             name("Message mangled")
