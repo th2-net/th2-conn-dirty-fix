@@ -31,7 +31,7 @@ import io.netty.buffer.ByteBufUtil
 class FixProtocolMangler(context: IContext<IProtocolManglerSettings>) : IProtocolMangler {
     private val rules = (context.settings as FixProtocolManglerSettings).rule
 
-    override fun onOutgoing(message: ByteBuf, metadata: Map<String, String>): Event? {
+    override fun onOutgoing(message: ByteBuf, metadata: MutableMap<String, String>): Event? {
         val original = message.copy()
         val executed = MessageTransformer.transform(message, rules).ifEmpty { return null }
 

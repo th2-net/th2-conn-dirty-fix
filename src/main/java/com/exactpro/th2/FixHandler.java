@@ -308,7 +308,7 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
 
     @NotNull
     @Override
-    public Map<String, String> onOutgoing(@NotNull ByteBuf message, @NotNull Map<String, String> metadata) {
+    public void onOutgoing(@NotNull ByteBuf message, @NotNull Map<String, String> metadata) {
         String sendMode = metadata.get("send-mode");
 
         if (sendMode == null || Objects.equals(sendMode, "")) {
@@ -318,8 +318,6 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
             onOutgoingNotUpdateTag(message, metadata);
         }
         LOGGER.info("Outgoing message - " + message.toString(StandardCharsets.US_ASCII));
-
-        return metadata;
     }
 
     public void onOutgoingUpdateTag(@NotNull ByteBuf message, @NotNull Map<String, String> metadata){

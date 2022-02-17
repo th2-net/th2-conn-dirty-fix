@@ -158,8 +158,14 @@ class FixHandlerTest {
         expected4.put("MsgType", "A");
         expected4.put("send-mode", "manual");
 
-        Map<String, String> actual = fixHandler.onOutgoing(bufferForPrepareMessage1, expected);
-        Map<String, String> actual2 = fixHandler.onOutgoing(bufferForPrepareMessage2, new HashMap<>());
+        Map<String, String> actual = new HashMap<>(expected);
+        fixHandler.onOutgoing(bufferForPrepareMessage1, actual);
+        assertEquals(expected, actual);
+
+        Map<String, String> actual2 = new HashMap<>();
+        fixHandler.onOutgoing(bufferForPrepareMessage2, actual2);
+        assertEquals(expected2, actual2);
+
         fixHandler.onOutgoing(bufferForPrepareMessage3, expected3);
         fixHandler.onOutgoing(bufferForPrepareMessage4, expected4);
 
@@ -170,9 +176,6 @@ class FixHandlerTest {
         assertEquals(expectedMessage2, bufferForPrepareMessage2.toString(StandardCharsets.US_ASCII));
         assertEquals(expectedMessage3, bufferForPrepareMessage3.toString(StandardCharsets.US_ASCII));
         assertEquals(expectedMessage4, bufferForPrepareMessage4.toString(StandardCharsets.US_ASCII));
-
-        assertEquals(expected, actual);
-        assertEquals(expected2, actual2);
     }
 
     @Test
