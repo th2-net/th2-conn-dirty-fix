@@ -52,7 +52,7 @@ object MessageTransformer {
 
             actions.forEach { action ->
                 action.set?.apply {
-                    if (message.setField(tag, value)) {
+                    if (message.setField(getSingleTag(), getSingleValue())) {
                         executed += action
                     }
                 }
@@ -95,7 +95,7 @@ object MessageTransformer {
             logger.debug { "Recalculated checksum" }
         }
 
-        return TransformResult(targetRule.ruleID, executed)
+        return TransformResult(targetRule.id, executed)
     }
 }
 
@@ -220,7 +220,7 @@ data class Transform(
 }
 
 data class Rule(
-    val ruleID: RuleID,
+    val id: RuleID,
     val transform: List<Transform>
 ) {
     init {
@@ -228,7 +228,7 @@ data class Rule(
     }
 
     override fun toString() = buildString {
-        appendLine("id: $ruleID")
+        appendLine("id: $id")
         appendLine("transforms: ")
         transform.forEach { appendLine("    $it") }
     }
