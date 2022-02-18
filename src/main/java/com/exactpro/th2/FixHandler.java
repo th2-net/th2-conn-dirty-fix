@@ -249,16 +249,20 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
             int endSeqNo = Integer.parseInt(Objects.requireNonNull(strEndSeqNo.getValue()));
 
             try {
-                if (endSeqNo == 0) endSeqNo = msgSeqNum.get() - 1;
+                // FIXME: there is not syn on the outgoing sequence. Should make operations with seq more careful
+                if (endSeqNo == 0) {
+                    endSeqNo = msgSeqNum.get();
+                }
                 LOGGER.info("Returning messages from " + beginSeqNo + " to " + endSeqNo);
                 for (int i = beginSeqNo; i <= endSeqNo; i++) {
-                    if (outgoingMessages.get(i) != null) {
-                        LOGGER.info("Returning message - " + outgoingMessages.get(i).toString(StandardCharsets.US_ASCII));
-                        client.send(outgoingMessages.get(i), Collections.emptyMap(), IChannel.SendMode.MANGLE);
-                    }
-                    else {
+                    ByteBuf storedMsg = outgoingMessages.get(i);
+                    if (storedMsg == null) {
+                        // TODO: the HB tasks works in parallel. We need to make it stop or add a condition not to send HB when resend request received
                         resendRequestSeqNum.getAndSet(i);
                         sendHeartbeat();
+                    } else {
+                        LOGGER.info("Returning message - " + storedMsg.toString(StandardCharsets.US_ASCII));
+                        client.send(storedMsg, Collections.emptyMap(), IChannel.SendMode.MANGLE);
                     }
                 }
                 resendRequestSeqNum.getAndSet(0);
