@@ -63,6 +63,19 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
     public FixHandler(IContext<IProtocolHandlerSettings> context) {
         this.context = context;
         executorService = Executors.newScheduledThreadPool(1);
+        this.settings = (FixHandlerSettings) context.getSettings();
+        Objects.requireNonNull(settings.getBeginString(), "BeginString can not be null");
+        Objects.requireNonNull(settings.getSenderCompID(), "SenderCompID can not be null");
+        Objects.requireNonNull(settings.getTargetCompID(), "TargetCompID can not be null");
+        Objects.requireNonNull(settings.getEncryptMethod(), "EncryptMethod can not be null");
+        Objects.requireNonNull(settings.getUsername(), "Username can not be null");
+        Objects.requireNonNull(settings.getPassword(), "Password can not be null");
+        Objects.requireNonNull(settings.getResetSeqNumFlag(), "ResetSeqNumFlag can not be null");
+        Objects.requireNonNull(settings.getResetOnLogon(), "ResetOnLogon can not be null");
+        if(settings.getHeartBtInt() <= 0) throw new IllegalArgumentException("HeartBtInt cannot be negative or zero");
+        if(settings.getDefaultApplVerID() <= 0) throw new IllegalArgumentException("DefaultApplVerID cannot be negative or zero");
+        if(settings.getTestRequestDelay() <= 0) throw new IllegalArgumentException("TestRequestDelay cannot be negative or zero");
+        if(settings.getDisconnectRequestDelay() <= 0) throw new IllegalArgumentException("DisconnectRequestDelay cannot be negative or zero");
     }
 
     @Override
@@ -474,7 +487,6 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
     @Override
     public void onOpen() {
         this.client = context.getChannel();
-        this.settings = (FixHandlerSettings) context.getSettings();
         sendLogon();
     }
 
@@ -507,7 +519,6 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
         }
         reconnectRequestTimer = executorService.schedule(this::sendLogon, settings.getReconnectDelay(), TimeUnit.SECONDS);
     }
-
 
     public void sendLogon() {
         StringBuilder logon = new StringBuilder();
