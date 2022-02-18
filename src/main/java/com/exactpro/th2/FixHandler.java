@@ -165,10 +165,10 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
                 break;
             case MSG_TYPE_LOGOUT: //extract logout reason
                 LOGGER.info("Logout received - " + message.toString(StandardCharsets.US_ASCII));
-                String text = Objects.requireNonNull(findField(message, TEXT_TAG)).getValue();
+                FixField text = findField(message, TEXT_TAG);
                 if (text != null) {
-                    LOGGER.warn("Received Logout has text (58) tag: " + text);
-                    String value = StringUtils.substringBetween(text, "expecting ", " but received");
+                    LOGGER.warn("Received Logout has text (58) tag: " + text.getValue());
+                    String value = StringUtils.substringBetween(text.getValue(), "expecting ", " but received");
                     if (value != null) {
                         msgSeqNum.getAndSet(Integer.parseInt(value)-2);
                         serverMsgSeqNum.getAndSet(Integer.parseInt(msgSeqNumValue.getValue()));
@@ -511,15 +511,15 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
 
     public void sendLogon() {
         StringBuilder logon = new StringBuilder();
+        Boolean reset;
+        if (!connStarted.get()) reset = settings.getResetSeqNumFlag();
+        else reset = settings.getResetOnLogon();
+        if (reset) msgSeqNum.getAndSet(0);
+
         setHeader(logon, MSG_TYPE_LOGON, msgSeqNum.incrementAndGet());
         logon.append(ENCRYPT_METHOD).append(settings.getEncryptMethod());
         logon.append(HEART_BT_INT).append(settings.getHeartBtInt());
-        if (!connStarted.get()) {
-            if (settings.getResetSeqNumFlag()) logon.append(RESET_SEQ_NUM).append("Y");
-        }
-        else {
-            if (settings.getResetOnLogon()) logon.append(RESET_SEQ_NUM).append("Y");
-        }
+        if (reset) logon.append(RESET_SEQ_NUM).append("Y");
         logon.append(DEFAULT_APPL_VER_ID).append(settings.getDefaultApplVerID());
         logon.append(USERNAME).append(settings.getUsername());
         logon.append(PASSWORD).append(settings.getPassword());
@@ -542,15 +542,6 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
 
     @Override
     public void close() {
-        executorService.shutdown();
-        try {
-            if (!executorService.awaitTermination(3000, TimeUnit.MILLISECONDS)) {
-                executorService.shutdownNow();
-            }
-        } catch (InterruptedException e) {
-            executorService.shutdownNow();
-        }
-
         StringBuilder logout = new StringBuilder();
         setHeader(logout, MSG_TYPE_LOGOUT, msgSeqNum.incrementAndGet());
         setChecksumAndBodyLength(logout);
