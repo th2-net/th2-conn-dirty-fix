@@ -19,6 +19,8 @@ package com.exactpro.th2.conn.dirty.fix
 import com.exactpro.th2.common.event.Event
 import com.exactpro.th2.common.event.Event.Status.PASSED
 import com.exactpro.th2.common.event.EventUtils.createMessageBean
+import com.exactpro.th2.common.event.bean.IRow
+import com.exactpro.th2.common.event.bean.Table
 import com.exactpro.th2.conn.dirty.tcp.core.api.IContext
 import com.exactpro.th2.conn.dirty.tcp.core.api.IProtocolMangler
 import com.exactpro.th2.conn.dirty.tcp.core.api.IProtocolManglerFactory
@@ -34,22 +36,23 @@ class FixProtocolMangler(context: IContext<IProtocolManglerSettings>) : IProtoco
     override fun onOutgoing(message: ByteBuf, metadata: MutableMap<String, String>): Event? {
         val original = message.copy()
         val (id, actions) = MessageTransformer.transform(message, rules) ?: return null
-
+        val firstAction = actions[0]
 
         //FIXME: Replace metadata info to event info of transforms
         metadata["CorruptionType"] = id.toString()
-        metadata["CorruptedTag"] = actions[0].tag.toString()
-        actions[0].value?.let { metadata["CorruptedValue"] = it }
-
+        metadata["CorruptedTag"] = firstAction.tag.toString()
+        firstAction.value?.let { metadata["CorruptedValue"] = it }
 
         return Event.start().apply {
             name("Message mangled")
             type("Mangle")
             status(PASSED)
-            bodyData(createMessageBean("Applied rule ID: $id"))
             actions.forEach { bodyData(createMessageBean(it.toString())) }
             bodyData(createMessageBean("Original message:"))
             bodyData(createMessageBean(ByteBufUtil.prettyHexDump(original)))
+            bodyData(Table().apply {
+                fields = listOf(EventTableRow(id, firstAction.tag, firstAction.value))
+            })
         }
     }
 }
@@ -62,3 +65,5 @@ class FixProtocolManglerFactory : IProtocolManglerFactory {
 }
 
 class FixProtocolManglerSettings(@JsonAlias("rules") val rule: List<Rule> = emptyList()) : IProtocolManglerSettings
+
+private data class EventTableRow(val corruptionType: Int, val corruptedTag: Int, val corruptedValue: String?) : IRow
