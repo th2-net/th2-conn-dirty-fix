@@ -46,6 +46,7 @@ class FixProtocolMangler(context: IContext<IProtocolManglerSettings>) : IProtoco
             name("Message mangled")
             type("Mangle")
             status(PASSED)
+            bodyData(createMessageBean("Applied rule ID: $id"))
             actions.forEach { bodyData(createMessageBean(it.toString())) }
             bodyData(createMessageBean("Original message:"))
             bodyData(createMessageBean(ByteBufUtil.prettyHexDump(original)))
