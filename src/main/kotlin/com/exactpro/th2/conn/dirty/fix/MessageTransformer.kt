@@ -23,7 +23,7 @@ import mu.KotlinLogging
 import java.util.regex.Pattern
 import kotlin.text.Charsets.UTF_8
 
-typealias RuleID = Int
+typealias RuleID = String
 typealias Tag = Int
 
 object MessageTransformer {
@@ -102,7 +102,7 @@ object MessageTransformer {
             logger.debug { "Recalculated checksum" }
         }
 
-        return TransformResult(targetRule.id, executed)
+        return TransformResult(targetRule.name, executed)
     }
 }
 
@@ -248,15 +248,15 @@ data class Transform(
 }
 
 data class Rule(
-    val id: RuleID,
-    val transform: List<Transform>
+    val name: RuleID,
+    val transform: List<Transform>,
 ) {
     init {
         require(transform.isNotEmpty()) { "Rule must have at least one transform" }
     }
 
     override fun toString() = buildString {
-        appendLine("id: $id")
+        appendLine("name: $name")
         appendLine("transforms: ")
         transform.forEach { appendLine("    $it") }
     }

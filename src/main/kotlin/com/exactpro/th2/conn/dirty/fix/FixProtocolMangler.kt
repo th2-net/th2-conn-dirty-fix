@@ -35,11 +35,11 @@ class FixProtocolMangler(context: IContext<IProtocolManglerSettings>) : IProtoco
 
     override fun onOutgoing(message: ByteBuf, metadata: MutableMap<String, String>): Event? {
         val original = message.copy()
-        val (id, actions) = MessageTransformer.transform(message, rules) ?: return null
+        val (rule, actions) = MessageTransformer.transform(message, rules) ?: return null
         val firstAction = actions[0]
 
         //FIXME: Replace metadata info to event info of transforms
-        metadata["CorruptionType"] = id.toString()
+        metadata["CorruptionType"] = rule
         metadata["CorruptedTag"] = firstAction.tag.toString()
         firstAction.value?.let { metadata["CorruptedValue"] = it }
 
@@ -51,7 +51,7 @@ class FixProtocolMangler(context: IContext<IProtocolManglerSettings>) : IProtoco
             bodyData(createMessageBean("Original message:"))
             bodyData(createMessageBean(ByteBufUtil.prettyHexDump(original)))
             bodyData(Table().apply {
-                fields = listOf(EventTableRow(id, firstAction.tag, firstAction.value))
+                fields = listOf(EventTableRow(rule, firstAction.tag, firstAction.value))
             })
         }
     }
@@ -66,4 +66,4 @@ class FixProtocolManglerFactory : IProtocolManglerFactory {
 
 class FixProtocolManglerSettings(@JsonAlias("rules") val rule: List<Rule> = emptyList()) : IProtocolManglerSettings
 
-private data class EventTableRow(val corruptionType: Int, val corruptedTag: Int, val corruptedValue: String?) : IRow
+private data class EventTableRow(val corruptionType: String, val corruptedTag: Int, val corruptedValue: String?) : IRow
