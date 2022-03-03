@@ -116,24 +116,23 @@ then:
 Transformation can also automatically recalculate length and checksum if any actions were applied.  
 This is controlled by `update-length` and `update-checksum` (both `true` by default) transformation options.
 
-Full config will be divided into groups of transforms united by rules, each rule will have `id` as key and list of transforms. 
-Only one rule can be triggered, after conditions tests triggered rules will be united into specific list and 
+Full config will be divided into groups of transforms united by rules, each rule will have `name` as key and list of transforms. Only one rule can be triggered, after conditions tests triggered rules will be united into specific list and
 only one random rule (group of transforms) will be chosen.
 
 ```yaml
 rules:
-  - id: 1
-    transform: [...]
-  - id: 99
-    transform: [...]
+  - name: rule-1
+    transform: [ ... ]
+  - name: rule-99
+    transform: [ ... ]
 ```
 
 Complete mangler configuration would look something like this:
 
 ```yaml
 mangler:
-  rules: 
-    - id: 1
+  rules:
+    - name: rule-1
       transform:
         - when:
             - tag: 8
@@ -212,7 +211,7 @@ spec:
           disconnectRequestDelay: 5
         mangler:
           rules:
-            - id: 1
+            - name: rule-1
               transform:
                 - when:
                     - { tag: 8, matches: FIXT.1.1 }
