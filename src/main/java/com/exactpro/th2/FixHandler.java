@@ -65,15 +65,9 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
         executorService = Executors.newScheduledThreadPool(1);
         this.settings = (FixHandlerSettings) context.getSettings();
         Objects.requireNonNull(settings.getBeginString(), "BeginString can not be null");
-        Objects.requireNonNull(settings.getSenderCompID(), "SenderCompID can not be null");
-        Objects.requireNonNull(settings.getTargetCompID(), "TargetCompID can not be null");
-        Objects.requireNonNull(settings.getEncryptMethod(), "EncryptMethod can not be null");
-        Objects.requireNonNull(settings.getUsername(), "Username can not be null");
-        Objects.requireNonNull(settings.getPassword(), "Password can not be null");
         Objects.requireNonNull(settings.getResetSeqNumFlag(), "ResetSeqNumFlag can not be null");
         Objects.requireNonNull(settings.getResetOnLogon(), "ResetOnLogon can not be null");
         if(settings.getHeartBtInt() <= 0) throw new IllegalArgumentException("HeartBtInt cannot be negative or zero");
-        if(settings.getDefaultApplVerID() <= 0) throw new IllegalArgumentException("DefaultApplVerID cannot be negative or zero");
         if(settings.getTestRequestDelay() <= 0) throw new IllegalArgumentException("TestRequestDelay cannot be negative or zero");
         if(settings.getDisconnectRequestDelay() <= 0) throw new IllegalArgumentException("DisconnectRequestDelay cannot be negative or zero");
     }
@@ -530,12 +524,12 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
         if (reset) msgSeqNum.getAndSet(0);
 
         setHeader(logon, MSG_TYPE_LOGON, msgSeqNum.incrementAndGet());
-        logon.append(ENCRYPT_METHOD).append(settings.getEncryptMethod());
+        if(settings.getEncryptMethod() != null) logon.append(ENCRYPT_METHOD).append(settings.getEncryptMethod());
         logon.append(HEART_BT_INT).append(settings.getHeartBtInt());
         if (reset) logon.append(RESET_SEQ_NUM).append("Y");
-        logon.append(DEFAULT_APPL_VER_ID).append(settings.getDefaultApplVerID());
-        logon.append(USERNAME).append(settings.getUsername());
-        logon.append(PASSWORD).append(settings.getPassword());
+        if(settings.getDefaultApplVerID() > 0) logon.append(DEFAULT_APPL_VER_ID).append(settings.getDefaultApplVerID());
+        if(settings.getUsername() != null) logon.append(USERNAME).append(settings.getUsername());
+        if(settings.getPassword() != null) logon.append(PASSWORD).append(settings.getPassword());
 
         setChecksumAndBodyLength(logon);
         LOGGER.info("Send logon - " + logon);
@@ -569,8 +563,8 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
         stringBuilder.append(BEGIN_STRING_TAG).append("=").append(settings.getBeginString());
         stringBuilder.append(MSG_TYPE).append(msgType);
         stringBuilder.append(MSG_SEQ_NUM).append(seqNum);
-        stringBuilder.append(SENDER_COMP_ID).append(settings.getSenderCompID());
-        stringBuilder.append(TARGET_COMP_ID).append(settings.getTargetCompID());
+        if(settings.getSenderCompID() != null) stringBuilder.append(SENDER_COMP_ID).append(settings.getSenderCompID());
+        if(settings.getTargetCompID() != null) stringBuilder.append(TARGET_COMP_ID).append(settings.getTargetCompID());
         stringBuilder.append(SENDING_TIME).append(getTime());
     }
 
