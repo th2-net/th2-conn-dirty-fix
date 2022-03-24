@@ -116,43 +116,56 @@ then:
 Transformation can also automatically recalculate length and checksum if any actions were applied.  
 This is controlled by `update-length` and `update-checksum` (both `true` by default) transformation options.
 
+Full config will be divided into groups of transforms united by rules, each rule will have `name` as key and list of transforms. Only one rule can be triggered, after conditions tests triggered rules will be united into specific list and
+only one random rule (group of transforms) will be chosen.
+
+```yaml
+rules:
+  - name: rule-1
+    transform: [ ... ]
+  - name: rule-99
+    transform: [ ... ]
+```
+
 Complete mangler configuration would look something like this:
 
 ```yaml
 mangler:
-  transform:
-    - when:
-        - tag: 8
-          matches: FIXT.1.1
-        - tag: 35
-          matches: D
-      then:
-        - set:
-            tag: 1
-            value: new account
-        - add:
-            tag: 15
-            value: USD
-          after:
-            tag: 58
-            matches: (.*)
-      update-length: false
-    - when:
-        - tag: 8
-          matches: FIXT.1.1
-        - tag: 35
-          matches: 8
-      then:
-        - replace:
-            tag: 64
-            matches: (.*)
-          with:
-            tag: 63
-            value: 1
-        - remove:
-            tag: 110
-            matches: (.*)
-      update-checksum: false
+  rules:
+    - name: rule-1
+      transform:
+        - when:
+            - tag: 8
+              matches: FIXT.1.1
+            - tag: 35
+              matches: D
+          then:
+            - set:
+                tag: 1
+                value: new account
+            - add:
+                tag: 15
+                value: USD
+              after:
+                tag: 58
+                matches: (.*)
+          update-length: false
+        - when:
+            - tag: 8
+              matches: FIXT.1.1
+            - tag: 35
+              matches: 8
+          then:
+            - replace:
+                tag: 64
+                matches: (.*)
+              with:
+                tag: 63
+                value: 1
+            - remove:
+                tag: 110
+                matches: (.*)
+          update-checksum: false
 ```
 ## MQ pins
 + input queue with `subscribe`, `send` and `raw` attributes for outgoing messages
@@ -197,23 +210,25 @@ spec:
           reconnectDelay": 5
           disconnectRequestDelay: 5
         mangler:
-          transform:
-            - when:
-                - { tag: 8, matches: FIXT.1.1 }
-                - { tag: 35, matches: D }
-              then:
-                - set: { tag: 1, value: new account }
-                - add: { tag: 15, value: USD }
-                  after: { tag: 58, matches: (.*) }
-              update-length: false
-            - when:
-                - { tag: 8, matches: FIXT.1.1 }
-                - { tag: 35, matches: 8 }
-              then:
-                - replace: { tag: 64, matches: (.*) }
-                  with: { tag: 63, value: 1 }
-                - remove: { tag: 110, matches: (.*) }
-              update-checksum: false
+          rules:
+            - name: rule-1
+              transform:
+                - when:
+                    - { tag: 8, matches: FIXT.1.1 }
+                    - { tag: 35, matches: D }
+                  then:
+                    - set: { tag: 1, value: new account }
+                    - add: { tag: 15, valueOneOf: ["USD", "EUR"] }
+                      after: { tag: 58, matches: (.*) }
+                  update-length: false
+                - when:
+                    - { tag: 8, matches: FIXT.1.1 }
+                    - { tag: 35, matches: 8 }
+                  then:
+                    - replace: { tag: 64, matches: (.*) }
+                      with: { tag: 63, value: 1 }
+                    - remove: { tag: 110, matches: (.*) }
+                  update-checksum: false
   pins:
     - name: to_send
       connection-type: mq

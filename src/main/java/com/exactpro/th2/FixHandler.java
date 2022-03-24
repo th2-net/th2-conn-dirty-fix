@@ -65,15 +65,9 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
         executorService = Executors.newScheduledThreadPool(1);
         this.settings = (FixHandlerSettings) context.getSettings();
         Objects.requireNonNull(settings.getBeginString(), "BeginString can not be null");
-        Objects.requireNonNull(settings.getSenderCompID(), "SenderCompID can not be null");
-        Objects.requireNonNull(settings.getTargetCompID(), "TargetCompID can not be null");
-        Objects.requireNonNull(settings.getEncryptMethod(), "EncryptMethod can not be null");
-        Objects.requireNonNull(settings.getUsername(), "Username can not be null");
-        Objects.requireNonNull(settings.getPassword(), "Password can not be null");
         Objects.requireNonNull(settings.getResetSeqNumFlag(), "ResetSeqNumFlag can not be null");
         Objects.requireNonNull(settings.getResetOnLogon(), "ResetOnLogon can not be null");
         if(settings.getHeartBtInt() <= 0) throw new IllegalArgumentException("HeartBtInt cannot be negative or zero");
-        if(settings.getDefaultApplVerID() <= 0) throw new IllegalArgumentException("DefaultApplVerID cannot be negative or zero");
         if(settings.getTestRequestDelay() <= 0) throw new IllegalArgumentException("TestRequestDelay cannot be negative or zero");
         if(settings.getDisconnectRequestDelay() <= 0) throw new IllegalArgumentException("DisconnectRequestDelay cannot be negative or zero");
     }
@@ -262,16 +256,20 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
             int endSeqNo = Integer.parseInt(Objects.requireNonNull(strEndSeqNo.getValue()));
 
             try {
-                if (endSeqNo == 0) endSeqNo = msgSeqNum.get() - 1;
+                // FIXME: there is not syn on the outgoing sequence. Should make operations with seq more careful
+                if (endSeqNo == 0) {
+                    endSeqNo = msgSeqNum.get();
+                }
                 LOGGER.info("Returning messages from " + beginSeqNo + " to " + endSeqNo);
                 for (int i = beginSeqNo; i <= endSeqNo; i++) {
-                    if (outgoingMessages.get(i) != null) {
-                        LOGGER.info("Returning message - " + outgoingMessages.get(i).toString(StandardCharsets.US_ASCII));
-                        client.send(outgoingMessages.get(i), Collections.emptyMap(), IChannel.SendMode.MANGLE);
-                    }
-                    else {
+                    ByteBuf storedMsg = outgoingMessages.get(i);
+                    if (storedMsg == null) {
+                        // TODO: the HB tasks works in parallel. We need to make it stop or add a condition not to send HB when resend request received
                         resendRequestSeqNum.getAndSet(i);
                         sendHeartbeat();
+                    } else {
+                        LOGGER.info("Returning message - " + storedMsg.toString(StandardCharsets.US_ASCII));
+                        client.send(storedMsg, Collections.emptyMap(), IChannel.SendMode.MANGLE);
                     }
                 }
                 resendRequestSeqNum.getAndSet(0);
@@ -321,7 +319,7 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
 
     @NotNull
     @Override
-    public Map<String, String> onOutgoing(@NotNull ByteBuf message, @NotNull Map<String, String> metadata) {
+    public void onOutgoing(@NotNull ByteBuf message, @NotNull Map<String, String> metadata) {
         String sendMode = metadata.get("send-mode");
 
         if (sendMode == null || Objects.equals(sendMode, "")) {
@@ -331,8 +329,6 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
             onOutgoingNotUpdateTag(message, metadata);
         }
         LOGGER.info("Outgoing message - " + message.toString(StandardCharsets.US_ASCII));
-
-        return metadata;
     }
 
     public void onOutgoingUpdateTag(@NotNull ByteBuf message, @NotNull Map<String, String> metadata){
@@ -528,12 +524,12 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
         if (reset) msgSeqNum.getAndSet(0);
 
         setHeader(logon, MSG_TYPE_LOGON, msgSeqNum.incrementAndGet());
-        logon.append(ENCRYPT_METHOD).append(settings.getEncryptMethod());
+        if(settings.getEncryptMethod() != null) logon.append(ENCRYPT_METHOD).append(settings.getEncryptMethod());
         logon.append(HEART_BT_INT).append(settings.getHeartBtInt());
         if (reset) logon.append(RESET_SEQ_NUM).append("Y");
-        logon.append(DEFAULT_APPL_VER_ID).append(settings.getDefaultApplVerID());
-        logon.append(USERNAME).append(settings.getUsername());
-        logon.append(PASSWORD).append(settings.getPassword());
+        if(settings.getDefaultApplVerID() > 0) logon.append(DEFAULT_APPL_VER_ID).append(settings.getDefaultApplVerID());
+        if(settings.getUsername() != null) logon.append(USERNAME).append(settings.getUsername());
+        if(settings.getPassword() != null) logon.append(PASSWORD).append(settings.getPassword());
 
         setChecksumAndBodyLength(logon);
         LOGGER.info("Send logon - " + logon);
@@ -567,8 +563,8 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
         stringBuilder.append(BEGIN_STRING_TAG).append("=").append(settings.getBeginString());
         stringBuilder.append(MSG_TYPE).append(msgType);
         stringBuilder.append(MSG_SEQ_NUM).append(seqNum);
-        stringBuilder.append(SENDER_COMP_ID).append(settings.getSenderCompID());
-        stringBuilder.append(TARGET_COMP_ID).append(settings.getTargetCompID());
+        if(settings.getSenderCompID() != null) stringBuilder.append(SENDER_COMP_ID).append(settings.getSenderCompID());
+        if(settings.getTargetCompID() != null) stringBuilder.append(TARGET_COMP_ID).append(settings.getTargetCompID());
         stringBuilder.append(SENDING_TIME).append(getTime());
     }
 
