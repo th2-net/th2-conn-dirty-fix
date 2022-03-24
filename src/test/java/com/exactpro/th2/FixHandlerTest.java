@@ -4,7 +4,6 @@ import com.exactpro.th2.common.grpc.MessageID;
 import com.exactpro.th2.conn.dirty.tcp.core.api.IChannel;
 import com.exactpro.th2.conn.dirty.tcp.core.api.IContext;
 import com.exactpro.th2.conn.dirty.tcp.core.api.IProtocolHandlerSettings;
-import com.exactpro.th2.constants.Constants;
 import com.exactpro.th2.util.MessageUtil;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
@@ -20,11 +19,9 @@ import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneId;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
+import static com.exactpro.th2.constants.Constants.*;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -59,18 +56,27 @@ class FixHandlerTest {
     }
 
     @Test
+    void test3188(){
+        String body1 = "8=F";
+        String body2 = "IXT.1.1\0019=13\00135=AE\001552=1\00158=11111\00110=169\001";
+        ByteBuf byteBuf1 = Unpooled.buffer().writeBytes(body1.getBytes(StandardCharsets.UTF_8));
+        fixHandler.onReceive(byteBuf1);
+        assertEquals("8=F", byteBuf1.toString(StandardCharsets.US_ASCII));
+        byteBuf1.writeBytes(body2.getBytes(StandardCharsets.UTF_8));
+        fixHandler.onReceive(byteBuf1);
+        assertEquals("", byteBuf1.toString(StandardCharsets.US_ASCII));
+    }
+
+    @Test
     void onDataBrokenMessageTest() {
         ByteBuf result0 = fixHandler.onReceive(brokenBuffer);
         ByteBuf result1 = fixHandler.onReceive(brokenBuffer);
         ByteBuf result2 = fixHandler.onReceive(brokenBuffer);
         String expected0 = "A";
-        String expected1 = "8=FIXT.1.19=1335=AE552=110=16913138=FIXT.1.1\0019=13\00135=AE\001552=1\00110=169\001";
-
 
         assertNotNull(result0);
         assertEquals(expected0, result0.toString(StandardCharsets.US_ASCII));
-        assertNotNull(result1);
-        assertEquals(expected1, result1.toString(StandardCharsets.US_ASCII));
+        assertNull(result1);
         assertNull(result2);
     }
 
@@ -126,28 +132,45 @@ class FixHandlerTest {
         } catch (InterruptedException e) {
             e.printStackTrace();
         }
-        assertEquals("8=FIXT.1.1\u00019=95\u000135=A\u000134=7\u000149=client\u000156=server\u000152=2014-12-22T10:15:30Z\u000198=0\u0001108=30\u00011137=9\001553=username\u0001554=pass\u000110=132\u0001",
+        assertEquals("8=FIXT.1.1\u00019=95\u000135=A\u000134=8\u000149=client\u000156=server\u000152=2014-12-22T10:15:30Z\u000198=0\u0001108=30\u00011137=9\001553=username\u0001554=pass\u000110=133\u0001",
                 new String(client.getQueue().get(0).array()));
     }
 
     @Test
     void onOutgoingMessageTest() {
-        ByteBuf bufferForPrepareMessage = Unpooled.buffer().writeBytes("8=FIXT.1.1\0019=13\001552=1\00110=169\001".getBytes(StandardCharsets.US_ASCII));
-        ByteBuf bufferForPrepareMessage2 = Unpooled.buffer(11).writeBytes("552=1\001".getBytes(StandardCharsets.UTF_8));
+        ByteBuf bufferForPrepareMessage1 = Unpooled.buffer().writeBytes("8=FIXT.1.1\0019=13\001552=1\00149=client\u000134=8\u000156=null\00110=169\001".getBytes(StandardCharsets.US_ASCII));
+        ByteBuf bufferForPrepareMessage2 = Unpooled.buffer(11).writeBytes("552=1\001".getBytes(StandardCharsets.US_ASCII));
+        ByteBuf bufferForPrepareMessage3 = Unpooled.buffer().writeBytes("8=FIXT.1.1\00111=9977764\00122=8\00138=100\00140=2\00144=55\00152=20220127-12:00:40.775\00148=INSTR2\00154=2\00159=3\00160=20220127-15:00:36\001528=A\001581=1\001453=4\001448=DEMO-CONN2\001447=D\001452=76\001448=0\001447=P\001452=3\001448=0\001447=P\001452=122\001448=3\001447=P\001452=12\00110=157\001".getBytes(StandardCharsets.US_ASCII));
+        ByteBuf bufferForPrepareMessage4 = Unpooled.buffer().writeBytes("8=FIXT.1.1\0019=192\00135=A\00111=3428785\00122=8\00138=30\00140=2\00144=55\00148=INSTR1\00154=1\00159=0\00160=20220127-18:38:35\001526=11111\001528=A\001581=1\001453=4\001448=DEMO-CONN1\001447=D\001452=76\001448=0\001447=P\001452=3\001448=0\00147=P\001452=122\001448=3\001447=P\001452=12\00110=228\001".getBytes(StandardCharsets.US_ASCII));
 
-        String expectedMessage = "8=FIXT.1.1\u00019=13\u000135=A\u000134=5\00149=client\u000156=server\u000152=2014-12-22T10:15:30Z\u0001552=1\u000110=169\u0001";
-        String expectedMessage2 = "8=FIXT.1.1\u00019=XXX\u000134=6\00149=client\u000156=server\u000152=2014-12-22T10:15:30Z\u0001552=1\u000110=XXX\u0001";
+        String expectedMessage1 = "8=FIXT.1.1\u00019=60\u000135=A\u000134=5\00149=client\u000156=server\u000152=2014-12-22T10:15:30Z\u0001552=1\u000110=091\u0001";
+        String expectedMessage2 = "8=FIXT.1.1\u00019=55\u000134=6\00149=client\u000156=server\u000152=2014-12-22T10:15:30Z\u0001552=1\u000110=121\u0001";
+        String expectedMessage3 = "8=FIXT.1.1\u00019=233\u000135=A\u000134=7\u000149=client\u000156=server\u000152=20220127-12:00:40.775\u000111=9977764\u000122=8\u000138=100\u000140=2\u000144=55\u000148=INSTR2\u000154=2\u000159=3\u000160=20220127-15:00:36\u0001528=A\u0001581=1\u0001453=4\u0001448=DEMO-CONN2\u0001447=D\u0001452=76\u0001448=0\u0001447=P\u0001452=3\u0001448=0\u0001447=P\u0001452=122\u0001448=3\u0001447=P\u0001452=12\u000110=157\u0001";
+        String expectedMessage4 = "8=FIXT.1.1\0019=192\00135=A\00111=3428785\00122=8\00138=30\00140=2\00144=55\00148=INSTR1\00154=1\00159=0\00160=20220127-18:38:35\001526=11111\001528=A\001581=1\001453=4\001448=DEMO-CONN1\001447=D\001452=76\001448=0\001447=P\001452=3\001448=0\00147=P\001452=122\001448=3\001447=P\001452=12\00110=228\001";
         Map<String, String> expected = new HashMap<>();
         expected.put("MsgType", "A");
+        expected.put("send-mode", "");
         Map<String, String> expected2 = new HashMap<>();
+        Map<String, String> expected3 = new HashMap<>();
+        expected3.put("MsgType", "A");
+        expected3.put("send-mode", "semi-manual");
+        Map<String, String> expected4 = new HashMap<>();
+        expected4.put("MsgType", "A");
+        expected4.put("send-mode", "manual");
 
-        Map<String, String> actual = fixHandler.onOutgoing(bufferForPrepareMessage, expected);
+        Map<String, String> actual = fixHandler.onOutgoing(bufferForPrepareMessage1, expected);
         Map<String, String> actual2 = fixHandler.onOutgoing(bufferForPrepareMessage2, new HashMap<>());
+        fixHandler.onOutgoing(bufferForPrepareMessage3, expected3);
+        fixHandler.onOutgoing(bufferForPrepareMessage4, expected4);
 
-        bufferForPrepareMessage.readerIndex(0);
+        bufferForPrepareMessage1.readerIndex(0);
         bufferForPrepareMessage2.readerIndex(0);
-        assertEquals(expectedMessage, bufferForPrepareMessage.toString(StandardCharsets.US_ASCII));
+
+        assertEquals(expectedMessage1, bufferForPrepareMessage1.toString(StandardCharsets.US_ASCII));
         assertEquals(expectedMessage2, bufferForPrepareMessage2.toString(StandardCharsets.US_ASCII));
+        assertEquals(expectedMessage3, bufferForPrepareMessage3.toString(StandardCharsets.US_ASCII));
+        assertEquals(expectedMessage4, bufferForPrepareMessage4.toString(StandardCharsets.US_ASCII));
+
         assertEquals(expected, actual);
         assertEquals(expected2, actual2);
     }
@@ -234,7 +257,6 @@ class FixHandlerTest {
         assertEquals(expected2, actual2);
     }
 
-
     @Test
     void putTagTest() {
 
@@ -243,30 +265,33 @@ class FixHandlerTest {
         String expected2 = "8=FIX.2.2\0019=19\001552=1\001";
         String expected3 = "8=FIX.2.2\0019=19\001552=1\00110=009\001";
 
-        MessageUtil.putTag(buf, Constants.BEGIN_STRING_TAG, "FIX.2.2");
+        MessageUtil.putTag(buf, BEGIN_STRING_TAG.toString(), "FIX.2.2");
         assertNotNull(buf);
         assertEquals(expected, new String(buf.array()));
 
-        MessageUtil.putTag(buf, Constants.BODY_LENGTH_TAG, "19");
+        MessageUtil.putTag(buf, BODY_LENGTH_TAG.toString(), "19");
         assertNotNull(buf);
         assertEquals(expected2, new String(buf.array()));
 
-        MessageUtil.putTag(buf, Constants.CHECKSUM_TAG, fixHandler.getChecksum(buf));
+        MessageUtil.putTag(buf, CHECKSUM_TAG.toString(), fixHandler.getChecksum(buf));
         assertNotNull(buf);
         assertEquals(expected3, new String(buf.array()));
     }
 
     @Test
     void updateTagTest() {
-        ByteBuf buf = Unpooled.wrappedBuffer("8=FIX.2.2\00135=AE\001".getBytes(StandardCharsets.UTF_8));
+        ByteBuf buf = Unpooled.buffer().writeBytes("8=FIX.2.2\00135=AE\001".getBytes(StandardCharsets.UTF_8));
         String expected = "8=FIX.2.2\00135=AEE\001";
         String expected2 = "8=FIX.2.3\00135=AEE\001";
 
-        buf = MessageUtil.updateTag(buf, Constants.MSG_TYPE_TAG, "AEE");
-        assertEquals(expected, new String(buf.array()));
+        MessageUtil.updateTag(buf, MSG_TYPE_TAG.toString(), "AEE");
+        assertEquals(expected, buf.toString(StandardCharsets.US_ASCII));
 
-        buf = MessageUtil.updateTag(buf, Constants.BEGIN_STRING_TAG, "FIX.2.3");
-        assertEquals(expected2, new String(buf.array()));
+        MessageUtil.updateTag(buf, BEGIN_STRING_TAG.toString(), "FIX.2.3");
+        assertEquals(expected2, buf.toString(StandardCharsets.US_ASCII));
+
+        MessageUtil.updateTag(buf, DEFAULT_APPL_VER_ID_TAG.toString(), "1");
+        assertEquals(expected2, buf.toString(StandardCharsets.US_ASCII));
     }
 
 }
@@ -278,6 +303,19 @@ class Client implements IChannel {
 
     Client() {
         this.fixHandlerSettings = new FixHandlerSettings();
+        fixHandlerSettings.setBeginString("FIXT.1.1");
+        fixHandlerSettings.setHeartBtInt(30);
+        fixHandlerSettings.setSenderCompID("client");
+        fixHandlerSettings.setTargetCompID("server");
+        fixHandlerSettings.setEncryptMethod("0");
+        fixHandlerSettings.setUsername("username");
+        fixHandlerSettings.setPassword("pass");
+        fixHandlerSettings.setTestRequestDelay(10);
+        fixHandlerSettings.setReconnectDelay(5);
+        fixHandlerSettings.setDisconnectRequestDelay(5);
+        fixHandlerSettings.setResetSeqNumFlag(false);
+        fixHandlerSettings.setResetOnLogon(false);
+        fixHandlerSettings.setDefaultApplVerID(9);
         IContext<IProtocolHandlerSettings> context = Mockito.mock(IContext.class);
         Mockito.when(context.getSettings()).thenReturn(fixHandlerSettings);
         Mockito.when(context.getChannel()).thenReturn(this);

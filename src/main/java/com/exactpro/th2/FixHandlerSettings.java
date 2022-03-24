@@ -6,19 +6,21 @@ import com.google.auto.service.AutoService;
 @AutoService(IProtocolHandlerSettings.class)
 public class FixHandlerSettings implements IProtocolHandlerSettings {
 
-    private String beginString = "FIXT.1.1";
-    private long heartBtInt = 30;
-    private String senderCompID = "client";
-    private String targetCompID = "server";
-    private String encryptMethod = "0";
-    private String username = "username";
-    private String password = "pass";
-    private long defaultApplVerID = 9;
+    private String beginString;
+    private long heartBtInt;
+    private String senderCompID;
+    private String targetCompID;
+    private String encryptMethod;
+    private String username;
+    private String password;
+    private Boolean resetSeqNumFlag;
+    private Boolean resetOnLogon;
 
-    private int testRequestDelay = 60;
-    private int reconnectDelay = 5;
-    private int disconnectRequestDelay = 5;
+    private long defaultApplVerID;
 
+    private int testRequestDelay;
+    private int reconnectDelay;
+    private int disconnectRequestDelay;
 
     public String getBeginString() {
         return beginString;
@@ -68,6 +70,10 @@ public class FixHandlerSettings implements IProtocolHandlerSettings {
         return password;
     }
 
+    public Boolean getResetSeqNumFlag() { return resetSeqNumFlag; }
+
+    public Boolean getResetOnLogon() { return resetOnLogon; }
+
     public int getTestRequestDelay() {
         return testRequestDelay;
     }
@@ -83,6 +89,10 @@ public class FixHandlerSettings implements IProtocolHandlerSettings {
     public void setPassword(String password) {
         this.password = password;
     }
+
+    public void setResetSeqNumFlag(Boolean resetSeqNumFlag) { this.resetSeqNumFlag = resetSeqNumFlag; }
+
+    public void setResetOnLogon(Boolean resetOnLogon) { this.resetOnLogon = resetOnLogon; }
 
     public void setTestRequestDelay(int testRequestDelay) {
         this.testRequestDelay = testRequestDelay;

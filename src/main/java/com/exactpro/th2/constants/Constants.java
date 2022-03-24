@@ -5,27 +5,27 @@ public class Constants {
     public static final String SOH = "\001";
 
     //Tags
-    public static final String BEGIN_STRING_TAG = "8";
-    public static final String BODY_LENGTH_TAG = "9";
-    public static final String MSG_TYPE_TAG = "35";
-    public static final String SENDER_COMP_ID_TAG = "49";
-    public static final String TARGET_COMP_ID_TAG = "56";
-    public static final String MSG_SEQ_NUM_TAG = "34";
-    public static final String SENDING_TIME_TAG = "52";
-    public static final String CHECKSUM_TAG = "10";
-    public static final String DEFAULT_APPL_VER_ID_TAG = "1137";
-    public static final String ENCRYPT_METHOD_TAG = "98";
-    public static final String HEART_BT_INT_TAG = "108";
-    public static final String USERNAME_TAG = "553";
-    public static final String PASSWORD_TAG = "554";
-    public static final String SESSION_STATUS_TAG = "1409";
-    public static final String TEST_REQ_ID_TAG = "112";
-    public static final String BEGIN_SEQ_NO_TAG = "7";
-    public static final String END_SEQ_NO_TAG = "16";
-    public static final String NEW_SEQ_NO_TAG = "36";
-    public static final String GAP_FILL_FLAG_TAG = "123";
-    public static final String TEXT_TAG = "58";
-    public static final String RESET_SEQ_NUM_TAG = "141";
+    public static final Integer BEGIN_STRING_TAG = 8;
+    public static final Integer BODY_LENGTH_TAG = 9;
+    public static final Integer MSG_TYPE_TAG = 35;
+    public static final Integer SENDER_COMP_ID_TAG = 49;
+    public static final Integer TARGET_COMP_ID_TAG = 56;
+    public static final Integer MSG_SEQ_NUM_TAG = 34;
+    public static final Integer SENDING_TIME_TAG = 52;
+    public static final Integer CHECKSUM_TAG = 10;
+    public static final Integer DEFAULT_APPL_VER_ID_TAG = 1137;
+    public static final Integer ENCRYPT_METHOD_TAG = 98;
+    public static final Integer HEART_BT_INT_TAG = 108;
+    public static final Integer USERNAME_TAG = 553;
+    public static final Integer PASSWORD_TAG = 554;
+    public static final Integer SESSION_STATUS_TAG = 1409;
+    public static final Integer TEST_REQ_ID_TAG = 112;
+    public static final Integer BEGIN_SEQ_NO_TAG = 7;
+    public static final Integer END_SEQ_NO_TAG = 16;
+    public static final Integer NEW_SEQ_NO_TAG = 36;
+    public static final Integer GAP_FILL_FLAG_TAG = 123;
+    public static final Integer TEXT_TAG = 58;
+    public static final Integer RESET_SEQ_NUM_TAG = 141;
 
     //Fields
     public static final String BEGIN_STRING = SOH + BEGIN_STRING_TAG + "=";
