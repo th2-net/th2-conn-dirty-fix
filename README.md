@@ -167,10 +167,19 @@ mangler:
                 matches: (.*)
           update-checksum: false
 ```
+
+Also:
+
+* to apply a rule to a message unconditionally pass rule's name in `rule-name` message metadata property
+* to apply a set of actions (like in `then` block) to a message pass them in `rule-actions` message metadata property in YAML/JSON format
+
 ## MQ pins
+
 + input queue with `subscribe`, `send` and `raw` attributes for outgoing messages
 + output queue with `publish`, `first` (for incoming messages) or `second` (for outgoing messages) and `raw` attributes
+
 ## Deployment via infra-mgr
+
 Here's an example of `infra-mgr` config required to deploy this service
 
 ```yaml
