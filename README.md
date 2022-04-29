@@ -6,8 +6,6 @@ This microservice allows sending and receiving messages via FIX protocol
 
 + *autoStart* - enables/disable auto-starting of session on box start (`true` by default)
 + *autoStopAfter* - time in seconds after which session will be automatically stopped (`0` by default = disabled)
-+ *totalThreads* - total amount of threads (IO threads included) used by the box (`2` by default)
-+ *ioThreads* - amount of IO threads used by the box (`1` by default)
 + *maxBatchSize* - max size of outgoing message batch (`100` by default)
 + *maxFlushTime* - max message batch flush time (`1000` by default)
 + *reconnectDelay* - delay between reconnects (`5000` by default)
@@ -198,8 +196,6 @@ spec:
   custom-config:
     autoStart: true
     autoStopAfter: 0
-    totalThreads: 2
-    ioThreads: 1
     maxBatchSize: 100
     maxFlushTime: 1000
     reconnectDelay: 5000

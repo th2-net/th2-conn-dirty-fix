@@ -21,13 +21,60 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
-import java.util.concurrent.*;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import static com.exactpro.th2.conn.dirty.fix.FixByteBufUtilKt.*;
+import static com.exactpro.th2.conn.dirty.fix.FixByteBufUtilKt.addFieldAfter;
+import static com.exactpro.th2.conn.dirty.fix.FixByteBufUtilKt.addFieldBefore;
+import static com.exactpro.th2.conn.dirty.fix.FixByteBufUtilKt.findField;
+import static com.exactpro.th2.conn.dirty.fix.FixByteBufUtilKt.moveFieldValue;
+import static com.exactpro.th2.conn.dirty.fix.FixByteBufUtilKt.replaceAndMoveFieldValue;
+import static com.exactpro.th2.conn.dirty.fix.FixByteBufUtilKt.replaceFieldValue;
+import static com.exactpro.th2.conn.dirty.fix.FixByteBufUtilKt.updateChecksum;
 import static com.exactpro.th2.conn.dirty.tcp.core.util.ByteBufUtil.indexOf;
-import static com.exactpro.th2.constants.Constants.*;
+import static com.exactpro.th2.constants.Constants.BEGIN_SEQ_NO;
+import static com.exactpro.th2.constants.Constants.BEGIN_SEQ_NO_TAG;
+import static com.exactpro.th2.constants.Constants.BEGIN_STRING_TAG;
+import static com.exactpro.th2.constants.Constants.BODY_LENGTH;
+import static com.exactpro.th2.constants.Constants.BODY_LENGTH_TAG;
+import static com.exactpro.th2.constants.Constants.CHECKSUM;
+import static com.exactpro.th2.constants.Constants.CHECKSUM_TAG;
+import static com.exactpro.th2.constants.Constants.DEFAULT_APPL_VER_ID;
+import static com.exactpro.th2.constants.Constants.ENCRYPT_METHOD;
+import static com.exactpro.th2.constants.Constants.END_SEQ_NO;
+import static com.exactpro.th2.constants.Constants.END_SEQ_NO_TAG;
+import static com.exactpro.th2.constants.Constants.GAP_FILL_FLAG_TAG;
+import static com.exactpro.th2.constants.Constants.HEART_BT_INT;
+import static com.exactpro.th2.constants.Constants.MSG_SEQ_NUM;
+import static com.exactpro.th2.constants.Constants.MSG_SEQ_NUM_TAG;
+import static com.exactpro.th2.constants.Constants.MSG_TYPE;
+import static com.exactpro.th2.constants.Constants.MSG_TYPE_HEARTBEAT;
+import static com.exactpro.th2.constants.Constants.MSG_TYPE_LOGON;
+import static com.exactpro.th2.constants.Constants.MSG_TYPE_LOGOUT;
+import static com.exactpro.th2.constants.Constants.MSG_TYPE_RESEND_REQUEST;
+import static com.exactpro.th2.constants.Constants.MSG_TYPE_SEQUENCE_RESET;
+import static com.exactpro.th2.constants.Constants.MSG_TYPE_TAG;
+import static com.exactpro.th2.constants.Constants.MSG_TYPE_TEST_REQUEST;
+import static com.exactpro.th2.constants.Constants.NEW_SEQ_NO;
+import static com.exactpro.th2.constants.Constants.NEW_SEQ_NO_TAG;
+import static com.exactpro.th2.constants.Constants.PASSWORD;
+import static com.exactpro.th2.constants.Constants.RESET_SEQ_NUM;
+import static com.exactpro.th2.constants.Constants.SENDER_COMP_ID;
+import static com.exactpro.th2.constants.Constants.SENDER_COMP_ID_TAG;
+import static com.exactpro.th2.constants.Constants.SENDING_TIME;
+import static com.exactpro.th2.constants.Constants.SENDING_TIME_TAG;
+import static com.exactpro.th2.constants.Constants.SESSION_STATUS_TAG;
+import static com.exactpro.th2.constants.Constants.TARGET_COMP_ID;
+import static com.exactpro.th2.constants.Constants.TARGET_COMP_ID_TAG;
+import static com.exactpro.th2.constants.Constants.TEST_REQ_ID;
+import static com.exactpro.th2.constants.Constants.TEST_REQ_ID_TAG;
+import static com.exactpro.th2.constants.Constants.TEXT_TAG;
+import static com.exactpro.th2.constants.Constants.USERNAME;
 import static com.exactpro.th2.util.MessageUtil.findByte;
 
 //todo parse logout
@@ -48,7 +95,6 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
     private final AtomicInteger msgSeqNum = new AtomicInteger(0);
     private final AtomicInteger serverMsgSeqNum = new AtomicInteger(0);
     private final AtomicInteger testReqID = new AtomicInteger(0);
-    private final AtomicInteger resendRequestSeqNum = new AtomicInteger(0);
     private final AtomicBoolean enabled = new AtomicBoolean(false);
     private final AtomicBoolean connStarted = new AtomicBoolean(false);
     private final ScheduledExecutorService executorService;
@@ -59,6 +105,7 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
     private Future<?> disconnectRequest = CompletableFuture.completedFuture(null);
     private IChannel client;
     protected FixHandlerSettings settings;
+    private long lastSendTime = System.currentTimeMillis();
 
     public FixHandler(IContext<IProtocolHandlerSettings> context) {
         this.context = context;
@@ -219,6 +266,7 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
     }
 
     public void sendResendRequest(int beginSeqNo, int endSeqNo) { //do private
+        lastSendTime = System.currentTimeMillis();
         StringBuilder resendRequest = new StringBuilder();
         setHeader(resendRequest, MSG_TYPE_RESEND_REQUEST, msgSeqNum.incrementAndGet());
         resendRequest.append(BEGIN_SEQ_NO).append(beginSeqNo).append(SOH);
@@ -229,7 +277,7 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
 
 
     void sendResendRequest(int beginSeqNo) { //do private
-
+        lastSendTime = System.currentTimeMillis();
         StringBuilder resendRequest = new StringBuilder();
         setHeader(resendRequest, MSG_TYPE_RESEND_REQUEST, msgSeqNum.incrementAndGet());
         resendRequest.append(BEGIN_SEQ_NO).append(beginSeqNo);
@@ -264,15 +312,15 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
                 for (int i = beginSeqNo; i <= endSeqNo; i++) {
                     ByteBuf storedMsg = outgoingMessages.get(i);
                     if (storedMsg == null) {
-                        // TODO: the HB tasks works in parallel. We need to make it stop or add a condition not to send HB when resend request received
-                        resendRequestSeqNum.getAndSet(i);
-                        sendHeartbeat();
+                        StringBuilder heartbeat = new StringBuilder();
+                        setHeader(heartbeat, MSG_TYPE_HEARTBEAT, i);
+                        setChecksumAndBodyLength(heartbeat);
+                        client.send(Unpooled.wrappedBuffer(heartbeat.toString().getBytes(StandardCharsets.UTF_8)), Collections.emptyMap(), IChannel.SendMode.MANGLE);
                     } else {
                         LOGGER.info("Returning message - " + storedMsg.toString(StandardCharsets.US_ASCII));
                         client.send(storedMsg, Collections.emptyMap(), IChannel.SendMode.MANGLE);
                     }
                 }
-                resendRequestSeqNum.getAndSet(0);
             } catch (Exception e) {
                 sendSequenceReset();
             }
@@ -280,6 +328,7 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
     }
 
     private void sendSequenceReset() {
+        lastSendTime = System.currentTimeMillis();
         StringBuilder sequenceReset = new StringBuilder();
         setHeader(sequenceReset, MSG_TYPE_SEQUENCE_RESET, msgSeqNum.incrementAndGet());
         sequenceReset.append(NEW_SEQ_NO).append(msgSeqNum.get() + 1);
@@ -320,14 +369,15 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
     @NotNull
     @Override
     public void onOutgoing(@NotNull ByteBuf message, @NotNull Map<String, String> metadata) {
+        lastSendTime = System.currentTimeMillis();
         String sendMode = metadata.get("send-mode");
 
         if (sendMode == null || Objects.equals(sendMode, "")) {
             onOutgoingUpdateTag(message, metadata);
-        }
-        else if (Objects.equals(sendMode, "semi-manual")){
+        } else if (Objects.equals(sendMode, "semi-manual")) {
             onOutgoingNotUpdateTag(message, metadata);
         }
+
         LOGGER.info("Outgoing message - " + message.toString(StandardCharsets.US_ASCII));
     }
 
@@ -487,13 +537,18 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
     }
 
     public void sendHeartbeat() {
+        long secondsSinceLastSend = (System.currentTimeMillis() - lastSendTime) / 1000;
+
+        if (secondsSinceLastSend < settings.getHeartBtInt()) {
+            return;
+        }
+
         StringBuilder heartbeat = new StringBuilder();
-        int seqNum = resendRequestSeqNum.get();
-        if (seqNum==0) seqNum = msgSeqNum.incrementAndGet();
+        int seqNum = msgSeqNum.incrementAndGet();
 
         setHeader(heartbeat, MSG_TYPE_HEARTBEAT, seqNum);
-
         setChecksumAndBodyLength(heartbeat);
+
         if (enabled.get()) {
             LOGGER.info("Send Heartbeat to server - " + heartbeat);
             client.send(Unpooled.wrappedBuffer(heartbeat.toString().getBytes(StandardCharsets.UTF_8)), Collections.emptyMap(), IChannel.SendMode.MANGLE);
@@ -503,6 +558,7 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
     }
 
     public void sendTestRequest() { //do private
+        lastSendTime = System.currentTimeMillis();
         StringBuilder testRequest = new StringBuilder();
         setHeader(testRequest, MSG_TYPE_TEST_REQUEST, msgSeqNum.get());
         testRequest.append(TEST_REQ_ID).append(testReqID.incrementAndGet());
@@ -517,6 +573,7 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
     }
 
     public void sendLogon() {
+        lastSendTime = System.currentTimeMillis();
         StringBuilder logon = new StringBuilder();
         Boolean reset;
         if (!connStarted.get()) reset = settings.getResetSeqNumFlag();
