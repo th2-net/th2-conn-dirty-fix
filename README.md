@@ -168,10 +168,14 @@ mangler:
           update-checksum: false
 ```
 
-Also:
-
-* to apply a rule to a message unconditionally pass rule's name in `rule-name` message metadata property
-* to apply a set of actions (like in `then` block) to a message pass them in `rule-actions` message metadata property in YAML/JSON format
+### Ways to use mangler:
+1) Rule described in CR: rule will be applied if message is passed `when` condition 
+2) Rule is described in CR and message contain property `rule-name`: rule with name from `rule-name` property value will be applied to message despite of `when` block.
+<br />example - rule with name `5` that described in CR will be applied:
+<br />```... .setMetadata(MessageMetadata.newBuilder(builder.getMetadata()).putProperties("rule-name", "5").build()) ...```
+3) Rule is described in message `rule-actions` property: rule will be applied to message as described in property `rule-actions`
+<br />example - value of tag 44 will be changed to `åÅæÆøØ`
+<br />```... .setMetadata(MessageMetadata.newBuilder(builder.getMetadata()).putProperties("rule-actions", "[{\"set\":{\"tag\": 44,\"value\": \"åÅæÆøØ\"}}]").build()) ...```
 
 ## MQ pins
 
