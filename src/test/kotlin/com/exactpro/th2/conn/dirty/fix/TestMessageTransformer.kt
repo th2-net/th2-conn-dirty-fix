@@ -37,7 +37,7 @@ class TestMessageTransformer {
         val buffer = MESSAGE.toBuffer()
         val transform = add(123 eq "abc") before (34 matches "177") onlyIf (35 matches "A")
         val description = MessageTransformer.transform(buffer, listOf(Rule("0", transform)))!!.actions.joinToString(System.lineSeparator()) { it.action.toString() }
-        assertEquals(description, "add tag 123 = 'abc' before tag 34 ~= /177/")
+        assertEquals("add tag 123 = 'abc' before tag 34 ~= /177/", description)
         assertEquals("8=FIX.4.2|9=73|35=A|49=SERVER|56=CLIENT|123=abc|34=177|52=20090107-18:15:16|98=0|108=30|10=055|", buffer.asString())
     }
 
@@ -45,8 +45,24 @@ class TestMessageTransformer {
         val buffer = MESSAGE.toBuffer()
         val transform = add(124 eq "cde") after (34 matches "177") onlyIf (35 matches "A")
         val description = MessageTransformer.transform(buffer, listOf(Rule("0", transform)))!!.actions.joinToString(System.lineSeparator()) { it.action.toString() }
-        assertEquals(description, "add tag 124 = 'cde' after tag 34 ~= /177/")
+        assertEquals("add tag 124 = 'cde' after tag 34 ~= /177/", description)
         assertEquals("8=FIX.4.2|9=73|35=A|49=SERVER|56=CLIENT|34=177|124=cde|52=20090107-18:15:16|98=0|108=30|10=062|", buffer.asString())
+    }
+
+    @Test fun `move field before`() {
+        val buffer = MESSAGE.toBuffer()
+        val transform = move(56 matching ".*") before (49 matches ".*") onlyIf (35 matches "A")
+        val description = MessageTransformer.transform(buffer, listOf(Rule("0", transform)))!!.actions.joinToString(System.lineSeparator()) { it.action.toString() }
+        assertEquals("move tag 56 ~= /.*/ before tag 49 ~= /.*/", description)
+        assertEquals("8=FIX.4.2|9=65|35=A|56=CLIENT|49=SERVER|34=177|52=20090107-18:15:16|98=0|108=30|10=062|", buffer.asString())
+    }
+
+    @Test fun `move field after`() {
+        val buffer = MESSAGE.toBuffer()
+        val transform = move(49 matching ".*") after (56 matches ".*") onlyIf (35 matches "A")
+        val description = MessageTransformer.transform(buffer, listOf(Rule("0", transform)))!!.actions.joinToString(System.lineSeparator()) { it.action.toString() }
+        assertEquals("move tag 49 ~= /.*/ after tag 56 ~= /.*/", description)
+        assertEquals("8=FIX.4.2|9=65|35=A|56=CLIENT|49=SERVER|34=177|52=20090107-18:15:16|98=0|108=30|10=062|", buffer.asString())
     }
 
     @Test fun `add field after random one of`() {
@@ -56,15 +72,15 @@ class TestMessageTransformer {
         assertEquals(description, "add tag 124 = one of [cde, cbe] after tag 34 ~= /177/")
         val resultString = buffer.asString()
         assertTrue("8=FIX.4.2|9=73|35=A|49=SERVER|56=CLIENT|34=177|124=cde|52=20090107-18:15:16|98=0|108=30|10=062|" == resultString ||
-                    "8=FIX.4.2|9=73|35=A|49=SERVER|56=CLIENT|34=177|124=cbe|52=20090107-18:15:16|98=0|108=30|10=060|" == resultString
-        ) {"message $resultString wasn't filled right"}
+                "8=FIX.4.2|9=73|35=A|49=SERVER|56=CLIENT|34=177|124=cbe|52=20090107-18:15:16|98=0|108=30|10=060|" == resultString
+        ) { "message $resultString wasn't filled right" }
     }
 
     @Test fun `replace field`() {
         val buffer = MESSAGE.toBuffer()
         val transform = replace(98 matching "0") with (100 eq "1") onlyIf (35 matches "A")
         val description = MessageTransformer.transform(buffer, listOf(Rule("0", transform)))!!.actions.joinToString(System.lineSeparator()) { it.action.toString() }
-        assertEquals(description, "replace tag 98 ~= /0/ with tag 100 = '1'")
+        assertEquals("replace tag 98 ~= /0/ with tag 100 = '1'", description)
         assertEquals("8=FIX.4.2|9=66|35=A|49=SERVER|56=CLIENT|34=177|52=20090107-18:15:16|100=1|108=30|10=096|", buffer.asString())
     }
 
@@ -72,7 +88,7 @@ class TestMessageTransformer {
         val buffer = MESSAGE.toBuffer()
         val transform = remove(52 matching ".*") onlyIf (35 matches "A")
         val description = MessageTransformer.transform(buffer, listOf(Rule("0", transform)))!!.actions.joinToString(System.lineSeparator()) { it.action.toString() }
-        assertEquals(description, "remove tag 52 ~= /.*/")
+        assertEquals("remove tag 52 ~= /.*/", description)
         assertEquals("8=FIX.4.2|9=44|35=A|49=SERVER|56=CLIENT|34=177|98=0|108=30|10=044|", buffer.asString())
     }
 
@@ -91,16 +107,19 @@ class TestMessageTransformer {
         private fun select(tag: Int, pattern: String) = FieldSelector(tag, null, pattern.toPattern())
         private infix fun Int.eq(value: String) = field(this, value)
         private infix fun Int.to(value: String) = field(this, value)
-        private infix fun Int.oneOf(value: List<String>) =  FieldDefinition(this, null, null, value)
-        private infix fun List<Int>.oneOf(value: List<String>) =  FieldDefinition(null, null, this, value)
+        private infix fun Int.oneOf(value: List<String>) = FieldDefinition(this, null, null, value)
+        private infix fun List<Int>.oneOf(value: List<String>) = FieldDefinition(null, null, this, value)
         private infix fun Int.matches(pattern: String) = select(this, pattern)
         private infix fun Int.matching(pattern: String) = select(this, pattern)
         private fun set(field: FieldDefinition) = Action(set = field)
         private fun add(field: FieldDefinition) = field
+        private fun move(field: FieldSelector) = field
         private fun replace(field: FieldSelector) = field
-        private fun remove(fieldSelector: FieldSelector) = Action(remove = fieldSelector)
+        private fun remove(field: FieldSelector) = Action(remove = field)
         private infix fun FieldDefinition.before(field: FieldSelector) = Action(add = this, before = field)
+        private infix fun FieldSelector.before(field: FieldSelector) = Action(move = this, before = field)
         private infix fun FieldDefinition.after(field: FieldSelector) = Action(add = this, after = field)
+        private infix fun FieldSelector.after(field: FieldSelector) = Action(move = this, after = field)
         private infix fun FieldSelector.with(field: FieldDefinition) = Action(replace = this, with = field)
         private infix fun Action.onlyIf(condition: FieldSelector) = listOf(Transform(listOf(condition), listOf(this)))
     }

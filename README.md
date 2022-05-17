@@ -17,8 +17,16 @@ This microservice allows sending and receiving messages via FIX protocol
 + *sessionAlias* - session alias for incoming/outgoing th2 messages
 + *host* - service host
 + *port* - service port
++ *security* - connection security settings
 + *handler* - handler settings
 + *mangler* - mangler settings
+
+### Security settings
+
++ *ssl* - enables SSL on connection (`false` by default)
++ *sni* - enables SNI support (`false` by default)
++ *certFile* - path to server certificate (`null` by default)
++ *acceptAllCerts* - accept all server certificates (`false` by default, takes precedence over `certFile`)
 
 ## Handler settings
 
@@ -77,6 +85,17 @@ Actions describe modifications which will be applied to a message. There are 4 t
     value: USD
   after: # or before
     tag: 58
+    matches: (.*)
+  ```
+
+* move - moves an existing field before or after another field:
+
+  ```yaml
+  move:
+    tag: 49
+    matches: (.*)
+  after: # or before
+    tag: 56
     matches: (.*)
   ```
 
@@ -202,7 +221,11 @@ spec:
     publishSentEvents: true
     sessions:
       - sessionAlias: client
-        secure: false
+        security:
+          ssl: false
+          sni: false
+          certFile: "<file-path>"
+          acceptAllCerts: false
         host: "<host>"
         port: "<port>"
         handler:
