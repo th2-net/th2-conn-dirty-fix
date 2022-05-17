@@ -100,6 +100,23 @@ object MessageTransformer {
                 }
             }
 
+            action.move?.find(message)?.let { field ->
+                val tag = checkNotNull(field.tag) { "Field tag for move was empty" }
+                val value = field.value
+
+                action.before?.find(message)?.let { next ->
+                    field.clear()
+                    next.insertPrevious(tag, value)
+                    yield(ActionResult(tag, value, action))
+                }
+
+                action.after?.find(message)?.let { previous ->
+                    previous.insertNext(tag, value)
+                    field.clear()
+                    yield(ActionResult(tag, value, action))
+                }
+            }
+
             action.remove?.find(message)?.let { field ->
                 val tag = checkNotNull(field.tag) { "Field tag for remove was empty" }
                 field.clear()
@@ -172,6 +189,7 @@ data class FieldDefinition(
 data class Action(
     val set: FieldDefinition? = null,
     val add: FieldDefinition? = null,
+    val move: FieldSelector? = null,
     val replace: FieldSelector? = null,
     val remove: FieldSelector? = null,
     val with: FieldDefinition? = null,
@@ -179,7 +197,7 @@ data class Action(
     val after: FieldSelector? = null,
 ) {
     init {
-        val operations = listOfNotNull(set, add, remove, replace)
+        val operations = listOfNotNull(set, add, move, remove, replace)
 
         require(operations.isNotEmpty()) { "Action must have at least one operation" }
         require(operations.size == 1) { "Action has more than one operation" }
@@ -188,8 +206,8 @@ data class Action(
             "'set'/'remove' operations cannot have 'with', 'before', 'after' options"
         }
 
-        require(add == null || with == null) {
-            "'add' operations cannot have 'with' option"
+        require(add == null && move == null || with == null) {
+            "'add'/'move' operations cannot have 'with' option"
         }
 
         require(replace == null || with != null) {
@@ -200,14 +218,15 @@ data class Action(
             "'before' and 'after' options are mutually exclusive"
         }
 
-        require(add == null || before != null || after != null) {
-            "'add' option requires 'before' or 'after' option"
+        require(add == null && move == null || before != null || after != null) {
+            "'add'/'move' option requires 'before' or 'after' option"
         }
     }
 
     override fun toString() = buildString {
         set?.apply { append("set $this") }
         add?.apply { append("add $this") }
+        move?.apply { append("move $this") }
         replace?.apply { append("replace $this") }
         remove?.apply { append("remove $this") }
         with?.apply { append(" with $this") }

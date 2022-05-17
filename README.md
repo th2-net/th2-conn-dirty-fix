@@ -80,6 +80,17 @@ Actions describe modifications which will be applied to a message. There are 4 t
     matches: (.*)
   ```
 
+* move - moves an existing field before or after another field:
+
+  ```yaml
+  move:
+    tag: 49
+    matches: (.*)
+  after: # or before
+    tag: 56
+    matches: (.*)
+  ```
+
 * replace - replaces an existing field with another field:
 
   ```yaml
