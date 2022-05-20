@@ -4,6 +4,7 @@ import com.exactpro.th2.common.grpc.MessageID;
 import com.exactpro.th2.conn.dirty.tcp.core.api.IChannel;
 import com.exactpro.th2.conn.dirty.tcp.core.api.IContext;
 import com.exactpro.th2.conn.dirty.tcp.core.api.IProtocolHandlerSettings;
+import com.exactpro.th2.conn.dirty.tcp.core.api.impl.Channel.Security;
 import com.exactpro.th2.util.MessageUtil;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
@@ -336,7 +337,7 @@ class Client implements IChannel {
     }
 
     @Override
-    public void open(InetSocketAddress address, boolean secure) {
+    public void open(InetSocketAddress address, Security security) {
 
     }
 
@@ -380,8 +381,8 @@ class Client implements IChannel {
     }
 
     @Override
-    public boolean isSecure() {
-        return false;
+    public Security getSecurity() {
+        return new Security();
     }
 }
 
