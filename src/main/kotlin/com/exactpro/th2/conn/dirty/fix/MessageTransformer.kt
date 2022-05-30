@@ -32,129 +32,116 @@ object MessageTransformer {
     fun transform(message: ByteBuf, rules: List<Rule>): TransformResult? {
         logger.debug { "Processing message: ${message.toString(UTF_8)}" }
 
-        val executed = mutableListOf<ActionResult>()
-
-        val targetRule = rules.filter { rule ->
+        val rule = rules.filter { rule ->
             rule.transform.any { transform ->
                 transform.conditions.any { it.matches(message) }
             }
         }.randomOrNull()
 
-        if (targetRule == null) {
-            logger.debug { "No transformation were applied" }
+        if (rule == null) {
+            logger.debug { "No matching rule was found" }
             return null
         }
 
-        for ((conditions, actions) in targetRule.transform) {
-            if (!conditions.all { it.matches(message) }) {
-                continue
+        return transform(message, rule)
+    }
+
+    fun transform(message: ByteBuf, rule: Rule, unconditionally: Boolean = false): TransformResult {
+        logger.debug { "Applying rule: ${rule.name}" }
+
+        val executed = sequence {
+            for ((conditions, actions) in rule.transform) {
+                if (unconditionally || conditions.all { it.matches(message) }) {
+                    yieldAll(transform(message, actions))
+                }
+            }
+        }.toList()
+
+        executed.forEach { logger.trace { "Applied transformation: $it" } }
+
+        if (executed.isNotEmpty()) {
+            if (rule.transform.any(Transform::updateLength)) {
+                message.updateLength()
+                logger.debug { "Recalculated length" }
             }
 
-            actions.forEach { action ->
-                action.set?.apply {
-                    val tag = getSingleTag()
-                    val value = getSingleValue()
-                    if (message.setField(tag, value)) {
-                        executed += ActionResult(tag, value, action)
-                    }
-                }
-
-                action.add?.also { field ->
-                    val tag = field.getSingleTag()
-                    val value = field.getSingleValue()
-                    action.before?.find(message)?.let { next ->
-                        next.insertPrevious(tag, value)
-                        executed += ActionResult(tag, value, action)
-                    }
-
-                    action.after?.find(message)?.let { previous ->
-                        previous.insertNext(tag, value)
-                        executed += ActionResult(tag, value, action)
-                    }
-                }
-
-                action.remove?.find(message)?.let { field ->
-                    val tag = checkNotNull(field.tag) { "Field tag for remove was empty" }
-                    field.clear()
-                    executed += ActionResult(tag, null, action)
-                }
-
-                action.replace?.find(message)?.let { field ->
-                    val with = action.with!!
-                    val tag = with.getSingleTag()
-                    val value = with.getSingleValue()
-                    field.tag = tag
-                    field.value = value
-                    executed += ActionResult(tag, value, action)
-                }
+            if (rule.transform.any(Transform::updateChecksum)) {
+                message.updateChecksum()
+                logger.debug { "Recalculated checksum" }
             }
         }
 
-        executed.forEach { logger.debug { "Applied transformation: $it" } }
+        return TransformResult(rule.name, executed)
+    }
 
-        if (targetRule.transform.any(Transform::updateLength)) {
-            message.updateLength()
-            logger.debug { "Recalculated length" }
+    fun transform(message: ByteBuf, actions: List<Action>): Sequence<ActionResult> = sequence {
+        actions.forEach { action ->
+            action.set?.apply {
+                val tag = singleTag
+                val value = singleValue
+
+                if (message.setField(tag, value)) {
+                    yield(ActionResult(tag, value, action))
+                }
+            }
+
+            action.add?.also { field ->
+                val tag = field.singleTag
+                val value = field.singleValue
+
+                action.before?.find(message)?.let { next ->
+                    next.insertPrevious(tag, value)
+                    yield(ActionResult(tag, value, action))
+                }
+
+                action.after?.find(message)?.let { previous ->
+                    previous.insertNext(tag, value)
+                    yield(ActionResult(tag, value, action))
+                }
+            }
+
+            action.remove?.find(message)?.let { field ->
+                val tag = checkNotNull(field.tag) { "Field tag for remove was empty" }
+                field.clear()
+                yield(ActionResult(tag, null, action))
+            }
+
+            action.replace?.find(message)?.let { field ->
+                val with = action.with!!
+                val tag = with.singleTag
+                val value = with.singleValue
+
+                field.tag = tag
+                field.value = value
+
+                yield(ActionResult(tag, value, action))
+            }
         }
-
-        if (targetRule.transform.any(Transform::updateChecksum)) {
-            message.updateChecksum()
-            logger.debug { "Recalculated checksum" }
-        }
-
-        return TransformResult(targetRule.name, executed)
     }
 }
 
-fun FieldDefinition.getSingleTag(): Tag {
-    if (tag != null) {
-        return tag
-    }
-    return checkNotNull(tagOneOf) { "At last one tag need to be defined" }.random()
-}
-
-fun FieldDefinition.getSingleValue(): String {
-    if (value != null) {
-        return value
-    }
-    return checkNotNull(valueOneOf) { "At last one value need to be defined" }.random()
-}
 
 data class FieldSelector(
     val tag: Tag?,
     val tagOneOf: List<Tag>?,
     val matches: Pattern,
 ) {
-
     init {
-        require(tag != null || tagOneOf != null && tagOneOf.isNotEmpty()) { "Tag must be defined" }
+        require((tag != null) xor !tagOneOf.isNullOrEmpty()) { "Either 'tag' or 'tagOneOf' must be specified" }
     }
 
     @JsonIgnore private val predicate = matches.asMatchPredicate()
 
     fun matches(message: ByteBuf): Boolean = find(message) != null
 
-    fun find(message: ByteBuf): FixField? {
-         when {
-             tag != null -> return message.findField {
-                 it.tag == this.tag && it.value?.run(this.predicate::test) ?: false
-             }
-             tagOneOf != null -> {
-                 val foundFields = message.findAll {
-                     tagOneOf.contains(it.tag) && it.value?.run(this.predicate::test) ?: false
-                 }
-                 if (foundFields.isEmpty()) {
-                     return null
-                 }
-                 return foundFields.random()
-             }
-        }
-        return null
+    fun find(message: ByteBuf): FixField? = when {
+        tag != null -> message.findField { it.tag == tag && it.value?.run(predicate::test) ?: false }
+        else -> message.findFields { it.tag in tagOneOf!! && it.value?.run(predicate::test) ?: false }.randomOrNull()
     }
 
     override fun toString() = buildString {
         tag?.apply { append("tag $tag") }
-        tagOneOf?.apply { append("one of tags $tag") }
+        tagOneOf?.apply { append("one of tags $tagOneOf") }
         append(" ~= /$matches/")
     }
 }
@@ -165,11 +152,13 @@ data class FieldDefinition(
     val tagOneOf: List<Tag>?,
     val valueOneOf: List<String>?
 ) {
-
     init {
-        require(tag != null || tagOneOf != null && tagOneOf.isNotEmpty()) { "Tag must be defined" }
-        require(value != null || valueOneOf != null && valueOneOf.isNotEmpty()) { "Transformation must have at least one action" }
+        require((tag != null) xor !tagOneOf.isNullOrEmpty()) { "Either 'tag' or 'tagOneOf' must be specified" }
+        require((value != null) xor !valueOneOf.isNullOrEmpty()) { "Either 'value' or 'valueOneOf' must be specified" }
     }
+
+    @JsonIgnore val singleTag: Tag = tag ?: tagOneOf!!.random()
+    @JsonIgnore val singleValue: String = value ?: valueOneOf!!.random()
 
     override fun toString() = buildString {
         tag?.apply { append("tag $tag") }
