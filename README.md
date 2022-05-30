@@ -169,8 +169,8 @@ mangler:
 ```
 
 ### Ways to use mangler:
-1) Rule described in CR: rule will be applied if message is passed `when` condition 
-2) Rule is described in CR and message contain property `rule-name`: rule with name from `rule-name` property value will be applied to message despite of `when` block.
+1) Rule described in CR: rule will be applied if message passes `when` condition 
+2) Rule is described in CR and message contains property `rule-name`: rule with name from `rule-name` property value will be applied to message despite of `when` block.
 <br />example - rule with name `5` that described in CR will be applied:
 <br />```... .setMetadata(MessageMetadata.newBuilder(builder.getMetadata()).putProperties("rule-name", "5").build()) ...```
 3) Rule is described in message `rule-actions` property: rule will be applied to message as described in property `rule-actions`
