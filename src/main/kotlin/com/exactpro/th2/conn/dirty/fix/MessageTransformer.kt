@@ -21,7 +21,6 @@ import com.fasterxml.jackson.annotation.JsonIgnore
 import io.netty.buffer.ByteBuf
 import mu.KotlinLogging
 import java.util.regex.Pattern
-import kotlin.text.Charsets.UTF_8
 
 typealias RuleID = String
 typealias Tag = Int
@@ -29,52 +28,40 @@ typealias Tag = Int
 object MessageTransformer {
     private val logger = KotlinLogging.logger {}
 
-    fun transform(message: ByteBuf, rules: List<Rule>): TransformResult? {
-        logger.debug { "Processing message: ${message.toString(UTF_8)}" }
+    fun transform(message: ByteBuf, rule: Rule, unconditionally: Boolean = false): TransformResult? {
+        logger.debug { "Applying rule: ${rule.name}" }
 
-        val rule = rules.filter { rule ->
-            rule.transform.any { transform ->
-                transform.conditions.any { it.matches(message) }
+        val original = message.copy()
+
+        val results = mutableListOf<ActionResult>().apply {
+            for ((conditions, actions) in rule.transform) {
+                if (unconditionally || conditions.all { it.matches(message) }) {
+                    this += transform(message, actions)
+                }
             }
-        }.randomOrNull()
+        }
 
-        if (rule == null) {
-            logger.debug { "No matching rule was found" }
+        if (results.isEmpty()) {
+            logger.debug("No transformations were applied")
             return null
         }
 
-        return transform(message, rule)
-    }
+        results.forEach { logger.trace { "Applied transformation: $it" } }
 
-    fun transform(message: ByteBuf, rule: Rule, unconditionally: Boolean = false): TransformResult {
-        logger.debug { "Applying rule: ${rule.name}" }
-
-        val executed = sequence {
-            for ((conditions, actions) in rule.transform) {
-                if (unconditionally || conditions.all { it.matches(message) }) {
-                    yieldAll(transform(message, actions))
-                }
-            }
-        }.toList()
-
-        executed.forEach { logger.trace { "Applied transformation: $it" } }
-
-        if (executed.isNotEmpty()) {
-            if (rule.transform.any(Transform::updateLength)) {
-                message.updateLength()
-                logger.debug { "Recalculated length" }
-            }
-
-            if (rule.transform.any(Transform::updateChecksum)) {
-                message.updateChecksum()
-                logger.debug { "Recalculated checksum" }
-            }
+        if (rule.transform.any(Transform::updateLength)) {
+            message.updateLength()
+            logger.trace { "Recalculated length" }
         }
 
-        return TransformResult(rule.name, executed)
+        if (rule.transform.any(Transform::updateChecksum)) {
+            message.updateChecksum()
+            logger.trace { "Recalculated checksum" }
+        }
+
+        return TransformResult(rule.name, results, original)
     }
 
-    fun transform(message: ByteBuf, actions: List<Action>): Sequence<ActionResult> = sequence {
+    private fun transform(message: ByteBuf, actions: List<Action>) = sequence {
         actions.forEach { action ->
             action.set?.apply {
                 val tag = singleTag
@@ -136,7 +123,6 @@ object MessageTransformer {
         }
     }
 }
-
 
 data class FieldSelector(
     val tag: Tag?,
@@ -270,5 +256,5 @@ data class Rule(
     }
 }
 
-data class TransformResult(val rule: RuleID, val actions: List<ActionResult>)
+data class TransformResult(val rule: RuleID, val results: List<ActionResult>, val message: ByteBuf)
 data class ActionResult(val tag: Tag, val value: String?, val action: Action)

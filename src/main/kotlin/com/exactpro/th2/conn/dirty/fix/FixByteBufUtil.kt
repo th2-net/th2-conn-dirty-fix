@@ -17,6 +17,8 @@
 package com.exactpro.th2.conn.dirty.fix
 
 import com.exactpro.th2.conn.dirty.tcp.core.util.EMPTY_STRING
+import com.exactpro.th2.conn.dirty.tcp.core.util.endsWith
+import com.exactpro.th2.conn.dirty.tcp.core.util.get
 import com.exactpro.th2.conn.dirty.tcp.core.util.indexOf
 import com.exactpro.th2.conn.dirty.tcp.core.util.insert
 import com.exactpro.th2.conn.dirty.tcp.core.util.lastIndexOf
@@ -31,6 +33,9 @@ const val SOH_CHAR = '\u0001'
 const val SOH_BYTE = SOH_CHAR.code.toByte()
 const val SEP_CHAR = '='
 const val SEP_BYTE = '='.code.toByte()
+
+private val LENGTH_START_BYTES = "${SOH_CHAR}9${SEP_CHAR}".toByteArray()
+private val CHECKSUM_START_BYTES = "${SOH_CHAR}10${SEP_CHAR}".toByteArray()
 
 @JvmOverloads
 fun ByteBuf.firstField(charset: Charset = UTF_8): FixField? = FixField.atOffset(this, readerIndex(), charset)
@@ -126,7 +131,6 @@ fun ByteBuf.addFieldAfter(
     field: FixField = lastField() ?: error("message is empty"),
 ): FixField = field.insertNext(tag, value)
 
-@JvmOverloads
 fun ByteBuf.addFieldAfter(
     tag: Int?,
     value: String?,
@@ -150,7 +154,6 @@ fun ByteBuf.replaceFieldValue(
     return modifyField({ it.tag == tag && it.value == oldValue }, charset) { it.value = newValue }
 }
 
-@JvmOverloads
 fun ByteBuf.replaceAndMoveFieldValue(
     field: FixField,
     newValue: String?,
@@ -161,7 +164,6 @@ fun ByteBuf.replaceAndMoveFieldValue(
     findField(beforeTag)?.insertNext(tag, newValue)?: error("in message no tag: $beforeTag")
 }
 
-@JvmOverloads
 fun ByteBuf.moveFieldValue(
     field: FixField,
     beforeTag: Int?,
@@ -208,16 +210,23 @@ fun ByteBuf.calculateChecksum(): Int {
 }
 
 fun ByteBuf.setChecksum(checksum: Int): Boolean {
-    val value = "%03d".format(checksum)
+    val value = checksum.toString().padStart(3, '0')
 
-    if (!setField(10, value)) {
+    if (!setLastField(10, value)) {
         lastField()?.insertNext(10, value) ?: return false
     }
 
     return true
 }
 
-fun ByteBuf.updateChecksum(): Boolean = setChecksum(calculateChecksum())
+fun ByteBuf.updateChecksum(): ByteBuf {
+    val checksumIndex = lastIndexOf(CHECKSUM_START_BYTES)
+    if (checksumIndex < 0) return this
+    val checksum = (readerIndex()..checksumIndex).sumOf { this[it].toInt() }
+    if (!endsWith(SOH_BYTE)) writeByte(SOH_BYTE.toInt())
+    val checksumString = (checksum % 256).toString().padStart(3, '0')
+    return replace(checksumIndex + CHECKSUM_START_BYTES.size, writerIndex() - 1, checksumString)
+}
 
 fun ByteBuf.calculateLength(): Int {
     var length = 0
@@ -240,9 +249,16 @@ fun ByteBuf.setLength(length: Int): Boolean {
     return true
 }
 
-fun ByteBuf.updateLength(): Boolean = when (val length = calculateLength()) {
-    -1 -> false
-    else -> setLength(length)
+fun ByteBuf.updateLength(): ByteBuf {
+    val lengthIndex = indexOf(LENGTH_START_BYTES)
+    if (lengthIndex < 0) return this
+    val valueIndex = lengthIndex + LENGTH_START_BYTES.size
+    val sohIndex = indexOf(SOH_BYTE, valueIndex)
+    if (sohIndex < 0) return this
+    val startIndex = sohIndex + 1
+    val checksumIndex = lastIndexOf(CHECKSUM_START_BYTES, startIndex)
+    val endIndex = if (checksumIndex < 0) writerIndex() else checksumIndex + 1
+    return replace(valueIndex, sohIndex, (endIndex - startIndex).toString())
 }
 
 class FixField private constructor(
