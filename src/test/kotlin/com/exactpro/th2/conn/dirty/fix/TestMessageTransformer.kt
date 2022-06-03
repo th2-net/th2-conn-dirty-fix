@@ -21,14 +21,14 @@ import io.netty.buffer.Unpooled
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
-import kotlin.test.assertNull
+import java.lang.System.lineSeparator
 import kotlin.text.Charsets.UTF_8
 
 class TestMessageTransformer {
     @Test fun `set field`() {
         val buffer = MESSAGE.toBuffer()
         val transform = set(49 to "abc") onlyIf (35 matches "A")
-        val description = MessageTransformer.transform(buffer, listOf(Rule("0", transform)))!!.actions.joinToString(System.lineSeparator()) { it.action.toString() }
+        val description = MessageTransformer.transform(buffer, Rule("0", transform))!!.results.joinToString(lineSeparator()) { it.action.toString() }
         assertEquals("set tag 49 = 'abc'", description)
         assertEquals("8=FIX.4.2|9=62|35=A|49=abc|56=CLIENT|34=177|52=20090107-18:15:16|98=0|108=30|10=138|", buffer.asString())
     }
@@ -36,7 +36,7 @@ class TestMessageTransformer {
     @Test fun `add field before`() {
         val buffer = MESSAGE.toBuffer()
         val transform = add(123 eq "abc") before (34 matches "177") onlyIf (35 matches "A")
-        val description = MessageTransformer.transform(buffer, listOf(Rule("0", transform)))!!.actions.joinToString(System.lineSeparator()) { it.action.toString() }
+        val description = MessageTransformer.transform(buffer, Rule("0", transform))!!.results.joinToString(lineSeparator()) { it.action.toString() }
         assertEquals("add tag 123 = 'abc' before tag 34 ~= /177/", description)
         assertEquals("8=FIX.4.2|9=73|35=A|49=SERVER|56=CLIENT|123=abc|34=177|52=20090107-18:15:16|98=0|108=30|10=055|", buffer.asString())
     }
@@ -44,7 +44,7 @@ class TestMessageTransformer {
     @Test fun `add field after`() {
         val buffer = MESSAGE.toBuffer()
         val transform = add(124 eq "cde") after (34 matches "177") onlyIf (35 matches "A")
-        val description = MessageTransformer.transform(buffer, listOf(Rule("0", transform)))!!.actions.joinToString(System.lineSeparator()) { it.action.toString() }
+        val description = MessageTransformer.transform(buffer, Rule("0", transform))!!.results.joinToString(lineSeparator()) { it.action.toString() }
         assertEquals("add tag 124 = 'cde' after tag 34 ~= /177/", description)
         assertEquals("8=FIX.4.2|9=73|35=A|49=SERVER|56=CLIENT|34=177|124=cde|52=20090107-18:15:16|98=0|108=30|10=062|", buffer.asString())
     }
@@ -52,7 +52,7 @@ class TestMessageTransformer {
     @Test fun `move field before`() {
         val buffer = MESSAGE.toBuffer()
         val transform = move(56 matching ".*") before (49 matches ".*") onlyIf (35 matches "A")
-        val description = MessageTransformer.transform(buffer, listOf(Rule("0", transform)))!!.actions.joinToString(System.lineSeparator()) { it.action.toString() }
+        val description = MessageTransformer.transform(buffer, Rule("0", transform))!!.results.joinToString(lineSeparator()) { it.action.toString() }
         assertEquals("move tag 56 ~= /.*/ before tag 49 ~= /.*/", description)
         assertEquals("8=FIX.4.2|9=65|35=A|56=CLIENT|49=SERVER|34=177|52=20090107-18:15:16|98=0|108=30|10=062|", buffer.asString())
     }
@@ -60,7 +60,7 @@ class TestMessageTransformer {
     @Test fun `move field after`() {
         val buffer = MESSAGE.toBuffer()
         val transform = move(49 matching ".*") after (56 matches ".*") onlyIf (35 matches "A")
-        val description = MessageTransformer.transform(buffer, listOf(Rule("0", transform)))!!.actions.joinToString(System.lineSeparator()) { it.action.toString() }
+        val description = MessageTransformer.transform(buffer, Rule("0", transform))!!.results.joinToString(lineSeparator()) { it.action.toString() }
         assertEquals("move tag 49 ~= /.*/ after tag 56 ~= /.*/", description)
         assertEquals("8=FIX.4.2|9=65|35=A|56=CLIENT|49=SERVER|34=177|52=20090107-18:15:16|98=0|108=30|10=062|", buffer.asString())
     }
@@ -68,7 +68,7 @@ class TestMessageTransformer {
     @Test fun `add field after random one of`() {
         val buffer = MESSAGE.toBuffer()
         val transform = add(124 oneOf listOf("cde", "cbe")) after (34 matches "177") onlyIf (35 matches "A")
-        val description = MessageTransformer.transform(buffer, listOf(Rule("0", transform)))!!.actions.joinToString(System.lineSeparator()) { it.action.toString() }
+        val description = MessageTransformer.transform(buffer, Rule("0", transform))!!.results.joinToString(lineSeparator()) { it.action.toString() }
         assertEquals(description, "add tag 124 = one of [cde, cbe] after tag 34 ~= /177/")
         val resultString = buffer.asString()
         assertTrue("8=FIX.4.2|9=73|35=A|49=SERVER|56=CLIENT|34=177|124=cde|52=20090107-18:15:16|98=0|108=30|10=062|" == resultString ||
@@ -79,7 +79,7 @@ class TestMessageTransformer {
     @Test fun `replace field`() {
         val buffer = MESSAGE.toBuffer()
         val transform = replace(98 matching "0") with (100 eq "1") onlyIf (35 matches "A")
-        val description = MessageTransformer.transform(buffer, listOf(Rule("0", transform)))!!.actions.joinToString(System.lineSeparator()) { it.action.toString() }
+        val description = MessageTransformer.transform(buffer, Rule("0", transform))!!.results.joinToString(lineSeparator()) { it.action.toString() }
         assertEquals("replace tag 98 ~= /0/ with tag 100 = '1'", description)
         assertEquals("8=FIX.4.2|9=66|35=A|49=SERVER|56=CLIENT|34=177|52=20090107-18:15:16|100=1|108=30|10=096|", buffer.asString())
     }
@@ -87,16 +87,9 @@ class TestMessageTransformer {
     @Test fun `remove field`() {
         val buffer = MESSAGE.toBuffer()
         val transform = remove(52 matching ".*") onlyIf (35 matches "A")
-        val description = MessageTransformer.transform(buffer, listOf(Rule("0", transform)))!!.actions.joinToString(System.lineSeparator()) { it.action.toString() }
+        val description = MessageTransformer.transform(buffer, Rule("0", transform))!!.results.joinToString(lineSeparator()) { it.action.toString() }
         assertEquals("remove tag 52 ~= /.*/", description)
         assertEquals("8=FIX.4.2|9=44|35=A|49=SERVER|56=CLIENT|34=177|98=0|108=30|10=044|", buffer.asString())
-    }
-
-    @Test fun `non-matching condition`() {
-        val buffer = MESSAGE.toBuffer()
-        val transform = remove(52 matching ".*") onlyIf (35 matches "B")
-        assertNull(MessageTransformer.transform(buffer, listOf(Rule("0", transform))))
-        assertEquals("8=FIX.4.2|9=65|35=A|49=SERVER|56=CLIENT|34=177|52=20090107-18:15:16|98=0|108=30|10=062|", buffer.asString())
     }
 
     companion object {

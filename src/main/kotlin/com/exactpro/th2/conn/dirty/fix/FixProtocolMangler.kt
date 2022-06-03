@@ -46,45 +46,10 @@ class FixProtocolMangler(context: IContext<IProtocolManglerSettings>) : IProtoco
     private val rules = (context.settings as FixProtocolManglerSettings).rules
 
     override fun onOutgoing(message: ByteBuf, metadata: MutableMap<String, String>): Event? {
-        var original = message
+        LOGGER.trace { "Processing message: ${message.toString(Charsets.UTF_8)}" }
 
-        val (rule, actions) = when {
-            RULE_NAME_PROPERTY in metadata -> {
-                val name = metadata[RULE_NAME_PROPERTY]
-                val rule = rules.find { it.name == name } ?: throw IllegalArgumentException("No rule with name: $name")
-                original = message.copy()
-                MessageTransformer.transform(message, rule, true)
-            }
-            RULE_ACTIONS_PROPERTY in metadata -> {
-                val actions = try {
-                    MAPPER.readValue<List<Action>>(metadata[RULE_ACTIONS_PROPERTY]!!)
-                } catch (e: Exception) {
-                    throw IllegalArgumentException("Invalid '$RULE_ACTIONS_PROPERTY' value", e)
-                }
-
-                original = message.copy()
-                val results = MessageTransformer.transform(message, actions).toList()
-
-                if (results.isNotEmpty()) {
-                    message.updateLength()
-                    LOGGER.debug { "Recalculated length" }
-                    message.updateChecksum()
-                    LOGGER.debug { "Recalculated checksum" }
-                }
-
-                TransformResult("custom", results)
-            }
-            else -> {
-                if (rules.isEmpty()) return null
-                original = message.copy()
-                MessageTransformer.transform(message, rules) ?: return null
-            }
-        }
-
-        if (actions.isEmpty()) {
-            LOGGER.debug("No transformations were applied")
-            return null
-        }
+        val (rule, unconditionally) = getRule(message, metadata) ?: return null
+        val (name, results, message) = MessageTransformer.transform(message, rule, unconditionally) ?: return null
 
         return Event.start().apply {
             name("Message mangled")
@@ -92,13 +57,48 @@ class FixProtocolMangler(context: IContext<IProtocolManglerSettings>) : IProtoco
             status(PASSED)
 
             bodyData(createMessageBean("Original message:"))
-            bodyData(createMessageBean(ByteBufUtil.prettyHexDump(original)))
+            bodyData(createMessageBean(ByteBufUtil.prettyHexDump(message)))
 
             TableBuilder<ActionRow>().run {
-                actions.forEach { row(ActionRow(rule, it.tag, it.value, it.action.toString())) }
+                results.forEach { result ->
+                    row(ActionRow(name, result.tag, result.value, result.action.toString()))
+                }
+
                 bodyData(build())
             }
         }
+    }
+
+    private fun getRule(message: ByteBuf, metadata: MutableMap<String, String>): Pair<Rule, Boolean>? {
+        metadata[RULE_NAME_PROPERTY]?.also { name ->
+            val rule = rules.find { it.name == name } ?: throw IllegalArgumentException("No rule with name: $name")
+            return rule to true
+        }
+
+        metadata[RULE_ACTIONS_PROPERTY]?.also { yaml ->
+            val actions = try {
+                MAPPER.readValue<List<Action>>(yaml)
+            } catch (e: Exception) {
+                throw IllegalArgumentException("Invalid '$RULE_ACTIONS_PROPERTY' value", e)
+            }
+
+            return Rule("custom", listOf(Transform(listOf(), actions))) to true
+        }
+
+        if (rules.isEmpty()) return null
+
+        val rule = rules.filter { rule ->
+            rule.transform.any { transform ->
+                transform.conditions.all { it.matches(message) }
+            }
+        }.randomOrNull()
+
+        if (rule == null) {
+            LOGGER.trace { "No matching rule was found" }
+            return null
+        }
+
+        return rule to false
     }
 }
 
