@@ -44,8 +44,12 @@ fun ByteBuf.firstField(charset: Charset = UTF_8): FixField? = FixField.atOffset(
 fun ByteBuf.lastField(charset: Charset = UTF_8): FixField? = FixField.atOffset(this, writerIndex() - 1, charset)
 
 @JvmOverloads
-inline fun ByteBuf.forEachField(charset: Charset = UTF_8, action: (FixField) -> Unit) {
-    var field = firstField(charset)
+inline fun ByteBuf.forEachField(
+    charset: Charset = UTF_8,
+    start: FixField? = firstField(charset),
+    action: (FixField) -> Unit,
+) {
+    var field = start
 
     while (field != null) {
         action(field)
@@ -54,8 +58,12 @@ inline fun ByteBuf.forEachField(charset: Charset = UTF_8, action: (FixField) -> 
 }
 
 @JvmOverloads
-inline fun ByteBuf.forEachFieldDesc(charset: Charset = UTF_8, action: (FixField) -> Unit) {
-    var field = lastField(charset)
+inline fun ByteBuf.forEachFieldDesc(
+    charset: Charset = UTF_8,
+    start: FixField? = lastField(charset),
+    action: (FixField) -> Unit,
+) {
+    var field = start
 
     while (field != null) {
         action(field)
@@ -64,8 +72,12 @@ inline fun ByteBuf.forEachFieldDesc(charset: Charset = UTF_8, action: (FixField)
 }
 
 @JvmOverloads
-inline fun ByteBuf.findField(charset: Charset = UTF_8, predicate: (FixField) -> Boolean): FixField? {
-    forEachField(charset) { if (predicate(it)) return it }
+inline fun ByteBuf.findField(
+    charset: Charset = UTF_8,
+    start: FixField? = firstField(charset),
+    predicate: (FixField) -> Boolean,
+): FixField? {
+    forEachField(charset, start) { if (predicate(it)) return it }
     return null
 }
 
@@ -75,44 +87,68 @@ inline fun ByteBuf.findFields(charset: Charset = UTF_8, crossinline predicate: (
 }
 
 @JvmOverloads
-inline fun ByteBuf.findLastField(charset: Charset = UTF_8, predicate: (FixField) -> Boolean): FixField? {
-    forEachFieldDesc(charset) { if (predicate(it)) return it }
+inline fun ByteBuf.findLastField(
+    charset: Charset = UTF_8,
+    start: FixField? = lastField(charset),
+    predicate: (FixField) -> Boolean,
+): FixField? {
+    forEachFieldDesc(charset, start) { if (predicate(it)) return it }
     return null
 }
 
 @JvmOverloads
-fun ByteBuf.findField(tag: Int?, charset: Charset = UTF_8): FixField? {
-    return findField(charset) { it.tag == tag }
+fun ByteBuf.findField(
+    tag: Int?,
+    charset: Charset = UTF_8,
+    start: FixField? = firstField(charset),
+): FixField? {
+    return findField(charset, start) { it.tag == tag }
 }
 
 @JvmOverloads
-fun ByteBuf.findField(tag: Int?, value: String?, charset: Charset = UTF_8): FixField? {
-    return findField(charset) { it.tag == tag && it.value == value }
+fun ByteBuf.findField(
+    tag: Int?,
+    value: String?,
+    charset: Charset = UTF_8,
+    start: FixField? = firstField(charset),
+): FixField? {
+    return findField(charset, start) { it.tag == tag && it.value == value }
 }
 
 @JvmOverloads
-fun ByteBuf.findLastField(tag: Int?, charset: Charset = UTF_8): FixField? {
-    return findLastField(charset) { it.tag == tag }
+fun ByteBuf.findLastField(
+    tag: Int?,
+    charset: Charset = UTF_8,
+    start: FixField? = lastField(charset),
+): FixField? {
+    return findLastField(charset, start) { it.tag == tag }
 }
 
 @JvmOverloads
-fun ByteBuf.findLastField(tag: Int?, value: String?, charset: Charset = UTF_8): FixField? {
-    return findLastField(charset) { it.tag == tag && it.value == value }
+fun ByteBuf.findLastField(
+    tag: Int?,
+    value: String?,
+    charset: Charset = UTF_8,
+    start: FixField? = lastField(charset),
+): FixField? {
+    return findLastField(charset, start) { it.tag == tag && it.value == value }
 }
 
 @JvmOverloads
 inline fun ByteBuf.modifyField(
     predicate: (FixField) -> Boolean,
     charset: Charset = UTF_8,
+    start: FixField? = firstField(charset),
     action: (FixField) -> Unit,
-): Boolean = findField(charset, predicate)?.apply(action) != null
+): Boolean = findField(charset, start, predicate)?.apply(action) != null
 
 @JvmOverloads
 inline fun ByteBuf.modifyLastField(
     predicate: (FixField) -> Boolean,
     charset: Charset = UTF_8,
+    start: FixField? = lastField(charset),
     action: (FixField) -> Unit,
-): Boolean = findLastField(charset, predicate)?.apply(action) != null
+): Boolean = findLastField(charset, start, predicate)?.apply(action) != null
 
 @JvmOverloads
 fun ByteBuf.setField(tag: Int?, value: String?, charset: Charset = UTF_8): Boolean {
@@ -131,12 +167,6 @@ fun ByteBuf.addFieldAfter(
     field: FixField = lastField() ?: error("message is empty"),
 ): FixField = field.insertNext(tag, value)
 
-fun ByteBuf.addFieldAfter(
-    tag: Int?,
-    value: String?,
-    beforeTag: Int?,
-): FixField = findField(beforeTag)?.insertNext(tag, value) ?: error("in message no tag: $beforeTag")
-
 @JvmOverloads
 fun ByteBuf.addFieldBefore(
     tag: Int?,
@@ -152,26 +182,6 @@ fun ByteBuf.replaceFieldValue(
     charset: Charset = UTF_8,
 ): Boolean {
     return modifyField({ it.tag == tag && it.value == oldValue }, charset) { it.value = newValue }
-}
-
-fun ByteBuf.replaceAndMoveFieldValue(
-    field: FixField,
-    newValue: String?,
-    beforeTag: Int?,
-) {
-    val tag = field.tag
-    field.clear()
-    findField(beforeTag)?.insertNext(tag, newValue)?: error("in message no tag: $beforeTag")
-}
-
-fun ByteBuf.moveFieldValue(
-    field: FixField,
-    beforeTag: Int?,
-) {
-    val tag = field.tag
-    val value = field.value
-    field.clear()
-    findField(beforeTag)?.insertNext(tag, value)?: error("in message no tag: $beforeTag")
 }
 
 @JvmOverloads

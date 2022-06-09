@@ -29,14 +29,14 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import static com.exactpro.th2.conn.dirty.fix.FixByteBufUtilKt.addFieldAfter;
-import static com.exactpro.th2.conn.dirty.fix.FixByteBufUtilKt.addFieldBefore;
 import static com.exactpro.th2.conn.dirty.fix.FixByteBufUtilKt.findField;
-import static com.exactpro.th2.conn.dirty.fix.FixByteBufUtilKt.moveFieldValue;
-import static com.exactpro.th2.conn.dirty.fix.FixByteBufUtilKt.replaceAndMoveFieldValue;
-import static com.exactpro.th2.conn.dirty.fix.FixByteBufUtilKt.replaceFieldValue;
+import static com.exactpro.th2.conn.dirty.fix.FixByteBufUtilKt.findLastField;
+import static com.exactpro.th2.conn.dirty.fix.FixByteBufUtilKt.firstField;
+import static com.exactpro.th2.conn.dirty.fix.FixByteBufUtilKt.lastField;
 import static com.exactpro.th2.conn.dirty.fix.FixByteBufUtilKt.updateChecksum;
+import static com.exactpro.th2.conn.dirty.fix.FixByteBufUtilKt.updateLength;
 import static com.exactpro.th2.conn.dirty.tcp.core.util.ByteBufUtil.indexOf;
+import static com.exactpro.th2.conn.dirty.tcp.core.util.ByteBufUtil.isEmpty;
 import static com.exactpro.th2.constants.Constants.BEGIN_SEQ_NO;
 import static com.exactpro.th2.constants.Constants.BEGIN_SEQ_NO_TAG;
 import static com.exactpro.th2.constants.Constants.BEGIN_STRING_TAG;
@@ -76,6 +76,7 @@ import static com.exactpro.th2.constants.Constants.TEST_REQ_ID_TAG;
 import static com.exactpro.th2.constants.Constants.TEXT_TAG;
 import static com.exactpro.th2.constants.Constants.USERNAME;
 import static com.exactpro.th2.util.MessageUtil.findByte;
+import static java.nio.charset.StandardCharsets.US_ASCII;
 
 //todo parse logout
 //todo gapFillTag
@@ -140,8 +141,7 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
 
         try {
             if (checksum == -1 || endOfMessageIdx == -1 || endOfMessageIdx - checksum != 7) {
-                LOGGER.trace("Failed to parse message: {}. No Checksum or no tag separator at the end of the message with index {}", buffer.toString(StandardCharsets.US_ASCII), beginStringIdx);
-                throw new Exception();
+                throw new IllegalStateException("Failed to parse message: " + buffer.toString(US_ASCII) + ". No Checksum or no tag separator at the end of the message with index: " + beginStringIdx);
             }
         } catch (Exception e) {
             if (nextBeginString > 0) {
@@ -171,14 +171,14 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
         FixField msgSeqNumValue = findField(message, MSG_SEQ_NUM_TAG);
         if (msgSeqNumValue == null) {
             metadata.put(REJECT_REASON, "No msgSeqNum Field");
-            LOGGER.error("Invalid message. No MsgSeqNum in message: {}", message.toString(StandardCharsets.US_ASCII));
+            if (LOGGER.isErrorEnabled()) LOGGER.error("Invalid message. No MsgSeqNum in message: {}", message.toString(US_ASCII));
             return metadata;
         }
 
         FixField msgType = findField(message, MSG_TYPE_TAG);
         if (msgType == null) {
             metadata.put(REJECT_REASON, "No msgType Field");
-            LOGGER.error("Invalid message. No MsgType in message: {}", message.toString(StandardCharsets.US_ASCII));
+            if (LOGGER.isErrorEnabled()) LOGGER.error("Invalid message. No MsgType in message: {}", message.toString(US_ASCII));
             return metadata;
         }
 
@@ -194,12 +194,12 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
         String msgTypeValue = Objects.requireNonNull(msgType.getValue());
         switch (msgTypeValue) {
             case MSG_TYPE_HEARTBEAT:
-                LOGGER.info("Heartbeat received - " + message.toString(StandardCharsets.US_ASCII));
+                if (LOGGER.isInfoEnabled()) LOGGER.info("Heartbeat received - {}", message.toString(US_ASCII));
                 checkHeartbeat(message);
                 testRequestTimer = executorService.schedule(this::sendTestRequest, settings.getTestRequestDelay(), TimeUnit.SECONDS);
                 break;
             case MSG_TYPE_LOGON:
-                LOGGER.info("Logon received - " + message.toString(StandardCharsets.US_ASCII));
+                if (LOGGER.isInfoEnabled()) LOGGER.info("Logon received - {}", message.toString(US_ASCII));
                 boolean connectionSuccessful = checkLogon(message);
                 enabled.set(connectionSuccessful);
                 if (connectionSuccessful) {
@@ -218,10 +218,10 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
                 }
                 break;
             case MSG_TYPE_LOGOUT: //extract logout reason
-                LOGGER.info("Logout received - " + message.toString(StandardCharsets.US_ASCII));
+                if (LOGGER.isInfoEnabled()) LOGGER.info("Logout received - {}", message.toString(US_ASCII));
                 FixField text = findField(message, TEXT_TAG);
                 if (text != null) {
-                    LOGGER.warn("Received Logout has text (58) tag: " + text.getValue());
+                    LOGGER.warn("Received Logout has text (58) tag: {}", text.getValue());
                     String value = StringUtils.substringBetween(text.getValue(), "expecting ", " but received");
                     if (value != null) {
                         msgSeqNum.getAndSet(Integer.parseInt(value)-2);
@@ -235,11 +235,11 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
                 context.send(CommonUtil.toEvent("logout for sender - " + settings.getSenderCompID()));//make more useful
                 break;
             case MSG_TYPE_RESEND_REQUEST:
-                LOGGER.info("Resend_request received - " + message.toString(StandardCharsets.US_ASCII));
+                if (LOGGER.isInfoEnabled()) LOGGER.info("Resend request received - {}", message.toString(US_ASCII));
                 handleResendRequest(message);
                 break;
             case MSG_TYPE_SEQUENCE_RESET: //gap fill
-                LOGGER.info("Sequence_reset received - " + message.toString(StandardCharsets.US_ASCII));
+                if (LOGGER.isInfoEnabled()) LOGGER.info("Sequence reset received - {}", message.toString(US_ASCII));
                 resetSequence(message);
                 break;
         }
@@ -254,14 +254,13 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
     }
 
     private void resetSequence(ByteBuf message) {
-
         FixField gapFillFlagValue = findField(message, GAP_FILL_FLAG_TAG);
         FixField seqNumValue = findField(message, NEW_SEQ_NO_TAG);
 
         if (seqNumValue != null && (gapFillFlagValue == null || Objects.requireNonNull(gapFillFlagValue.getValue()).equals("N"))) {
             serverMsgSeqNum.set(Integer.parseInt(Objects.requireNonNull(seqNumValue.getValue())));
-        } else {
-            LOGGER.trace("Failed to reset servers MsgSeqNum. No such tag in message: {}", message.toString(StandardCharsets.US_ASCII));
+        } else if (LOGGER.isTraceEnabled()) {
+            LOGGER.trace("Failed to reset servers MsgSeqNum. No such tag in message: {}", message.toString(US_ASCII));
         }
     }
 
@@ -308,7 +307,7 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
                 if (endSeqNo == 0) {
                     endSeqNo = msgSeqNum.get();
                 }
-                LOGGER.info("Returning messages from " + beginSeqNo + " to " + endSeqNo);
+                LOGGER.info("Returning messages from {} to {}", beginSeqNo, endSeqNo);
                 for (int i = beginSeqNo; i <= endSeqNo; i++) {
                     ByteBuf storedMsg = outgoingMessages.get(i);
                     if (storedMsg == null) {
@@ -317,7 +316,7 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
                         setChecksumAndBodyLength(heartbeat);
                         client.send(Unpooled.wrappedBuffer(heartbeat.toString().getBytes(StandardCharsets.UTF_8)), Collections.emptyMap(), IChannel.SendMode.MANGLE);
                     } else {
-                        LOGGER.info("Returning message - " + storedMsg.toString(StandardCharsets.US_ASCII));
+                        if (LOGGER.isInfoEnabled()) LOGGER.info("Resending message: {}", storedMsg.toString(US_ASCII));
                         client.send(storedMsg, Collections.emptyMap(), IChannel.SendMode.MANGLE);
                     }
                 }
@@ -370,164 +369,98 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
     @Override
     public void onOutgoing(@NotNull ByteBuf message, @NotNull Map<String, String> metadata) {
         lastSendTime = System.currentTimeMillis();
-        String sendMode = metadata.get("send-mode");
+        onOutgoingUpdateTag(message, metadata);
 
-        if (sendMode == null || Objects.equals(sendMode, "")) {
-            onOutgoingUpdateTag(message, metadata);
-        } else if (Objects.equals(sendMode, "semi-manual")) {
-            onOutgoingNotUpdateTag(message, metadata);
+        if (LOGGER.isDebugEnabled()) {
+            LOGGER.debug("Outgoing message: {}", message.toString(US_ASCII));
         }
-
-        LOGGER.info("Outgoing message - " + message.toString(StandardCharsets.US_ASCII));
     }
 
-    public void onOutgoingUpdateTag(@NotNull ByteBuf message, @NotNull Map<String, String> metadata){
-        message.readerIndex(0);
+    public void onOutgoingUpdateTag(@NotNull ByteBuf message, @NotNull Map<String, String> metadata) {
+        if (isEmpty(message)) {
+            return;
+        }
+
         FixField beginString = findField(message, BEGIN_STRING_TAG);
+
         if (beginString == null) {
-            addFieldBefore(message, BEGIN_STRING_TAG, settings.getBeginString());
+            beginString = firstField(message).insertPrevious(BEGIN_STRING_TAG, settings.getBeginString());
         }
 
-        FixField bodyLength = findField(message, BODY_LENGTH_TAG);
+        FixField bodyLength = findField(message, BODY_LENGTH_TAG, US_ASCII, beginString);
+
         if (bodyLength == null) {
-            addFieldAfter(message, BODY_LENGTH_TAG, STUBBING_VALUE, BEGIN_STRING_TAG); //stubbing until finish checking message
+            bodyLength = beginString.insertNext(BODY_LENGTH_TAG, STUBBING_VALUE);
         }
 
-        FixField msgType = findField(message, MSG_TYPE_TAG);
+        FixField msgType = findField(message, MSG_TYPE_TAG, US_ASCII, bodyLength);
+
         if (msgType == null) {                                                        //should we interrupt sending message?
-            LOGGER.error("No msgType in message {}", new String(message.array()));
+            if (LOGGER.isErrorEnabled()) {
+                LOGGER.error("No msgType in message {}", message.toString(US_ASCII));
+            }
+
             if (metadata.get("MsgType") != null) {
-                addFieldAfter(message, MSG_TYPE_TAG, metadata.get("MsgType"), BODY_LENGTH_TAG);
+                msgType = bodyLength.insertNext(MSG_TYPE_TAG, metadata.get("MsgType"));
             }
         }
 
-        FixField checksum = findField(message, CHECKSUM_TAG);
+        FixField checksum = findLastField(message, CHECKSUM_TAG);
+
         if (checksum == null) {
-            addFieldAfter(message, CHECKSUM_TAG, STUBBING_VALUE); //stubbing until finish checking message
+            checksum = lastField(message).insertNext(CHECKSUM_TAG, STUBBING_VALUE); //stubbing until finish checking message
         }
 
-        int msgSeqNumValue = msgSeqNum.incrementAndGet();
-        FixField msgSeqNum = findField(message, MSG_SEQ_NUM_TAG);
+        FixField msgSeqNum = findField(message, MSG_SEQ_NUM_TAG, US_ASCII, bodyLength);
+
         if (msgSeqNum == null) {
-            if (findField(message, MSG_TYPE_TAG) != null) {
-                addFieldAfter(message, MSG_SEQ_NUM_TAG, Integer.toString(msgSeqNumValue), MSG_TYPE_TAG);
+            int msgSeqNumValue = this.msgSeqNum.incrementAndGet();
+
+            if (msgType != null) {
+                msgSeqNum = msgType.insertNext(MSG_SEQ_NUM_TAG, Integer.toString(msgSeqNumValue));
             } else {
-                addFieldAfter(message, MSG_SEQ_NUM_TAG, Integer.toString(msgSeqNumValue), BODY_LENGTH_TAG);
+                msgSeqNum = bodyLength.insertNext(MSG_SEQ_NUM_TAG, Integer.toString(msgSeqNumValue));
             }
-        } else {
-            replaceAndMoveFieldValue(message, msgSeqNum, Integer.toString(msgSeqNumValue), MSG_TYPE_TAG);
         }
 
-        FixField senderCompID = findField(message, SENDER_COMP_ID_TAG);
+        FixField senderCompID = findField(message, SENDER_COMP_ID_TAG, US_ASCII, bodyLength);
+
         if (senderCompID == null) {
-            addFieldAfter(message, SENDER_COMP_ID_TAG, settings.getSenderCompID(), MSG_SEQ_NUM_TAG);
+            senderCompID = msgSeqNum.insertNext(SENDER_COMP_ID_TAG, settings.getSenderCompID());
         } else {
             String value = senderCompID.getValue();
-            if (!Objects.equals(value, "null") && !Objects.equals(value, "") && !Objects.equals(value, null)) {
-                replaceAndMoveFieldValue(message, senderCompID, value, MSG_SEQ_NUM_TAG);
-            } else {
-                replaceAndMoveFieldValue(message, senderCompID, settings.getSenderCompID(), MSG_TYPE_TAG);
+
+            if (value == null || value.isEmpty() || value.equals("null")) {
+                msgSeqNum.setValue(settings.getSenderCompID());
             }
         }
 
-        FixField targetCompID = findField(message, TARGET_COMP_ID_TAG);
+        FixField targetCompID = findField(message, TARGET_COMP_ID_TAG, US_ASCII, bodyLength);
+
         if (targetCompID == null) {
-            addFieldAfter(message, TARGET_COMP_ID_TAG, settings.getTargetCompID(), SENDER_COMP_ID_TAG);
+            targetCompID = senderCompID.insertNext(TARGET_COMP_ID_TAG, settings.getTargetCompID());
         } else {
             String value = targetCompID.getValue();
-            if (!Objects.equals(value, "null") && !Objects.equals(value, "") && !Objects.equals(value, null)) {
-                replaceAndMoveFieldValue(message, targetCompID, value, SENDER_COMP_ID_TAG);
-            } else {
-                replaceAndMoveFieldValue(message, targetCompID, settings.getTargetCompID(), SENDER_COMP_ID_TAG);
+
+            if (value == null || value.isEmpty() || value.equals("null")) {
+                targetCompID.setValue(settings.getTargetCompID());
             }
         }
 
-        FixField sendingTime = findField(message, SENDING_TIME_TAG);
+        FixField sendingTime = findField(message, SENDING_TIME_TAG, US_ASCII, bodyLength);
+
         if (sendingTime == null) {
-            addFieldAfter(message, SENDING_TIME_TAG, getTime(), TARGET_COMP_ID_TAG);
+            sendingTime = targetCompID.insertNext(SENDING_TIME_TAG, getTime());
         } else {
             String value = sendingTime.getValue();
-            if (!Objects.equals(value, "null") && !Objects.equals(value, "") && !Objects.equals(value, null)) {
-                replaceAndMoveFieldValue(message, sendingTime, value, TARGET_COMP_ID_TAG);
-            } else {
-                replaceAndMoveFieldValue(message, sendingTime, getTime(), TARGET_COMP_ID_TAG);
+
+            if (value == null || value.isEmpty() || value.equals("null")) {
+                sendingTime.setValue(getTime());
             }
         }
 
-        replaceFieldValue(message, BODY_LENGTH_TAG, bodyLength != null ? bodyLength.getValue() : STUBBING_VALUE, Integer.toString(getBodyLength(message)));
+        updateLength(message);
         updateChecksum(message);
-    }
-
-    public void onOutgoingNotUpdateTag(@NotNull ByteBuf message, @NotNull Map<String, String> metadata){
-        message.readerIndex(0);
-        FixField beginString = findField(message, BEGIN_STRING_TAG);
-        if (beginString == null) {
-            addFieldBefore(message, BEGIN_STRING_TAG, settings.getBeginString());
-        }
-
-        FixField bodyLength = findField(message, BODY_LENGTH_TAG);
-        if (bodyLength == null) {
-            addFieldAfter(message, BODY_LENGTH_TAG, STUBBING_VALUE, BEGIN_STRING_TAG); //stubbing until finish checking message
-        }
-
-        FixField msgType = findField(message, MSG_TYPE_TAG);
-        if (msgType == null) {                                                        //should we interrupt sending message?
-            LOGGER.error("No msgType in message {}", new String(message.array()));
-            if (metadata.get("MsgType") != null) {
-                addFieldAfter(message, MSG_TYPE_TAG, metadata.get("MsgType"), BODY_LENGTH_TAG);
-            }
-        }
-
-        FixField checksum = findField(message, CHECKSUM_TAG);
-        if (checksum == null) {
-            addFieldAfter(message, CHECKSUM_TAG, STUBBING_VALUE); //stubbing until finish checking message
-        }
-
-        int msgSeqNumValue = msgSeqNum.incrementAndGet();
-        FixField msgSeqNum = findField(message, MSG_SEQ_NUM_TAG);
-        if (msgSeqNum == null) {
-            if (findField(message, MSG_TYPE_TAG)!=null) {
-                addFieldAfter(message, MSG_SEQ_NUM_TAG, Integer.toString(msgSeqNumValue),MSG_TYPE_TAG);
-            }
-            else {
-                addFieldAfter(message, MSG_SEQ_NUM_TAG, Integer.toString(msgSeqNumValue), BODY_LENGTH_TAG);
-            }
-        } else {
-            moveFieldValue(message, msgSeqNum, MSG_TYPE_TAG);
-        }
-
-        FixField senderCompID = findField(message, SENDER_COMP_ID_TAG);
-        if (senderCompID == null) {
-            addFieldAfter(message, SENDER_COMP_ID_TAG, settings.getSenderCompID(), MSG_SEQ_NUM_TAG);
-        }
-        else {
-            moveFieldValue(message, senderCompID, MSG_TYPE_TAG);
-        }
-
-        FixField targetCompID = findField(message, TARGET_COMP_ID_TAG);
-        if (targetCompID == null) {
-            addFieldAfter(message, TARGET_COMP_ID_TAG, settings.getTargetCompID(), SENDER_COMP_ID_TAG);
-        }
-        else {
-            moveFieldValue(message, targetCompID, SENDER_COMP_ID_TAG);
-        }
-
-        FixField sendingTime = findField(message, SENDING_TIME_TAG);
-        if (sendingTime == null) {
-            addFieldAfter(message, SENDING_TIME_TAG, getTime(), TARGET_COMP_ID_TAG);
-        }
-        else {
-            moveFieldValue(message, sendingTime, TARGET_COMP_ID_TAG);
-        }
-
-        if (bodyLength == null){
-            replaceFieldValue(message, BODY_LENGTH_TAG, bodyLength != null ? bodyLength.getValue() : STUBBING_VALUE, Integer.toString(getBodyLength(message)));
-        }
-        if(checksum == null){
-            updateChecksum(message);
-        }
-
-        outgoingMessages.put(msgSeqNumValue, message);
     }
 
     @Override
@@ -550,7 +483,7 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
         setChecksumAndBodyLength(heartbeat);
 
         if (enabled.get()) {
-            LOGGER.info("Send Heartbeat to server - " + heartbeat);
+            LOGGER.info("Send Heartbeat to server - {}", heartbeat);
             client.send(Unpooled.wrappedBuffer(heartbeat.toString().getBytes(StandardCharsets.UTF_8)), Collections.emptyMap(), IChannel.SendMode.MANGLE);
         } else {
             sendLogon();
@@ -565,7 +498,7 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
         setChecksumAndBodyLength(testRequest);
         if (enabled.get()) {
             client.send(Unpooled.wrappedBuffer(testRequest.toString().getBytes(StandardCharsets.UTF_8)), Collections.emptyMap(), IChannel.SendMode.MANGLE);
-            LOGGER.info("Send TestRequest to server - " + testRequest);
+            LOGGER.info("Send TestRequest to server - {}", testRequest);
         } else {
             sendLogon();
         }
@@ -589,7 +522,7 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
         if(settings.getPassword() != null) logon.append(PASSWORD).append(settings.getPassword());
 
         setChecksumAndBodyLength(logon);
-        LOGGER.info("Send logon - " + logon);
+        LOGGER.info("Send logon - {}", logon);
         client.send(Unpooled.wrappedBuffer(logon.toString().getBytes(StandardCharsets.UTF_8)), Collections.emptyMap(), IChannel.SendMode.MANGLE);
     }
 
@@ -635,7 +568,7 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
     public String getChecksum(StringBuilder message) { //do private
 
         String substring = message.substring(0, message.indexOf(CHECKSUM) + 1);
-        return calculateChecksum(substring.getBytes(StandardCharsets.US_ASCII));
+        return calculateChecksum(substring.getBytes(US_ASCII));
     }
 
     public String getChecksum(ByteBuf message) {
