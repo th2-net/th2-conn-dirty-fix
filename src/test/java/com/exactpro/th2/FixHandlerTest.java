@@ -24,6 +24,8 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Future;
 
 import static com.exactpro.th2.constants.Constants.BEGIN_STRING_TAG;
 import static com.exactpro.th2.constants.Constants.BODY_LENGTH_TAG;
@@ -340,9 +342,9 @@ class Client implements IChannel {
 
     @NotNull
     @Override
-    public MessageID send(@NotNull ByteBuf byteBuf, @NotNull Map<String, String> map, @NotNull IChannel.SendMode sendMode) {
+    public Future<MessageID> send(@NotNull ByteBuf byteBuf, @NotNull Map<String, String> map, @NotNull IChannel.SendMode sendMode) {
         queue.add(byteBuf);
-        return MessageID.getDefaultInstance();
+        return CompletableFuture.completedFuture(MessageID.getDefaultInstance());
     }
 
     @Override
