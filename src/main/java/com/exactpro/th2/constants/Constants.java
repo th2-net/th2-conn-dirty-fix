@@ -14,6 +14,7 @@ public class Constants {
     public static final Integer SENDING_TIME_TAG = 52;
     public static final Integer CHECKSUM_TAG = 10;
     public static final Integer DEFAULT_APPL_VER_ID_TAG = 1137;
+    public static final Integer SENDER_SUB_ID_TAG = 50;
     public static final Integer ENCRYPT_METHOD_TAG = 98;
     public static final Integer HEART_BT_INT_TAG = 108;
     public static final Integer USERNAME_TAG = 553;
@@ -46,6 +47,7 @@ public class Constants {
     public static final String NEW_SEQ_NO = SOH + NEW_SEQ_NO_TAG + "=";
     public static final String GAP_FILL_FLAG = SOH + GAP_FILL_FLAG_TAG + "=";
     public static final String DEFAULT_APPL_VER_ID = SOH + DEFAULT_APPL_VER_ID_TAG + "=";
+    public static final String SENDER_SUB_ID = SOH + SENDER_SUB_ID_TAG + "=";
     public static final String RESET_SEQ_NUM = SOH + RESET_SEQ_NUM_TAG + "=";
 
 

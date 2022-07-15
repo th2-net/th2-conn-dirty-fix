@@ -66,6 +66,8 @@ import static com.exactpro.th2.constants.Constants.PASSWORD;
 import static com.exactpro.th2.constants.Constants.RESET_SEQ_NUM;
 import static com.exactpro.th2.constants.Constants.SENDER_COMP_ID;
 import static com.exactpro.th2.constants.Constants.SENDER_COMP_ID_TAG;
+import static com.exactpro.th2.constants.Constants.SENDER_SUB_ID;
+import static com.exactpro.th2.constants.Constants.SENDER_SUB_ID_TAG;
 import static com.exactpro.th2.constants.Constants.SENDING_TIME;
 import static com.exactpro.th2.constants.Constants.SENDING_TIME_TAG;
 import static com.exactpro.th2.constants.Constants.SESSION_STATUS_TAG;
@@ -210,7 +212,7 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
                     if (heartbeatTimer != null) {
                         heartbeatTimer.cancel(false);
                     }
-                    heartbeatTimer = executorService.scheduleWithFixedDelay(this::sendHeartbeat, settings.getHeartBtInt(), settings.getHeartBtInt(), TimeUnit.SECONDS);
+                    heartbeatTimer = executorService.scheduleWithFixedDelay(this::sendHeartbeat, 1, 1, TimeUnit.SECONDS);
 
                     testRequestTimer = executorService.schedule(this::sendTestRequest, settings.getTestRequestDelay(), TimeUnit.SECONDS);
                 } else {
@@ -447,6 +449,20 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
             }
         }
 
+        if (settings.getSenderSubID() != null) {
+            FixField senderSubID = findField(message, SENDER_SUB_ID_TAG, US_ASCII, bodyLength);
+
+            if (senderSubID == null) {
+                senderSubID = targetCompID.insertNext(SENDER_SUB_ID_TAG, settings.getSenderSubID());
+            } else {
+                String value = senderSubID.getValue();
+
+                if (value == null || value.isEmpty() || value.equals("null")) {
+                    senderSubID.setValue(settings.getSenderSubID());
+                }
+            }
+        }
+
         FixField sendingTime = findField(message, SENDING_TIME_TAG, US_ASCII, bodyLength);
 
         if (sendingTime == null) {
@@ -485,6 +501,7 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
         if (enabled.get()) {
             LOGGER.info("Send Heartbeat to server - {}", heartbeat);
             client.send(Unpooled.wrappedBuffer(heartbeat.toString().getBytes(StandardCharsets.UTF_8)), Collections.emptyMap(), IChannel.SendMode.MANGLE);
+            lastSendTime = System.currentTimeMillis();
         } else {
             sendLogon();
         }
@@ -514,12 +531,12 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
         if (reset) msgSeqNum.getAndSet(0);
 
         setHeader(logon, MSG_TYPE_LOGON, msgSeqNum.incrementAndGet());
-        if(settings.getEncryptMethod() != null) logon.append(ENCRYPT_METHOD).append(settings.getEncryptMethod());
+        if (settings.getEncryptMethod() != null) logon.append(ENCRYPT_METHOD).append(settings.getEncryptMethod());
         logon.append(HEART_BT_INT).append(settings.getHeartBtInt());
         if (reset) logon.append(RESET_SEQ_NUM).append("Y");
-        if(settings.getDefaultApplVerID() > 0) logon.append(DEFAULT_APPL_VER_ID).append(settings.getDefaultApplVerID());
-        if(settings.getUsername() != null) logon.append(USERNAME).append(settings.getUsername());
-        if(settings.getPassword() != null) logon.append(PASSWORD).append(settings.getPassword());
+        if (settings.getDefaultApplVerID() != null) logon.append(DEFAULT_APPL_VER_ID).append(settings.getDefaultApplVerID());
+        if (settings.getUsername() != null) logon.append(USERNAME).append(settings.getUsername());
+        if (settings.getPassword() != null) logon.append(PASSWORD).append(settings.getPassword());
 
         setChecksumAndBodyLength(logon);
         LOGGER.info("Send logon - {}", logon);
@@ -553,8 +570,9 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
         stringBuilder.append(BEGIN_STRING_TAG).append("=").append(settings.getBeginString());
         stringBuilder.append(MSG_TYPE).append(msgType);
         stringBuilder.append(MSG_SEQ_NUM).append(seqNum);
-        if(settings.getSenderCompID() != null) stringBuilder.append(SENDER_COMP_ID).append(settings.getSenderCompID());
-        if(settings.getTargetCompID() != null) stringBuilder.append(TARGET_COMP_ID).append(settings.getTargetCompID());
+        if (settings.getSenderCompID() != null) stringBuilder.append(SENDER_COMP_ID).append(settings.getSenderCompID());
+        if (settings.getTargetCompID() != null) stringBuilder.append(TARGET_COMP_ID).append(settings.getTargetCompID());
+        if (settings.getSenderSubID() != null) stringBuilder.append(SENDER_SUB_ID).append(settings.getSenderSubID());
         stringBuilder.append(SENDING_TIME).append(getTime());
     }
 
