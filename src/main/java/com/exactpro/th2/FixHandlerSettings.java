@@ -10,14 +10,13 @@ public class FixHandlerSettings implements IProtocolHandlerSettings {
     private long heartBtInt = 30;
     private String senderCompID;
     private String targetCompID;
+    private String defaultApplVerID;
+    private String senderSubID;
     private String encryptMethod;
     private String username;
     private String password;
     private Boolean resetSeqNumFlag = false;
     private Boolean resetOnLogon = false;
-
-    private long defaultApplVerID;
-
     private int testRequestDelay = 60;
     private int reconnectDelay = 5;
     private int disconnectRequestDelay = 5;
@@ -52,6 +51,22 @@ public class FixHandlerSettings implements IProtocolHandlerSettings {
 
     public void setTargetCompID(String targetCompID) {
         this.targetCompID = targetCompID;
+    }
+
+    public String getDefaultApplVerID() {
+        return defaultApplVerID;
+    }
+
+    public void setDefaultApplVerID(String defaultApplVerID) {
+        this.defaultApplVerID = defaultApplVerID;
+    }
+
+    public String getSenderSubID() {
+        return senderSubID;
+    }
+
+    public void setSenderSubID(String senderSubID) {
+        this.senderSubID = senderSubID;
     }
 
     public String getEncryptMethod() {
@@ -108,13 +123,5 @@ public class FixHandlerSettings implements IProtocolHandlerSettings {
 
     public void setDisconnectRequestDelay(int disconnectRequestDelay) {
         this.disconnectRequestDelay = disconnectRequestDelay;
-    }
-
-    public long getDefaultApplVerID() {
-        return defaultApplVerID;
-    }
-
-    public void setDefaultApplVerID(long defaultApplVerID) {
-        this.defaultApplVerID = defaultApplVerID;
     }
 }

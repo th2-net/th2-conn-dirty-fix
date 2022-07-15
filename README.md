@@ -34,6 +34,8 @@ This microservice allows sending and receiving messages via FIX protocol
 + *heartBtInt* - message waiting interval
 + *senderCompID* - ID of the sender of the message
 + *targetCompID* - ID of the message recipient
++ *defaultApplVerID* - specifies the service pack release being applied, by default, to message at the session level
++ *senderSubID* - assigned value used to identify specific message originator (desk, trader, etc.)
 + *encryptMethod* - encryption method
 + *username* - user name
 + *password* - user password
