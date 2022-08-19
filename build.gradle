@@ -1,0 +1,95 @@
+plugins {
+    id 'java'
+    id 'org.jetbrains.kotlin.jvm' version '1.5.31'
+    id 'com.palantir.docker' version '0.25.0'
+}
+
+apply plugin: 'application'
+apply plugin: 'com.palantir.docker'
+apply plugin: 'kotlin-kapt'
+
+group 'com.exactpro.th2'
+version release_version
+
+sourceCompatibility = 11
+targetCompatibility = 11
+
+repositories {
+    mavenCentral()
+
+    maven {
+        name 'Sonatype_snapshots'
+        url 'https://s01.oss.sonatype.org/content/repositories/snapshots/'
+    }
+
+    maven {
+        name 'Sonatype_releases'
+        url 'https://s01.oss.sonatype.org/content/repositories/releases/'
+    }
+
+    mavenLocal()
+
+    configurations.all {
+        resolutionStrategy.cacheChangingModulesFor 0, 'seconds'
+        resolutionStrategy.cacheDynamicVersionsFor 0, 'seconds'
+    }
+}
+
+dependencies {
+    api platform('com.exactpro.th2:bom:3.1.0')
+
+    implementation 'com.exactpro.th2:conn-dirty-tcp-core:1.0.0'
+    implementation 'com.exactpro.th2:common:3.32.0'
+
+    implementation 'org.slf4j:slf4j-api:1.7.33'
+    implementation 'io.github.microutils:kotlin-logging:2.1.21'
+
+    implementation 'io.netty:netty-all:4.1.72.Final'
+    implementation 'org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.6.0'
+    implementation 'com.google.auto.service:auto-service:1.0.1'
+
+    implementation group: 'com.fasterxml.jackson.core', name: 'jackson-core', version: jackson_version
+    implementation group: 'com.fasterxml.jackson.core', name: 'jackson-databind', version: jackson_version
+    implementation group: 'com.fasterxml.jackson.module', name: 'jackson-module-kotlin', version: jackson_version
+    implementation group: 'com.fasterxml.jackson.dataformat', name: 'jackson-dataformat-yaml', version: jackson_version
+
+    testImplementation 'org.mockito:mockito-all:1.10.19'
+    testImplementation 'org.jetbrains.kotlin:kotlin-test-junit5:1.6.0'
+
+    annotationProcessor 'com.google.auto.service:auto-service:1.0.1'
+    kapt 'com.google.auto.service:auto-service:1.0.1'
+}
+
+test {
+    useJUnitPlatform()
+}
+
+application {
+    mainClassName 'com.exactpro.th2.conn.dirty.tcp.core.Main'
+}
+
+applicationName = 'service'
+
+distTar {
+    archiveName "${applicationName}.tar"
+}
+
+dockerPrepare {
+    dependsOn distTar
+}
+
+docker {
+    copySpec.from(tarTree("$buildDir/distributions/${applicationName}.tar"))
+}
+
+compileKotlin {
+    kotlinOptions {
+        jvmTarget = '11'
+    }
+}
+
+compileTestKotlin {
+    kotlinOptions {
+        jvmTarget = '11'
+    }
+}
