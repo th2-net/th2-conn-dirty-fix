@@ -1,9 +1,33 @@
+/*
+ * Copyright 2022-2022 Exactpro (Exactpro Systems Limited)
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package com.exactpro.th2.util;
 
-import com.exactpro.th2.constants.Constants;
 import io.netty.buffer.ByteBuf;
+
 import java.nio.charset.StandardCharsets;
-import static com.exactpro.th2.constants.Constants.*;
+
+import static com.exactpro.th2.constants.Constants.BEGIN_STRING_TAG;
+import static com.exactpro.th2.constants.Constants.BODY_LENGTH_TAG;
+import static com.exactpro.th2.constants.Constants.CHECKSUM_TAG;
+import static com.exactpro.th2.constants.Constants.MSG_SEQ_NUM_TAG;
+import static com.exactpro.th2.constants.Constants.MSG_TYPE_TAG;
+import static com.exactpro.th2.constants.Constants.SENDER_COMP_ID_TAG;
+import static com.exactpro.th2.constants.Constants.SENDING_TIME_TAG;
+import static com.exactpro.th2.constants.Constants.TARGET_COMP_ID_TAG;
 
 public class MessageUtil {
 
@@ -113,7 +137,6 @@ public class MessageUtil {
         }
     }
 
-
     public static void putTag(ByteBuf message, String tag, String value) {
         byte[] toInsert;
 
@@ -143,8 +166,7 @@ public class MessageUtil {
             int toIdx;
             if (start == 0){
                 toIdx = message.indexOf(findTag(message, 0, BODY_LENGTH_TAG.toString()) + 1, message.readableBytes(), BYTE_SOH) + 1;
-            }
-            else{
+            } else{
                 toIdx = message.indexOf(start, message.readableBytes(), BYTE_SOH) + 1;
             }
             getSupplementedMessage(message, toInsert, toIdx);
