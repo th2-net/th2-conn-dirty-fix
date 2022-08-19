@@ -6,10 +6,10 @@ This microservice allows sending and receiving messages via FIX protocol
 
 + *autoStart* - enables/disable auto-starting of session on box start (`true` by default)
 + *autoStopAfter* - time in seconds after which session will be automatically stopped (`0` by default = disabled)
-+ *maxBatchSize* - max size of outgoing message batch (`100` by default)
++ *maxBatchSize* - max size of outgoing message batch (`1000` by default)
 + *maxFlushTime* - max message batch flush time (`1000` by default)
-+ *reconnectDelay* - delay between reconnects (`5000` by default)
 + *publishSentEvents* - enables/disables publish of "message sent" events (`true` by default)
++ *publishConnectEvents* - enables/disables publish of "connect/disconnect" events (`true` by default)
 + *sessions* - list of session settings
 
 ## Session settings
@@ -18,9 +18,11 @@ This microservice allows sending and receiving messages via FIX protocol
 + *host* - service host
 + *port* - service port
 + *security* - connection security settings
++ *maxMessageRate* - max outgoing message rate for this session (unlimited by default)
++ *autoReconnect* - enables/disables auto-reconnect (`true` by default)
++ *reconnectDelay* - delay between reconnects (`5000` by default)
 + *handler* - handler settings
 + *mangler* - mangler settings
-
 ### Security settings
 
 + *ssl* - enables SSL on connection (`false` by default)
@@ -219,17 +221,20 @@ spec:
     autoStopAfter: 0
     maxBatchSize: 100
     maxFlushTime: 1000
-    reconnectDelay: 5000
     publishSentEvents: true
+    publishConnectEvents: true
     sessions:
       - sessionAlias: client
         security:
           ssl: false
           sni: false
-          certFile: "<file-path>"
+          certFile: ${secret_path:cert_secret}
           acceptAllCerts: false
         host: "<host>"
         port: "<port>"
+        maxMessageRate: 100000
+        autoReconnect: true
+        reconnectDelay: 5000
         handler:
           beginString: FIXT.1.1
           heartBtInt: 30
