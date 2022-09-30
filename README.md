@@ -4,34 +4,24 @@ This microservice allows sending and receiving messages via FIX protocol
 
 ## Configuration
 
-+ *autoStart* - enables/disable auto-starting of session on box start (`true` by default)
-+ *autoStopAfter* - time in seconds after which session will be automatically stopped (`0` by default = disabled)
++ *sessions* - list of session settings
 + *maxBatchSize* - max size of outgoing message batch (`1000` by default)
 + *maxFlushTime* - max message batch flush time (`1000` by default)
++ *batchByGroup* - batch messages by group instead of session alias and direction (`true` by default)
 + *publishSentEvents* - enables/disables publish of "message sent" events (`true` by default)
 + *publishConnectEvents* - enables/disables publish of "connect/disconnect" events (`true` by default)
-+ *sessions* - list of session settings
 
 ## Session settings
 
 + *sessionAlias* - session alias for incoming/outgoing th2 messages
-+ *host* - service host
-+ *port* - service port
-+ *security* - connection security settings
-+ *maxMessageRate* - max outgoing message rate for this session (unlimited by default)
-+ *autoReconnect* - enables/disables auto-reconnect (`true` by default)
-+ *reconnectDelay* - delay between reconnects (`5000` by default)
 + *handler* - handler settings
 + *mangler* - mangler settings
-### Security settings
-
-+ *ssl* - enables SSL on connection (`false` by default)
-+ *sni* - enables SNI support (`false` by default)
-+ *certFile* - path to server certificate (`null` by default)
-+ *acceptAllCerts* - accept all server certificates (`false` by default, takes precedence over `certFile`)
 
 ## Handler settings
 
++ *host* - service host
++ *port* - service port
++ *security* - connection security settings
 + *beginString* - defines the start of a new message and the protocol version
 + *heartBtInt* - message waiting interval
 + *senderCompID* - ID of the sender of the message
@@ -46,6 +36,13 @@ This microservice allows sending and receiving messages via FIX protocol
 + *disconnectRequestDelay* - the interval for the shutdown request
 + *resetSeqNumFlag* - resetting sequence number in initial Logon message (when conn started)
 + *resetOnLogon* - resetting the sequence number in Logon in other cases (e.g. disconnect)
+
+### Security settings
+
++ *ssl* - enables SSL on connection (`false` by default)
++ *sni* - enables SNI support (`false` by default)
++ *certFile* - path to server certificate (`null` by default)
++ *acceptAllCerts* - accept all server certificates (`false` by default, takes precedence over `certFile`)
 
 ## Mangler settings
 
@@ -217,10 +214,9 @@ spec:
   image-version: 0.0.1
   type: th2-conn
   custom-config:
-    autoStart: true
-    autoStopAfter: 0
-    maxBatchSize: 100
+    maxBatchSize: 1000
     maxFlushTime: 1000
+    batchByGroup: false
     publishSentEvents: true
     publishConnectEvents: true
     sessions:
@@ -278,17 +274,11 @@ spec:
       settings:
         storageOnDemand: false
         queueLength: 1000
-    - name: outgoing_messages
+    - name: outgoing
       connection-type: mq
       attributes:
-        - second
         - publish
-        - raw
-    - name: incoming_messages
-      connection-type: mq
-      attributes:
-        - first
-        - publish
+        - store
         - raw
   extended-settings:
     externalBox:

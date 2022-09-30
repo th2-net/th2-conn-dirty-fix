@@ -16,20 +16,23 @@
 
 package com.exactpro.th2;
 
+import com.exactpro.th2.common.grpc.MessageID;
+import com.exactpro.th2.common.grpc.RawMessage;
 import com.exactpro.th2.conn.dirty.fix.FixField;
 import com.exactpro.th2.conn.dirty.tcp.core.api.IChannel;
-import com.exactpro.th2.conn.dirty.tcp.core.api.IContext;
-import com.exactpro.th2.conn.dirty.tcp.core.api.IProtocolHandler;
-import com.exactpro.th2.conn.dirty.tcp.core.api.IProtocolHandlerSettings;
+import com.exactpro.th2.conn.dirty.tcp.core.api.IChannel.SendMode;
+import com.exactpro.th2.conn.dirty.tcp.core.api.IHandler;
+import com.exactpro.th2.conn.dirty.tcp.core.api.IHandlerContext;
 import com.exactpro.th2.conn.dirty.tcp.core.util.CommonUtil;
-import com.google.auto.service.AutoService;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -51,8 +54,8 @@ import static com.exactpro.th2.conn.dirty.fix.FixByteBufUtilKt.firstField;
 import static com.exactpro.th2.conn.dirty.fix.FixByteBufUtilKt.lastField;
 import static com.exactpro.th2.conn.dirty.fix.FixByteBufUtilKt.updateChecksum;
 import static com.exactpro.th2.conn.dirty.fix.FixByteBufUtilKt.updateLength;
-import static com.exactpro.th2.conn.dirty.tcp.core.util.ByteBufUtil.indexOf;
-import static com.exactpro.th2.conn.dirty.tcp.core.util.ByteBufUtil.isEmpty;
+import static com.exactpro.th2.conn.dirty.tcp.core.util.CommonUtil.getEventId;
+import static com.exactpro.th2.conn.dirty.tcp.core.util.CommonUtil.toByteBuf;
 import static com.exactpro.th2.constants.Constants.BEGIN_SEQ_NO;
 import static com.exactpro.th2.constants.Constants.BEGIN_SEQ_NO_TAG;
 import static com.exactpro.th2.constants.Constants.BEGIN_STRING_TAG;
@@ -93,6 +96,8 @@ import static com.exactpro.th2.constants.Constants.TEST_REQ_ID;
 import static com.exactpro.th2.constants.Constants.TEST_REQ_ID_TAG;
 import static com.exactpro.th2.constants.Constants.TEXT_TAG;
 import static com.exactpro.th2.constants.Constants.USERNAME;
+import static com.exactpro.th2.netty.bytebuf.util.ByteBufUtil.indexOf;
+import static com.exactpro.th2.netty.bytebuf.util.ByteBufUtil.isEmpty;
 import static com.exactpro.th2.util.MessageUtil.findByte;
 import static java.nio.charset.StandardCharsets.US_ASCII;
 
@@ -101,45 +106,70 @@ import static java.nio.charset.StandardCharsets.US_ASCII;
 //todo ring buffer as cache
 //todo add events
 
-@AutoService(IProtocolHandler.class)
-public class FixHandler implements AutoCloseable, IProtocolHandler {
-
+public class FixHandler implements AutoCloseable, IHandler {
     private static final Logger LOGGER = LoggerFactory.getLogger(FixHandler.class);
     private static final String SOH = "\001";
     private static final byte BYTE_SOH = 1;
     private static final String STRING_MSG_TYPE = "MsgType";
     private static final String REJECT_REASON = "Reject reason";
     private static final String STUBBING_VALUE = "XXX";
+
     private final Log outgoingMessages = new Log(10000);
     private final AtomicInteger msgSeqNum = new AtomicInteger(0);
     private final AtomicInteger serverMsgSeqNum = new AtomicInteger(0);
     private final AtomicInteger testReqID = new AtomicInteger(0);
     private final AtomicBoolean enabled = new AtomicBoolean(false);
     private final AtomicBoolean connStarted = new AtomicBoolean(false);
-    private final ScheduledExecutorService executorService;
-    private final IContext<IProtocolHandlerSettings> context;
+    private final ScheduledExecutorService executorService = Executors.newScheduledThreadPool(1);
+    private final IHandlerContext context;
+    private final InetSocketAddress address;
+
     private Future<?> heartbeatTimer = CompletableFuture.completedFuture(null);
     private Future<?> testRequestTimer = CompletableFuture.completedFuture(null);
     private Future<?> reconnectRequestTimer = CompletableFuture.completedFuture(null);
     private Future<?> disconnectRequest = CompletableFuture.completedFuture(null);
-    private IChannel client;
+    private volatile IChannel channel;
     protected FixHandlerSettings settings;
     private long lastSendTime = System.currentTimeMillis();
 
-    public FixHandler(IContext<IProtocolHandlerSettings> context) {
+    public FixHandler(IHandlerContext context) {
         this.context = context;
-        executorService = Executors.newScheduledThreadPool(1);
         this.settings = (FixHandlerSettings) context.getSettings();
+        String host = settings.getHost();
+        if (host == null || host.isBlank()) throw new IllegalArgumentException("host cannot be blank");
+        int port = settings.getPort();
+        if (port < 1 || port > 65535) throw new IllegalArgumentException("port must be in 1..65535 range");
+        address = new InetSocketAddress(host, port);
+        Objects.requireNonNull(settings.getSecurity(), "security cannot be null");
         Objects.requireNonNull(settings.getBeginString(), "BeginString can not be null");
         Objects.requireNonNull(settings.getResetSeqNumFlag(), "ResetSeqNumFlag can not be null");
         Objects.requireNonNull(settings.getResetOnLogon(), "ResetOnLogon can not be null");
-        if(settings.getHeartBtInt() <= 0) throw new IllegalArgumentException("HeartBtInt cannot be negative or zero");
-        if(settings.getTestRequestDelay() <= 0) throw new IllegalArgumentException("TestRequestDelay cannot be negative or zero");
-        if(settings.getDisconnectRequestDelay() <= 0) throw new IllegalArgumentException("DisconnectRequestDelay cannot be negative or zero");
+        if (settings.getHeartBtInt() <= 0) throw new IllegalArgumentException("HeartBtInt cannot be negative or zero");
+        if (settings.getTestRequestDelay() <= 0) throw new IllegalArgumentException("TestRequestDelay cannot be negative or zero");
+        if (settings.getDisconnectRequestDelay() <= 0) throw new IllegalArgumentException("DisconnectRequestDelay cannot be negative or zero");
     }
 
     @Override
-    public ByteBuf onReceive(ByteBuf buffer) {
+    public void onStart() {
+        channel = context.createChannel(address, settings.getSecurity(), Map.of(), true, settings.getReconnectDelay() * 1000L, Integer.MAX_VALUE);
+    }
+
+    @NotNull
+    @Override
+    public CompletableFuture<MessageID> send(@NotNull RawMessage rawMessage) {
+        if (!channel.isOpen()) {
+            try {
+                channel.open().get();
+            } catch (Exception e) {
+                ExceptionUtils.rethrow(e);
+            }
+        }
+
+        return channel.send(toByteBuf(rawMessage.getBody()), rawMessage.getMetadata().getPropertiesMap(), getEventId(rawMessage), SendMode.HANDLE_AND_MANGLE);
+    }
+
+    @Override
+    public ByteBuf onReceive(IChannel channel, ByteBuf buffer) {
         int offset = buffer.readerIndex();
         if (offset == buffer.writerIndex()) return null;
 
@@ -176,7 +206,7 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
 
     @NotNull
     @Override
-    public Map<String, String> onIncoming(@NotNull ByteBuf message) {
+    public Map<String, String> onIncoming(@NotNull IChannel channel, @NotNull ByteBuf message) {
         Map<String, String> metadata = new HashMap<>();
 
         int beginString = indexOf(message, "8=FIX");
@@ -289,7 +319,7 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
         resendRequest.append(BEGIN_SEQ_NO).append(beginSeqNo).append(SOH);
         resendRequest.append(END_SEQ_NO).append(endSeqNo).append(SOH);
         setChecksumAndBodyLength(resendRequest);
-        client.send(Unpooled.wrappedBuffer(resendRequest.toString().getBytes(StandardCharsets.UTF_8)), Collections.emptyMap(), IChannel.SendMode.MANGLE);
+        channel.send(Unpooled.wrappedBuffer(resendRequest.toString().getBytes(StandardCharsets.UTF_8)), Collections.emptyMap(), null, IChannel.SendMode.MANGLE);
     }
 
     void sendResendRequest(int beginSeqNo) { //do private
@@ -301,7 +331,7 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
         setChecksumAndBodyLength(resendRequest);
 
         if (enabled.get()) {
-            client.send(Unpooled.wrappedBuffer(resendRequest.toString().getBytes(StandardCharsets.UTF_8)), Collections.emptyMap(), IChannel.SendMode.MANGLE);
+            channel.send(Unpooled.wrappedBuffer(resendRequest.toString().getBytes(StandardCharsets.UTF_8)), Collections.emptyMap(), null, IChannel.SendMode.MANGLE);
         } else {
             sendLogon();
         }
@@ -331,10 +361,10 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
                         StringBuilder heartbeat = new StringBuilder();
                         setHeader(heartbeat, MSG_TYPE_HEARTBEAT, i);
                         setChecksumAndBodyLength(heartbeat);
-                        client.send(Unpooled.wrappedBuffer(heartbeat.toString().getBytes(StandardCharsets.UTF_8)), Collections.emptyMap(), IChannel.SendMode.MANGLE);
+                        channel.send(Unpooled.wrappedBuffer(heartbeat.toString().getBytes(StandardCharsets.UTF_8)), Collections.emptyMap(), null, IChannel.SendMode.MANGLE);
                     } else {
                         if (LOGGER.isInfoEnabled()) LOGGER.info("Resending message: {}", storedMsg.toString(US_ASCII));
-                        client.send(storedMsg, Collections.emptyMap(), IChannel.SendMode.MANGLE);
+                        channel.send(storedMsg, Collections.emptyMap(), null, IChannel.SendMode.MANGLE);
                     }
                 }
             } catch (Exception e) {
@@ -351,7 +381,7 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
         setChecksumAndBodyLength(sequenceReset);
 
         if (enabled.get()) {
-            client.send(Unpooled.wrappedBuffer(sequenceReset.toString().getBytes(StandardCharsets.UTF_8)), Collections.emptyMap(), IChannel.SendMode.MANGLE);
+            channel.send(Unpooled.wrappedBuffer(sequenceReset.toString().getBytes(StandardCharsets.UTF_8)), Collections.emptyMap(), null, IChannel.SendMode.MANGLE);
         } else {
             sendLogon();
         }
@@ -384,7 +414,7 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
 
     @NotNull
     @Override
-    public void onOutgoing(@NotNull ByteBuf message, @NotNull Map<String, String> metadata) {
+    public void onOutgoing(@NotNull IChannel channel, @NotNull ByteBuf message, @NotNull Map<String, String> metadata) {
         lastSendTime = System.currentTimeMillis();
         onOutgoingUpdateTag(message, metadata);
 
@@ -495,8 +525,8 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
     }
 
     @Override
-    public void onOpen() {
-        this.client = context.getChannel();
+    public void onOpen(@NotNull IChannel channel) {
+        this.channel = channel;
         sendLogon();
     }
 
@@ -515,7 +545,7 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
 
         if (enabled.get()) {
             LOGGER.info("Send Heartbeat to server - {}", heartbeat);
-            client.send(Unpooled.wrappedBuffer(heartbeat.toString().getBytes(StandardCharsets.UTF_8)), Collections.emptyMap(), IChannel.SendMode.MANGLE);
+            channel.send(Unpooled.wrappedBuffer(heartbeat.toString().getBytes(StandardCharsets.UTF_8)), Collections.emptyMap(), null, IChannel.SendMode.MANGLE);
             lastSendTime = System.currentTimeMillis();
         } else {
             sendLogon();
@@ -529,7 +559,7 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
         testRequest.append(TEST_REQ_ID).append(testReqID.incrementAndGet());
         setChecksumAndBodyLength(testRequest);
         if (enabled.get()) {
-            client.send(Unpooled.wrappedBuffer(testRequest.toString().getBytes(StandardCharsets.UTF_8)), Collections.emptyMap(), IChannel.SendMode.MANGLE);
+            channel.send(Unpooled.wrappedBuffer(testRequest.toString().getBytes(StandardCharsets.UTF_8)), Collections.emptyMap(), null, IChannel.SendMode.MANGLE);
             LOGGER.info("Send TestRequest to server - {}", testRequest);
         } else {
             sendLogon();
@@ -555,11 +585,11 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
 
         setChecksumAndBodyLength(logon);
         LOGGER.info("Send logon - {}", logon);
-        client.send(Unpooled.wrappedBuffer(logon.toString().getBytes(StandardCharsets.UTF_8)), Collections.emptyMap(), IChannel.SendMode.MANGLE);
+        channel.send(Unpooled.wrappedBuffer(logon.toString().getBytes(StandardCharsets.UTF_8)), Collections.emptyMap(), null, IChannel.SendMode.MANGLE);
     }
 
     @Override
-    public void onClose() {
+    public void onClose(@NotNull IChannel channel) {
         enabled.set(false);
         if (heartbeatTimer != null) {
             heartbeatTimer.cancel(false);
@@ -576,7 +606,7 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
         setChecksumAndBodyLength(logout);
 
         if (enabled.get()) {
-            client.send(Unpooled.wrappedBuffer(logout.toString().getBytes(StandardCharsets.UTF_8)), Collections.emptyMap(), IChannel.SendMode.MANGLE);
+            channel.send(Unpooled.wrappedBuffer(logout.toString().getBytes(StandardCharsets.UTF_8)), Collections.emptyMap(), null, IChannel.SendMode.MANGLE);
         }
         disconnectRequest = executorService.schedule(() -> enabled.set(false), settings.getDisconnectRequestDelay(), TimeUnit.SECONDS);
     }

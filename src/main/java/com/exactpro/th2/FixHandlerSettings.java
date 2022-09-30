@@ -16,12 +16,13 @@
 
 package com.exactpro.th2;
 
-import com.exactpro.th2.conn.dirty.tcp.core.api.IProtocolHandlerSettings;
-import com.google.auto.service.AutoService;
+import com.exactpro.th2.conn.dirty.tcp.core.api.IChannel.Security;
+import com.exactpro.th2.conn.dirty.tcp.core.api.IHandlerSettings;
 
-@AutoService(IProtocolHandlerSettings.class)
-public class FixHandlerSettings implements IProtocolHandlerSettings {
-
+public class FixHandlerSettings implements IHandlerSettings {
+    private String host = null;
+    private int port = 0;
+    private Security security = new Security();
     private String beginString = "FIXT.1.1";
     private long heartBtInt = 30;
     private String senderCompID;
@@ -36,6 +37,30 @@ public class FixHandlerSettings implements IProtocolHandlerSettings {
     private int testRequestDelay = 60;
     private int reconnectDelay = 5;
     private int disconnectRequestDelay = 5;
+
+    public String getHost() {
+        return host;
+    }
+
+    public void setHost(String host) {
+        this.host = host;
+    }
+
+    public int getPort() {
+        return port;
+    }
+
+    public void setPort(int port) {
+        this.port = port;
+    }
+
+    public Security getSecurity() {
+        return security;
+    }
+
+    public void setSecurity(Security security) {
+        this.security = security;
+    }
 
     public String getBeginString() {
         return beginString;

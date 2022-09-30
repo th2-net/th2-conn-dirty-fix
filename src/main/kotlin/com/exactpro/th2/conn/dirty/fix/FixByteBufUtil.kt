@@ -16,15 +16,15 @@
 
 package com.exactpro.th2.conn.dirty.fix
 
-import com.exactpro.th2.conn.dirty.tcp.core.util.EMPTY_STRING
-import com.exactpro.th2.conn.dirty.tcp.core.util.endsWith
-import com.exactpro.th2.conn.dirty.tcp.core.util.get
-import com.exactpro.th2.conn.dirty.tcp.core.util.indexOf
-import com.exactpro.th2.conn.dirty.tcp.core.util.insert
-import com.exactpro.th2.conn.dirty.tcp.core.util.lastIndexOf
-import com.exactpro.th2.conn.dirty.tcp.core.util.replace
-import com.exactpro.th2.conn.dirty.tcp.core.util.requireReadable
-import com.exactpro.th2.conn.dirty.tcp.core.util.subsequence
+import com.exactpro.th2.netty.bytebuf.util.EMPTY_STRING
+import com.exactpro.th2.netty.bytebuf.util.endsWith
+import com.exactpro.th2.netty.bytebuf.util.get
+import com.exactpro.th2.netty.bytebuf.util.indexOf
+import com.exactpro.th2.netty.bytebuf.util.insert
+import com.exactpro.th2.netty.bytebuf.util.lastIndexOf
+import com.exactpro.th2.netty.bytebuf.util.replace
+import com.exactpro.th2.netty.bytebuf.util.requireReadable
+import com.exactpro.th2.netty.bytebuf.util.subsequence
 import io.netty.buffer.ByteBuf
 import java.nio.charset.Charset
 import kotlin.text.Charsets.UTF_8
