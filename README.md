@@ -214,7 +214,7 @@ metadata:
   name: fix-client
 spec:
   image-name: ghcr.io/th2-net/th2-conn-dirty-fix
-  image-version: 0.0.1
+  image-version: 0.0.2
   type: th2-conn
   custom-config:
     autoStart: true
@@ -303,3 +303,9 @@ spec:
         memory: 100Mi
         cpu: 20m
 ```
+
+# Changelog
+
+## 0.0.2
+
+* bump `com.exactpro.th2:conn-dirty-tcp-core` version to `1.0.1`
