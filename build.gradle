@@ -38,7 +38,7 @@ repositories {
 dependencies {
     api platform('com.exactpro.th2:bom:3.1.0')
 
-    implementation 'com.exactpro.th2:conn-dirty-tcp-core:1.0.1-TH2-4387-3345404883-SNAPSHOT'
+    implementation 'com.exactpro.th2:conn-dirty-tcp-core:1.0.2-connect-timeout-3393080326-SNAPSHOT'
     implementation 'com.exactpro.th2:common:3.32.0'
 
     implementation 'org.slf4j:slf4j-api:1.7.33'
