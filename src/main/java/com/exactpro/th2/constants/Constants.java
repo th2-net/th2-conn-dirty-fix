@@ -35,6 +35,7 @@ public class Constants {
     public static final Integer HEART_BT_INT_TAG = 108;
     public static final Integer USERNAME_TAG = 553;
     public static final Integer PASSWORD_TAG = 554;
+    public static final Integer ENCRYPTED_PASSWORD_TAG = 1402;
     public static final Integer SESSION_STATUS_TAG = 1409;
     public static final Integer TEST_REQ_ID_TAG = 112;
     public static final Integer BEGIN_SEQ_NO_TAG = 7;
@@ -57,6 +58,7 @@ public class Constants {
     public static final String HEART_BT_INT = SOH + HEART_BT_INT_TAG + "=";
     public static final String USERNAME = SOH + USERNAME_TAG + "=";
     public static final String PASSWORD = SOH + PASSWORD_TAG + "=";
+    public static final String ENCRYPTED_PASSWORD = SOH + ENCRYPTED_PASSWORD_TAG + "=";
     public static final String TEST_REQ_ID = SOH + TEST_REQ_ID_TAG + "=";
     public static final String BEGIN_SEQ_NO = SOH + BEGIN_SEQ_NO_TAG + "=";
     public static final String END_SEQ_NO = SOH + END_SEQ_NO_TAG + "=";

@@ -31,6 +31,7 @@ public class FixHandlerSettings implements IProtocolHandlerSettings {
     private String encryptMethod;
     private String username;
     private String password;
+    private String passwordEncryptKeyFilePath;
     private Boolean resetSeqNumFlag = false;
     private Boolean resetOnLogon = false;
     private int testRequestDelay = 60;
@@ -101,6 +102,10 @@ public class FixHandlerSettings implements IProtocolHandlerSettings {
         return password;
     }
 
+    public String getPasswordEncryptKeyFilePath() {
+        return passwordEncryptKeyFilePath;
+    }
+
     public Boolean getResetSeqNumFlag() { return resetSeqNumFlag; }
 
     public Boolean getResetOnLogon() { return resetOnLogon; }
@@ -119,6 +124,10 @@ public class FixHandlerSettings implements IProtocolHandlerSettings {
 
     public void setPassword(String password) {
         this.password = password;
+    }
+
+    public void setPasswordEncryptKeyFilePath(String passwordEncryptKeyFilePath) {
+        this.passwordEncryptKeyFilePath = passwordEncryptKeyFilePath;
     }
 
     public void setResetSeqNumFlag(Boolean resetSeqNumFlag) { this.resetSeqNumFlag = resetSeqNumFlag; }

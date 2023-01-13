@@ -31,6 +31,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Paths;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Collections;
@@ -51,6 +52,7 @@ import static com.exactpro.th2.conn.dirty.fix.FixByteBufUtilKt.firstField;
 import static com.exactpro.th2.conn.dirty.fix.FixByteBufUtilKt.lastField;
 import static com.exactpro.th2.conn.dirty.fix.FixByteBufUtilKt.updateChecksum;
 import static com.exactpro.th2.conn.dirty.fix.FixByteBufUtilKt.updateLength;
+import static com.exactpro.th2.conn.dirty.fix.FixUtilKt.encryptPassword;
 import static com.exactpro.th2.conn.dirty.tcp.core.util.ByteBufUtil.indexOf;
 import static com.exactpro.th2.conn.dirty.tcp.core.util.ByteBufUtil.isEmpty;
 import static com.exactpro.th2.constants.Constants.BEGIN_SEQ_NO;
@@ -61,6 +63,7 @@ import static com.exactpro.th2.constants.Constants.BODY_LENGTH_TAG;
 import static com.exactpro.th2.constants.Constants.CHECKSUM;
 import static com.exactpro.th2.constants.Constants.CHECKSUM_TAG;
 import static com.exactpro.th2.constants.Constants.DEFAULT_APPL_VER_ID;
+import static com.exactpro.th2.constants.Constants.ENCRYPTED_PASSWORD;
 import static com.exactpro.th2.constants.Constants.ENCRYPT_METHOD;
 import static com.exactpro.th2.constants.Constants.END_SEQ_NO;
 import static com.exactpro.th2.constants.Constants.END_SEQ_NO_TAG;
@@ -551,7 +554,14 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
         if (reset) logon.append(RESET_SEQ_NUM).append("Y");
         if (settings.getDefaultApplVerID() != null) logon.append(DEFAULT_APPL_VER_ID).append(settings.getDefaultApplVerID());
         if (settings.getUsername() != null) logon.append(USERNAME).append(settings.getUsername());
-        if (settings.getPassword() != null) logon.append(PASSWORD).append(settings.getPassword());
+        if (settings.getPassword() != null) {
+            if (settings.getPasswordEncryptKeyFilePath() != null) {
+                logon.append(ENCRYPTED_PASSWORD).append(encryptPassword(settings.getPassword(),
+                        Paths.get(settings.getPasswordEncryptKeyFilePath())));
+            } else {
+                logon.append(PASSWORD).append(settings.getPassword());
+            }
+        }
 
         setChecksumAndBodyLength(logon);
         LOGGER.info("Send logon - {}", logon);
