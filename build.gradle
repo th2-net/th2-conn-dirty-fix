@@ -36,10 +36,10 @@ repositories {
 }
 
 dependencies {
-    api platform('com.exactpro.th2:bom:3.1.0')
+    api platform('com.exactpro.th2:bom:4.0.2')
 
     implementation 'com.exactpro.th2:conn-dirty-tcp-core:1.0.0'
-    implementation 'com.exactpro.th2:common:3.32.0'
+    implementation 'com.exactpro.th2:common:3.42.1-TH2-2212-common-cannot-recover-channel-level-exceptions-3496538720-SNAPSHOT'
 
     implementation 'org.slf4j:slf4j-api:1.7.33'
     implementation 'io.github.microutils:kotlin-logging:2.1.21'
