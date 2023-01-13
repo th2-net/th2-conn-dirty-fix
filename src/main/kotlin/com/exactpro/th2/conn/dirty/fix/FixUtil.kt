@@ -16,23 +16,36 @@
 
 package com.exactpro.th2.conn.dirty.fix
 
-import java.io.ObjectInputStream
+import java.nio.charset.Charset
 import java.nio.file.Files
 import java.nio.file.Path
-import java.security.PublicKey
+import java.security.KeyFactory
+import java.security.interfaces.RSAPublicKey
+import java.security.spec.X509EncodedKeySpec
 import java.util.*
 import javax.crypto.Cipher
 
-fun encryptPassword(password: String, encryptionKeyFilePath: Path): String {
-    check(Files.exists(encryptionKeyFilePath)) {
-        "Encryption key file path '$encryptionKeyFilePath' doesn't exist"
-    }
-    ObjectInputStream(Files.newInputStream(encryptionKeyFilePath)).use { inputStream ->
-        val publicKey: PublicKey = inputStream.readObject() as PublicKey
-        val cipher = Cipher.getInstance("RSA")
-        cipher.init(Cipher.ENCRYPT_MODE, publicKey)
-        val encryptedPasswordBytes = cipher.doFinal(password.toByteArray())
-        return String(Base64.getEncoder().encode(encryptedPasswordBytes))
-    }
 
+fun encryptPassword(password: String, encryptionKeyPemFilePath: Path): String {
+    check(Files.exists(encryptionKeyPemFilePath)) {
+        "Encryption key file path '$encryptionKeyPemFilePath' doesn't exist"
+    }
+    val key = String(Files.readAllBytes(encryptionKeyPemFilePath), Charset.defaultCharset())
+
+    val privateKeyPEM = key
+        .replace("-----BEGIN PUBLIC KEY-----", "")
+        .replace(System.lineSeparator().toRegex(), "")
+        .replace("-----END PUBLIC KEY-----", "")
+
+    val encoded: ByteArray = Base64.getDecoder().decode(privateKeyPEM)
+
+    val keyFactory = KeyFactory.getInstance("RSA")
+    val keySpec = X509EncodedKeySpec(encoded)
+    val publicKey = keyFactory.generatePublic(keySpec) as RSAPublicKey
+
+    val cipher = Cipher.getInstance("RSA")
+    cipher.init(Cipher.ENCRYPT_MODE, publicKey)
+
+    val encryptedPasswordBytes = cipher.doFinal(password.toByteArray())
+    return String(Base64.getEncoder().encode(encryptedPasswordBytes))
 }
