@@ -308,6 +308,6 @@ spec:
 
 # Changelog
 
-## 2.12.0
+## 0.0.2
 
 * Supported the password encryption via `RSA` algorithm.
