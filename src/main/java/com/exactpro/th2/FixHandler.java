@@ -52,7 +52,6 @@ import static com.exactpro.th2.conn.dirty.fix.FixByteBufUtilKt.firstField;
 import static com.exactpro.th2.conn.dirty.fix.FixByteBufUtilKt.lastField;
 import static com.exactpro.th2.conn.dirty.fix.FixByteBufUtilKt.updateChecksum;
 import static com.exactpro.th2.conn.dirty.fix.FixByteBufUtilKt.updateLength;
-import static com.exactpro.th2.conn.dirty.fix.KeyFileType.Companion.Algorithm.RSA;
 import static com.exactpro.th2.conn.dirty.fix.KeyFileType.Companion.OperationMode.ENCRYPT_MODE;
 import static com.exactpro.th2.conn.dirty.tcp.core.util.ByteBufUtil.indexOf;
 import static com.exactpro.th2.conn.dirty.tcp.core.util.ByteBufUtil.isEmpty;
@@ -560,7 +559,11 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
         if (settings.getPassword() != null) {
             if (settings.getPasswordEncryptKeyFilePath() != null) {
                 logon.append(ENCRYPTED_PASSWORD).append(settings.getPasswordEncryptKeyFileType()
-                        .encrypt(Paths.get(settings.getPasswordEncryptKeyFilePath()), settings.getPassword(), RSA, ENCRYPT_MODE));
+                        .encrypt(Paths.get(settings.getPasswordEncryptKeyFilePath()),
+                                settings.getPassword(),
+                                settings.getPasswordKeyEncryptAlgorithm(),
+                                settings.getPasswordEncryptAlgorithm(),
+                                ENCRYPT_MODE));
             } else {
                 logon.append(PASSWORD).append(settings.getPassword());
             }

@@ -34,6 +34,14 @@ public class FixHandlerSettings implements IProtocolHandlerSettings {
     private String password;
     private String passwordEncryptKeyFilePath;
     private KeyFileType passwordEncryptKeyFileType = KeyFileType.PEM_PUBLIC_KEY;
+    /**
+     * Value from Java Security Standard Algorithm Names
+     */
+    private String passwordKeyEncryptAlgorithm;
+    /**
+     * Value from Java Security Standard Algorithm Names
+     */
+    private String passwordEncryptAlgorithm;
     private Boolean resetSeqNumFlag = false;
     private Boolean resetOnLogon = false;
     private int testRequestDelay = 60;
@@ -112,6 +120,14 @@ public class FixHandlerSettings implements IProtocolHandlerSettings {
         return passwordEncryptKeyFileType;
     }
 
+    public String getPasswordKeyEncryptAlgorithm() {
+        return passwordKeyEncryptAlgorithm;
+    }
+
+    public String getPasswordEncryptAlgorithm() {
+        return passwordEncryptAlgorithm;
+    }
+
     public Boolean getResetSeqNumFlag() { return resetSeqNumFlag; }
 
     public Boolean getResetOnLogon() { return resetOnLogon; }
@@ -138,6 +154,14 @@ public class FixHandlerSettings implements IProtocolHandlerSettings {
 
     public void setPasswordEncryptKeyFileType(KeyFileType passwordEncryptKeyFileType) {
         this.passwordEncryptKeyFileType = passwordEncryptKeyFileType;
+    }
+
+    public void setPasswordKeyEncryptAlgorithm(String passwordKeyEncryptAlgorithm) {
+        this.passwordKeyEncryptAlgorithm = passwordKeyEncryptAlgorithm;
+    }
+
+    public void setPasswordEncryptAlgorithm(String passwordEncryptAlgorithm) {
+        this.passwordEncryptAlgorithm = passwordEncryptAlgorithm;
     }
 
     public void setResetSeqNumFlag(Boolean resetSeqNumFlag) { this.resetSeqNumFlag = resetSeqNumFlag; }
