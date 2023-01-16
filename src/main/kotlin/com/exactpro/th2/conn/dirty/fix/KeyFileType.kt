@@ -31,9 +31,9 @@ enum class KeyFileType {
                 "Encryption key file path '$keyFilePath' doesn't exist"
             }
 
-            val privateKeyPEM = String(Files.readAllBytes(keyFilePath), Charset.defaultCharset())
+            val privateKeyPEM = Files.readString(keyFilePath, Charset.defaultCharset())
                 .replace(BEGIN_PUBLIC_KEY, "")
-                .replace(System.lineSeparator().toRegex(), "")
+                .replace(System.lineSeparator(), "")
                 .replace(END_PUBLIC_KEY, "")
 
             val publicKey = KeyFactory.getInstance(algorithm.value)
