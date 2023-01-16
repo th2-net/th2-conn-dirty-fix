@@ -1,4 +1,4 @@
-# th2-conn-dirty-fix
+# th2-conn-dirty-fix (0.0.2)
 
 This microservice allows sending and receiving messages via FIX protocol
 
@@ -40,7 +40,9 @@ This microservice allows sending and receiving messages via FIX protocol
 + *senderSubID* - assigned value used to identify specific message originator (desk, trader, etc.)
 + *encryptMethod* - encryption method
 + *username* - user name
-+ *password* - user password
++ *password* - user password. FIX client uses the Password(554) tag for unencrypted mode and the EncryptedPassword(1404) tag for encrypted. The encryption is enabled via *passwordEncryptKeyFilePath* option.
++ *passwordEncryptKeyFilePath* - path to key file for encrypting. FIX client encrypts the *password* value via `RSA` algorithm using specified file if this option is specified.
++ *passwordEncryptKeyFileType* - type of key file content. Supported values: `[PEM_PUBLIC_KEY]`. Default value is `PEM_PUBLIC_KEY`
 + *testRequestDelay* - interval for test request
 + *reconnectDelay* - interval for reconnect
 + *disconnectRequestDelay* - the interval for the shutdown request
@@ -303,3 +305,9 @@ spec:
         memory: 100Mi
         cpu: 20m
 ```
+
+# Changelog
+
+## 0.0.2
+
+* Supported the password encryption via `RSA` algorithm.

@@ -16,6 +16,7 @@
 
 package com.exactpro.th2;
 
+import com.exactpro.th2.conn.dirty.fix.KeyFileType;
 import com.exactpro.th2.conn.dirty.tcp.core.api.IProtocolHandlerSettings;
 import com.google.auto.service.AutoService;
 
@@ -31,6 +32,8 @@ public class FixHandlerSettings implements IProtocolHandlerSettings {
     private String encryptMethod;
     private String username;
     private String password;
+    private String passwordEncryptKeyFilePath;
+    private KeyFileType passwordEncryptKeyFileType = KeyFileType.PEM_PUBLIC_KEY;
     private Boolean resetSeqNumFlag = false;
     private Boolean resetOnLogon = false;
     private int testRequestDelay = 60;
@@ -101,6 +104,14 @@ public class FixHandlerSettings implements IProtocolHandlerSettings {
         return password;
     }
 
+    public String getPasswordEncryptKeyFilePath() {
+        return passwordEncryptKeyFilePath;
+    }
+
+    public KeyFileType getPasswordEncryptKeyFileType() {
+        return passwordEncryptKeyFileType;
+    }
+
     public Boolean getResetSeqNumFlag() { return resetSeqNumFlag; }
 
     public Boolean getResetOnLogon() { return resetOnLogon; }
@@ -119,6 +130,14 @@ public class FixHandlerSettings implements IProtocolHandlerSettings {
 
     public void setPassword(String password) {
         this.password = password;
+    }
+
+    public void setPasswordEncryptKeyFilePath(String passwordEncryptKeyFilePath) {
+        this.passwordEncryptKeyFilePath = passwordEncryptKeyFilePath;
+    }
+
+    public void setPasswordEncryptKeyFileType(KeyFileType passwordEncryptKeyFileType) {
+        this.passwordEncryptKeyFileType = passwordEncryptKeyFileType;
     }
 
     public void setResetSeqNumFlag(Boolean resetSeqNumFlag) { this.resetSeqNumFlag = resetSeqNumFlag; }

@@ -31,6 +31,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Paths;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Collections;
@@ -51,6 +52,8 @@ import static com.exactpro.th2.conn.dirty.fix.FixByteBufUtilKt.firstField;
 import static com.exactpro.th2.conn.dirty.fix.FixByteBufUtilKt.lastField;
 import static com.exactpro.th2.conn.dirty.fix.FixByteBufUtilKt.updateChecksum;
 import static com.exactpro.th2.conn.dirty.fix.FixByteBufUtilKt.updateLength;
+import static com.exactpro.th2.conn.dirty.fix.KeyFileType.Companion.Algorithm.RSA;
+import static com.exactpro.th2.conn.dirty.fix.KeyFileType.Companion.OperationMode.ENCRYPT_MODE;
 import static com.exactpro.th2.conn.dirty.tcp.core.util.ByteBufUtil.indexOf;
 import static com.exactpro.th2.conn.dirty.tcp.core.util.ByteBufUtil.isEmpty;
 import static com.exactpro.th2.constants.Constants.BEGIN_SEQ_NO;
@@ -61,6 +64,7 @@ import static com.exactpro.th2.constants.Constants.BODY_LENGTH_TAG;
 import static com.exactpro.th2.constants.Constants.CHECKSUM;
 import static com.exactpro.th2.constants.Constants.CHECKSUM_TAG;
 import static com.exactpro.th2.constants.Constants.DEFAULT_APPL_VER_ID;
+import static com.exactpro.th2.constants.Constants.ENCRYPTED_PASSWORD;
 import static com.exactpro.th2.constants.Constants.ENCRYPT_METHOD;
 import static com.exactpro.th2.constants.Constants.END_SEQ_NO;
 import static com.exactpro.th2.constants.Constants.END_SEQ_NO_TAG;
@@ -95,6 +99,7 @@ import static com.exactpro.th2.constants.Constants.TEXT_TAG;
 import static com.exactpro.th2.constants.Constants.USERNAME;
 import static com.exactpro.th2.util.MessageUtil.findByte;
 import static java.nio.charset.StandardCharsets.US_ASCII;
+import static java.util.Objects.requireNonNull;
 
 //todo parse logout
 //todo gapFillTag
@@ -130,12 +135,14 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
         this.context = context;
         executorService = Executors.newScheduledThreadPool(1);
         this.settings = (FixHandlerSettings) context.getSettings();
-        Objects.requireNonNull(settings.getBeginString(), "BeginString can not be null");
-        Objects.requireNonNull(settings.getResetSeqNumFlag(), "ResetSeqNumFlag can not be null");
-        Objects.requireNonNull(settings.getResetOnLogon(), "ResetOnLogon can not be null");
+        requireNonNull(settings.getBeginString(), "BeginString can not be null");
+        requireNonNull(settings.getResetSeqNumFlag(), "ResetSeqNumFlag can not be null");
+        requireNonNull(settings.getResetOnLogon(), "ResetOnLogon can not be null");
         if(settings.getHeartBtInt() <= 0) throw new IllegalArgumentException("HeartBtInt cannot be negative or zero");
         if(settings.getTestRequestDelay() <= 0) throw new IllegalArgumentException("TestRequestDelay cannot be negative or zero");
         if(settings.getDisconnectRequestDelay() <= 0) throw new IllegalArgumentException("DisconnectRequestDelay cannot be negative or zero");
+        if(settings.getPasswordEncryptKeyFilePath() != null) requireNonNull(settings.getPasswordEncryptKeyFileType(),
+                "PasswordEncryptKeyFileType can not be null, because the PasswordEncryptKeyFilePath `" + settings.getPasswordEncryptKeyFilePath() + "` isn't null");
     }
 
     @Override
@@ -201,7 +208,7 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
         }
 
         serverMsgSeqNum.incrementAndGet();
-        int receivedMsgSeqNum = Integer.parseInt(Objects.requireNonNull(msgSeqNumValue.getValue()));
+        int receivedMsgSeqNum = Integer.parseInt(requireNonNull(msgSeqNumValue.getValue()));
 
         if (serverMsgSeqNum.get() < receivedMsgSeqNum) {
             if (enabled.get()) {
@@ -209,7 +216,7 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
             }
         }
 
-        String msgTypeValue = Objects.requireNonNull(msgType.getValue());
+        String msgTypeValue = requireNonNull(msgType.getValue());
         switch (msgTypeValue) {
             case MSG_TYPE_HEARTBEAT:
                 if (LOGGER.isInfoEnabled()) LOGGER.info("Heartbeat received - {}", message.toString(US_ASCII));
@@ -275,8 +282,8 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
         FixField gapFillFlagValue = findField(message, GAP_FILL_FLAG_TAG);
         FixField seqNumValue = findField(message, NEW_SEQ_NO_TAG);
 
-        if (seqNumValue != null && (gapFillFlagValue == null || Objects.requireNonNull(gapFillFlagValue.getValue()).equals("N"))) {
-            serverMsgSeqNum.set(Integer.parseInt(Objects.requireNonNull(seqNumValue.getValue())));
+        if (seqNumValue != null && (gapFillFlagValue == null || requireNonNull(gapFillFlagValue.getValue()).equals("N"))) {
+            serverMsgSeqNum.set(Integer.parseInt(requireNonNull(seqNumValue.getValue())));
         } else if (LOGGER.isTraceEnabled()) {
             LOGGER.trace("Failed to reset servers MsgSeqNum. No such tag in message: {}", message.toString(US_ASCII));
         }
@@ -316,8 +323,8 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
         FixField strEndSeqNo = findField(message, END_SEQ_NO_TAG);
 
         if (strBeginSeqNo != null && strEndSeqNo != null) {
-            int beginSeqNo = Integer.parseInt(Objects.requireNonNull(strBeginSeqNo.getValue()));
-            int endSeqNo = Integer.parseInt(Objects.requireNonNull(strEndSeqNo.getValue()));
+            int beginSeqNo = Integer.parseInt(requireNonNull(strBeginSeqNo.getValue()));
+            int endSeqNo = Integer.parseInt(requireNonNull(strEndSeqNo.getValue()));
 
             try {
                 // FIXME: there is not syn on the outgoing sequence. Should make operations with seq more careful
@@ -370,19 +377,18 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
 
     private boolean checkLogon(ByteBuf message) {
         FixField sessionStatusField = findField(message, SESSION_STATUS_TAG); //check another options
-        if (sessionStatusField == null || Objects.requireNonNull(sessionStatusField.getValue()).equals("0")) {
+        if (sessionStatusField == null || requireNonNull(sessionStatusField.getValue()).equals("0")) {
             FixField msgSeqNumValue = findField(message, MSG_SEQ_NUM_TAG);
             if (msgSeqNumValue == null) {
                 return false;
             }
-            serverMsgSeqNum.set(Integer.parseInt(Objects.requireNonNull(msgSeqNumValue.getValue())));
+            serverMsgSeqNum.set(Integer.parseInt(requireNonNull(msgSeqNumValue.getValue())));
             context.send(CommonUtil.toEvent("successful login"));
             return true;
         }
         return false;
     }
 
-    @NotNull
     @Override
     public void onOutgoing(@NotNull ByteBuf message, @NotNull Map<String, String> metadata) {
         lastSendTime = System.currentTimeMillis();
@@ -551,7 +557,14 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
         if (reset) logon.append(RESET_SEQ_NUM).append("Y");
         if (settings.getDefaultApplVerID() != null) logon.append(DEFAULT_APPL_VER_ID).append(settings.getDefaultApplVerID());
         if (settings.getUsername() != null) logon.append(USERNAME).append(settings.getUsername());
-        if (settings.getPassword() != null) logon.append(PASSWORD).append(settings.getPassword());
+        if (settings.getPassword() != null) {
+            if (settings.getPasswordEncryptKeyFilePath() != null) {
+                logon.append(ENCRYPTED_PASSWORD).append(settings.getPasswordEncryptKeyFileType()
+                        .encrypt(Paths.get(settings.getPasswordEncryptKeyFilePath()), settings.getPassword(), RSA, ENCRYPT_MODE));
+            } else {
+                logon.append(PASSWORD).append(settings.getPassword());
+            }
+        }
 
         setChecksumAndBodyLength(logon);
         LOGGER.info("Send logon - {}", logon);
