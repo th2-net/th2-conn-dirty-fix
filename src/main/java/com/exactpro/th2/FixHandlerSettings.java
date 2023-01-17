@@ -32,16 +32,17 @@ public class FixHandlerSettings implements IProtocolHandlerSettings {
     private String encryptMethod;
     private String username;
     private String password;
+    private String newPassword;
     private String passwordEncryptKeyFilePath;
     private KeyFileType passwordEncryptKeyFileType = KeyFileType.PEM_PUBLIC_KEY;
     /**
      * Value from Java Security Standard Algorithm Names
      */
-    private String passwordKeyEncryptAlgorithm;
+    private String passwordKeyEncryptAlgorithm = "RSA";
     /**
      * Value from Java Security Standard Algorithm Names
      */
-    private String passwordEncryptAlgorithm;
+    private String passwordEncryptAlgorithm = "RSA";
     private Boolean resetSeqNumFlag = false;
     private Boolean resetOnLogon = false;
     private int testRequestDelay = 60;
@@ -112,6 +113,10 @@ public class FixHandlerSettings implements IProtocolHandlerSettings {
         return password;
     }
 
+    public String getNewPassword() {
+        return newPassword;
+    }
+
     public String getPasswordEncryptKeyFilePath() {
         return passwordEncryptKeyFilePath;
     }
@@ -146,6 +151,10 @@ public class FixHandlerSettings implements IProtocolHandlerSettings {
 
     public void setPassword(String password) {
         this.password = password;
+    }
+
+    public void setNewPassword(String newPassword) {
+        this.newPassword = newPassword;
     }
 
     public void setPasswordEncryptKeyFilePath(String passwordEncryptKeyFilePath) {
