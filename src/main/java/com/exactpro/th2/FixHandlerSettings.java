@@ -32,8 +32,17 @@ public class FixHandlerSettings implements IProtocolHandlerSettings {
     private String encryptMethod;
     private String username;
     private String password;
+    private String newPassword;
     private String passwordEncryptKeyFilePath;
     private KeyFileType passwordEncryptKeyFileType = KeyFileType.PEM_PUBLIC_KEY;
+    /**
+     * Value from Java Security Standard Algorithm Names
+     */
+    private String passwordKeyEncryptAlgorithm = "RSA";
+    /**
+     * Value from Java Security Standard Algorithm Names
+     */
+    private String passwordEncryptAlgorithm = "RSA";
     private Boolean resetSeqNumFlag = false;
     private Boolean resetOnLogon = false;
     private int testRequestDelay = 60;
@@ -104,12 +113,24 @@ public class FixHandlerSettings implements IProtocolHandlerSettings {
         return password;
     }
 
+    public String getNewPassword() {
+        return newPassword;
+    }
+
     public String getPasswordEncryptKeyFilePath() {
         return passwordEncryptKeyFilePath;
     }
 
     public KeyFileType getPasswordEncryptKeyFileType() {
         return passwordEncryptKeyFileType;
+    }
+
+    public String getPasswordKeyEncryptAlgorithm() {
+        return passwordKeyEncryptAlgorithm;
+    }
+
+    public String getPasswordEncryptAlgorithm() {
+        return passwordEncryptAlgorithm;
     }
 
     public Boolean getResetSeqNumFlag() { return resetSeqNumFlag; }
@@ -132,12 +153,24 @@ public class FixHandlerSettings implements IProtocolHandlerSettings {
         this.password = password;
     }
 
+    public void setNewPassword(String newPassword) {
+        this.newPassword = newPassword;
+    }
+
     public void setPasswordEncryptKeyFilePath(String passwordEncryptKeyFilePath) {
         this.passwordEncryptKeyFilePath = passwordEncryptKeyFilePath;
     }
 
     public void setPasswordEncryptKeyFileType(KeyFileType passwordEncryptKeyFileType) {
         this.passwordEncryptKeyFileType = passwordEncryptKeyFileType;
+    }
+
+    public void setPasswordKeyEncryptAlgorithm(String passwordKeyEncryptAlgorithm) {
+        this.passwordKeyEncryptAlgorithm = passwordKeyEncryptAlgorithm;
+    }
+
+    public void setPasswordEncryptAlgorithm(String passwordEncryptAlgorithm) {
+        this.passwordEncryptAlgorithm = passwordEncryptAlgorithm;
     }
 
     public void setResetSeqNumFlag(Boolean resetSeqNumFlag) { this.resetSeqNumFlag = resetSeqNumFlag; }

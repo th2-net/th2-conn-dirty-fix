@@ -1,5 +1,5 @@
 /*
- * Copyright 2022-2022 Exactpro (Exactpro Systems Limited)
+ * Copyright 2022-2023 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -52,7 +52,6 @@ import static com.exactpro.th2.conn.dirty.fix.FixByteBufUtilKt.firstField;
 import static com.exactpro.th2.conn.dirty.fix.FixByteBufUtilKt.lastField;
 import static com.exactpro.th2.conn.dirty.fix.FixByteBufUtilKt.updateChecksum;
 import static com.exactpro.th2.conn.dirty.fix.FixByteBufUtilKt.updateLength;
-import static com.exactpro.th2.conn.dirty.fix.KeyFileType.Companion.Algorithm.RSA;
 import static com.exactpro.th2.conn.dirty.fix.KeyFileType.Companion.OperationMode.ENCRYPT_MODE;
 import static com.exactpro.th2.conn.dirty.tcp.core.util.ByteBufUtil.indexOf;
 import static com.exactpro.th2.conn.dirty.tcp.core.util.ByteBufUtil.isEmpty;
@@ -80,6 +79,8 @@ import static com.exactpro.th2.constants.Constants.MSG_TYPE_RESEND_REQUEST;
 import static com.exactpro.th2.constants.Constants.MSG_TYPE_SEQUENCE_RESET;
 import static com.exactpro.th2.constants.Constants.MSG_TYPE_TAG;
 import static com.exactpro.th2.constants.Constants.MSG_TYPE_TEST_REQUEST;
+import static com.exactpro.th2.constants.Constants.NEW_ENCRYPTED_PASSWORD;
+import static com.exactpro.th2.constants.Constants.NEW_PASSWORD;
 import static com.exactpro.th2.constants.Constants.NEW_SEQ_NO;
 import static com.exactpro.th2.constants.Constants.NEW_SEQ_NO_TAG;
 import static com.exactpro.th2.constants.Constants.PASSWORD;
@@ -559,16 +560,31 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
         if (settings.getUsername() != null) logon.append(USERNAME).append(settings.getUsername());
         if (settings.getPassword() != null) {
             if (settings.getPasswordEncryptKeyFilePath() != null) {
-                logon.append(ENCRYPTED_PASSWORD).append(settings.getPasswordEncryptKeyFileType()
-                        .encrypt(Paths.get(settings.getPasswordEncryptKeyFilePath()), settings.getPassword(), RSA, ENCRYPT_MODE));
+                logon.append(ENCRYPTED_PASSWORD).append(encrypt(settings.getPassword()));
             } else {
                 logon.append(PASSWORD).append(settings.getPassword());
+            }
+        }
+        if (settings.getNewPassword() != null) {
+            if (settings.getPasswordEncryptKeyFilePath() != null) {
+                logon.append(NEW_ENCRYPTED_PASSWORD).append(encrypt(settings.getNewPassword()));
+            } else {
+                logon.append(NEW_PASSWORD).append(settings.getNewPassword());
             }
         }
 
         setChecksumAndBodyLength(logon);
         LOGGER.info("Send logon - {}", logon);
         client.send(Unpooled.wrappedBuffer(logon.toString().getBytes(StandardCharsets.UTF_8)), Collections.emptyMap(), IChannel.SendMode.MANGLE);
+    }
+
+    private String encrypt(String password) {
+        return settings.getPasswordEncryptKeyFileType()
+                .encrypt(Paths.get(settings.getPasswordEncryptKeyFilePath()),
+                        password,
+                        settings.getPasswordKeyEncryptAlgorithm(),
+                        settings.getPasswordEncryptAlgorithm(),
+                        ENCRYPT_MODE);
     }
 
     @Override

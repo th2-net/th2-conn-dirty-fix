@@ -26,7 +26,13 @@ import javax.crypto.Cipher
 
 enum class KeyFileType {
     PEM_PUBLIC_KEY {
-        override fun encrypt(keyFilePath: Path, value: String, algorithm: Algorithm, operationMode: OperationMode): String {
+        override fun encrypt(
+            keyFilePath: Path,
+            value: String,
+            keyEncryptAlgorithm: String,
+            encryptAlgorithm: String,
+            operationMode: OperationMode
+        ): String {
             check(Files.exists(keyFilePath)) {
                 "Encryption key file path '$keyFilePath' doesn't exist"
             }
@@ -36,10 +42,10 @@ enum class KeyFileType {
                 .replace(System.lineSeparator(), "")
                 .replace(END_PUBLIC_KEY, "")
 
-            val publicKey = KeyFactory.getInstance(algorithm.value)
+            val publicKey = KeyFactory.getInstance(keyEncryptAlgorithm)
                 .generatePublic(X509EncodedKeySpec(Base64.getDecoder().decode(privateKeyPEM))) as RSAPublicKey
 
-            Cipher.getInstance(algorithm.value).apply {
+            Cipher.getInstance(encryptAlgorithm).apply {
                 init(Cipher.ENCRYPT_MODE, publicKey)
                 return String(Base64.getEncoder().encode(doFinal(value.toByteArray())))
             }
@@ -49,7 +55,8 @@ enum class KeyFileType {
     abstract fun encrypt(
         keyFilePath: Path,
         value: String,
-        algorithm: Algorithm = Algorithm.RSA,
+        keyEncryptAlgorithm: String,
+        encryptAlgorithm: String,
         operationMode: OperationMode = OperationMode.ENCRYPT_MODE
     ): String
 
@@ -57,9 +64,6 @@ enum class KeyFileType {
         private const val BEGIN_PUBLIC_KEY = "-----BEGIN PUBLIC KEY-----"
         private const val END_PUBLIC_KEY = "-----END PUBLIC KEY-----"
 
-        enum class Algorithm(val value: String) {
-            RSA("RSA")
-        }
         enum class OperationMode(val value: Int) {
             ENCRYPT_MODE(Cipher.ENCRYPT_MODE),
         }
