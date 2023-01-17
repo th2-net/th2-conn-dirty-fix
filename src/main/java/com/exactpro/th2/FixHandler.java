@@ -24,23 +24,33 @@ import com.exactpro.th2.conn.dirty.tcp.core.api.IChannel.SendMode;
 import com.exactpro.th2.conn.dirty.tcp.core.api.IHandler;
 import com.exactpro.th2.conn.dirty.tcp.core.api.IHandlerContext;
 import com.exactpro.th2.conn.dirty.tcp.core.util.CommonUtil;
+import com.exactpro.th2.util.Util;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.exception.ExceptionUtils;
+import org.checkerframework.checker.units.qual.A;
 import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Paths;
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
+import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
+import java.util.TimeZone;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -48,6 +58,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 
 import static com.exactpro.th2.conn.dirty.fix.FixByteBufUtilKt.findField;
 import static com.exactpro.th2.conn.dirty.fix.FixByteBufUtilKt.findLastField;
@@ -58,6 +69,7 @@ import static com.exactpro.th2.conn.dirty.fix.FixByteBufUtilKt.updateLength;
 import static com.exactpro.th2.conn.dirty.tcp.core.util.CommonUtil.getEventId;
 import static com.exactpro.th2.conn.dirty.tcp.core.util.CommonUtil.toByteBuf;
 import static com.exactpro.th2.conn.dirty.fix.KeyFileType.Companion.OperationMode.ENCRYPT_MODE;
+import static com.exactpro.th2.constants.Constants.ADMIN_MESSAGES;
 import static com.exactpro.th2.constants.Constants.BEGIN_SEQ_NO;
 import static com.exactpro.th2.constants.Constants.BEGIN_SEQ_NO_TAG;
 import static com.exactpro.th2.constants.Constants.BEGIN_STRING_TAG;
@@ -72,6 +84,7 @@ import static com.exactpro.th2.constants.Constants.END_SEQ_NO;
 import static com.exactpro.th2.constants.Constants.END_SEQ_NO_TAG;
 import static com.exactpro.th2.constants.Constants.GAP_FILL_FLAG_TAG;
 import static com.exactpro.th2.constants.Constants.HEART_BT_INT;
+import static com.exactpro.th2.constants.Constants.IS_POSS_DUP;
 import static com.exactpro.th2.constants.Constants.MSG_SEQ_NUM;
 import static com.exactpro.th2.constants.Constants.MSG_SEQ_NUM_TAG;
 import static com.exactpro.th2.constants.Constants.MSG_TYPE;
@@ -86,7 +99,10 @@ import static com.exactpro.th2.constants.Constants.NEW_ENCRYPTED_PASSWORD;
 import static com.exactpro.th2.constants.Constants.NEW_PASSWORD;
 import static com.exactpro.th2.constants.Constants.NEW_SEQ_NO;
 import static com.exactpro.th2.constants.Constants.NEW_SEQ_NO_TAG;
+import static com.exactpro.th2.constants.Constants.NEXT_EXPECTED_SEQ_NUM;
+import static com.exactpro.th2.constants.Constants.NEXT_EXPECTED_SEQ_NUMBER_TAG;
 import static com.exactpro.th2.constants.Constants.PASSWORD;
+import static com.exactpro.th2.constants.Constants.POSS_DUP_TAG;
 import static com.exactpro.th2.constants.Constants.RESET_SEQ_NUM;
 import static com.exactpro.th2.constants.Constants.SENDER_COMP_ID;
 import static com.exactpro.th2.constants.Constants.SENDER_COMP_ID_TAG;
@@ -102,7 +118,9 @@ import static com.exactpro.th2.constants.Constants.TEST_REQ_ID_TAG;
 import static com.exactpro.th2.constants.Constants.TEXT_TAG;
 import static com.exactpro.th2.constants.Constants.USERNAME;
 import static com.exactpro.th2.netty.bytebuf.util.ByteBufUtil.indexOf;
+import static com.exactpro.th2.netty.bytebuf.util.ByteBufUtil.insert;
 import static com.exactpro.th2.netty.bytebuf.util.ByteBufUtil.isEmpty;
+import static com.exactpro.th2.netty.bytebuf.util.ByteBufUtil.set;
 import static com.exactpro.th2.util.MessageUtil.findByte;
 import static java.nio.charset.StandardCharsets.US_ASCII;
 import static java.util.Objects.requireNonNull;
@@ -121,14 +139,15 @@ public class FixHandler implements AutoCloseable, IHandler {
     private static final String STUBBING_VALUE = "XXX";
 
     private final Log outgoingMessages = new Log(10000);
-    private final AtomicInteger msgSeqNum = new AtomicInteger(0);
-    private final AtomicInteger serverMsgSeqNum = new AtomicInteger(0);
+    private final AtomicInteger msgSeqNum; // = new AtomicInteger(0);
+    private final AtomicInteger serverMsgSeqNum; // = new AtomicInteger(0);
     private final AtomicInteger testReqID = new AtomicInteger(0);
     private final AtomicBoolean enabled = new AtomicBoolean(false);
     private final AtomicBoolean connStarted = new AtomicBoolean(false);
     private final ScheduledExecutorService executorService = Executors.newScheduledThreadPool(1);
     private final IHandlerContext context;
     private final InetSocketAddress address;
+    private final LocalTime resetTime;
 
     private Future<?> heartbeatTimer = CompletableFuture.completedFuture(null);
     private Future<?> testRequestTimer = CompletableFuture.completedFuture(null);
@@ -141,6 +160,30 @@ public class FixHandler implements AutoCloseable, IHandler {
     public FixHandler(IHandlerContext context) {
         this.context = context;
         this.settings = (FixHandlerSettings) context.getSettings();
+        if(settings.getStateFilePath() == null) {
+            msgSeqNum = new AtomicInteger(0);
+            serverMsgSeqNum = new AtomicInteger(0);
+        } else {
+            SequenceHolder sequences = Util.readSequences(settings.getStateFilePath());
+            msgSeqNum = new AtomicInteger(sequences.getClientSeq());
+            serverMsgSeqNum = new AtomicInteger(sequences.getServerSeq());
+        }
+        if(settings.getStartOfADayTime() != null) {
+            DateTimeFormatter formatter = DateTimeFormatter.ofPattern("HH:mm:ss").withZone(ZoneOffset.UTC);
+            Instant instant = Instant.from(formatter.parse(settings.getStartOfADayTime()));
+            resetTime = LocalDateTime.ofInstant(instant, ZoneId.of("UTC")).toLocalTime();
+            LocalDateTime now = LocalDateTime.now();
+            LocalDateTime scheduleTime;
+            if(now.with(resetTime).isAfter(now)) {
+                scheduleTime = now.with(resetTime);
+            } else {
+                scheduleTime = now.plusDays(1).with(resetTime);
+            }
+            long time = scheduleTime.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli() - System.currentTimeMillis();
+            executorService.schedule(this::reset, time, TimeUnit.MILLISECONDS);
+        } else {
+            resetTime = LocalTime.now();
+        }
         String host = settings.getHost();
         if (host == null || host.isBlank()) throw new IllegalArgumentException("host cannot be blank");
         int port = settings.getPort();
@@ -236,10 +279,25 @@ public class FixHandler implements AutoCloseable, IHandler {
             return metadata;
         }
 
-        serverMsgSeqNum.incrementAndGet();
+        FixField possDup = findField(message, POSS_DUP_TAG);
+        boolean isDup = false;
+        if(possDup != null) {
+            isDup = possDup.getValue().equals(IS_POSS_DUP);
+        }
+
         int receivedMsgSeqNum = Integer.parseInt(requireNonNull(msgSeqNumValue.getValue()));
 
-        if (serverMsgSeqNum.get() < receivedMsgSeqNum) {
+        if(receivedMsgSeqNum < serverMsgSeqNum.get() && !isDup) {
+            sendLogout();
+            reconnectRequestTimer = executorService.schedule(this::sendLogon, settings.getReconnectDelay() + settings.getDisconnectRequestDelay(), TimeUnit.SECONDS);
+            metadata.put(REJECT_REASON, "SeqNum is less than expected.");
+            if (LOGGER.isErrorEnabled()) LOGGER.error("Invalid message. SeqNum is less than expected {}: {}", serverMsgSeqNum.get(), message.toString(US_ASCII));
+            return metadata;
+        }
+
+        serverMsgSeqNum.incrementAndGet();
+
+        if (serverMsgSeqNum.get() < receivedMsgSeqNum && !isDup) {
             if (enabled.get()) {
                 sendResendRequest(serverMsgSeqNum.get(), receivedMsgSeqNum);
             }
@@ -257,6 +315,22 @@ public class FixHandler implements AutoCloseable, IHandler {
                 boolean connectionSuccessful = checkLogon(message);
                 enabled.set(connectionSuccessful);
                 if (connectionSuccessful) {
+                    msgSeqNum.incrementAndGet();
+                    if(settings.isMaintainSessionBasedOnNextExpectedSeqNumber()) {
+                        FixField nextExpectedSeqField = findField(message, NEXT_EXPECTED_SEQ_NUMBER_TAG);
+                        if(nextExpectedSeqField == null) {
+                            metadata.put(REJECT_REASON, "No NextExpectedSeqNum field");
+                            if (LOGGER.isErrorEnabled()) LOGGER.error("Invalid message. No NextExpectedSeqNum in message: {}", message.toString(US_ASCII));
+                            return metadata;
+                        }
+
+                        int nextExpectedSeqNumber = Integer.parseInt(requireNonNull(msgSeqNumValue.getValue()));
+                        if(serverMsgSeqNum.get() + 1 < nextExpectedSeqNumber) {
+                            sendResendRequest(serverMsgSeqNum.get(), nextExpectedSeqNumber);
+                            serverMsgSeqNum.set(nextExpectedSeqNumber);
+                        }
+                    }
+
                     if (!connStarted.get()){
                         connStarted.set(true);
                     }
@@ -318,10 +392,18 @@ public class FixHandler implements AutoCloseable, IHandler {
         }
     }
 
+    private void reset() {
+        msgSeqNum.set(0);
+        serverMsgSeqNum.set(0);
+        LocalDateTime scheduleTime = LocalDateTime.now().plusDays(1).with(resetTime);
+        long diff = scheduleTime.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli() - System.currentTimeMillis();
+        executorService.schedule(this::reset, diff, TimeUnit.MILLISECONDS);
+    }
+
     public void sendResendRequest(int beginSeqNo, int endSeqNo) { //do private
         lastSendTime = System.currentTimeMillis();
         StringBuilder resendRequest = new StringBuilder();
-        setHeader(resendRequest, MSG_TYPE_RESEND_REQUEST, msgSeqNum.incrementAndGet());
+        setHeader(resendRequest, MSG_TYPE_RESEND_REQUEST, msgSeqNum.incrementAndGet(), false);
         resendRequest.append(BEGIN_SEQ_NO).append(beginSeqNo).append(SOH);
         resendRequest.append(END_SEQ_NO).append(endSeqNo).append(SOH);
         setChecksumAndBodyLength(resendRequest);
@@ -331,7 +413,7 @@ public class FixHandler implements AutoCloseable, IHandler {
     void sendResendRequest(int beginSeqNo) { //do private
         lastSendTime = System.currentTimeMillis();
         StringBuilder resendRequest = new StringBuilder();
-        setHeader(resendRequest, MSG_TYPE_RESEND_REQUEST, msgSeqNum.incrementAndGet());
+        setHeader(resendRequest, MSG_TYPE_RESEND_REQUEST, msgSeqNum.incrementAndGet(), false);
         resendRequest.append(BEGIN_SEQ_NO).append(beginSeqNo);
         resendRequest.append(END_SEQ_NO).append(0);
         setChecksumAndBodyLength(resendRequest);
@@ -365,11 +447,13 @@ public class FixHandler implements AutoCloseable, IHandler {
                     ByteBuf storedMsg = outgoingMessages.get(i);
                     if (storedMsg == null) {
                         StringBuilder heartbeat = new StringBuilder();
-                        setHeader(heartbeat, MSG_TYPE_HEARTBEAT, i);
+                        setHeader(heartbeat, MSG_TYPE_HEARTBEAT, i, false);
                         setChecksumAndBodyLength(heartbeat);
                         channel.send(Unpooled.wrappedBuffer(heartbeat.toString().getBytes(StandardCharsets.UTF_8)), Collections.emptyMap(), null, IChannel.SendMode.MANGLE);
                     } else {
                         if (LOGGER.isInfoEnabled()) LOGGER.info("Resending message: {}", storedMsg.toString(US_ASCII));
+                        FixField sendingTime = findField(storedMsg, SENDING_TIME_TAG);
+                        sendingTime.insertNext(POSS_DUP_TAG, IS_POSS_DUP);
                         channel.send(storedMsg, Collections.emptyMap(), null, IChannel.SendMode.MANGLE);
                     }
                 }
@@ -382,7 +466,7 @@ public class FixHandler implements AutoCloseable, IHandler {
     private void sendSequenceReset() {
         lastSendTime = System.currentTimeMillis();
         StringBuilder sequenceReset = new StringBuilder();
-        setHeader(sequenceReset, MSG_TYPE_SEQUENCE_RESET, msgSeqNum.incrementAndGet());
+        setHeader(sequenceReset, MSG_TYPE_SEQUENCE_RESET, msgSeqNum.incrementAndGet(), false);
         sequenceReset.append(NEW_SEQ_NO).append(msgSeqNum.get() + 1);
         setChecksumAndBodyLength(sequenceReset);
 
@@ -464,9 +548,10 @@ public class FixHandler implements AutoCloseable, IHandler {
         }
 
         FixField msgSeqNum = findField(message, MSG_SEQ_NUM_TAG, US_ASCII, bodyLength);
+        int seqNumValue = this.msgSeqNum.incrementAndGet();
 
         if (msgSeqNum == null) {
-            int msgSeqNumValue = this.msgSeqNum.incrementAndGet();
+            int msgSeqNumValue = seqNumValue;
 
             if (msgType != null) {
                 msgSeqNum = msgType.insertNext(MSG_SEQ_NUM_TAG, Integer.toString(msgSeqNumValue));
@@ -525,6 +610,12 @@ public class FixHandler implements AutoCloseable, IHandler {
             }
         }
 
+        if(settings.isSaveAdminMessages()) {
+            outgoingMessages.put(seqNumValue, message);
+        } else if(msgType != null && !ADMIN_MESSAGES.contains(msgType)) {
+            outgoingMessages.put(seqNumValue, message);
+        }
+
         updateLength(message);
         updateChecksum(message);
     }
@@ -545,7 +636,7 @@ public class FixHandler implements AutoCloseable, IHandler {
         StringBuilder heartbeat = new StringBuilder();
         int seqNum = msgSeqNum.incrementAndGet();
 
-        setHeader(heartbeat, MSG_TYPE_HEARTBEAT, seqNum);
+        setHeader(heartbeat, MSG_TYPE_HEARTBEAT, seqNum, false);
         setChecksumAndBodyLength(heartbeat);
 
         if (enabled.get()) {
@@ -560,7 +651,7 @@ public class FixHandler implements AutoCloseable, IHandler {
     public void sendTestRequest() { //do private
         lastSendTime = System.currentTimeMillis();
         StringBuilder testRequest = new StringBuilder();
-        setHeader(testRequest, MSG_TYPE_TEST_REQUEST, msgSeqNum.get());
+        setHeader(testRequest, MSG_TYPE_TEST_REQUEST, msgSeqNum.get(), false);
         testRequest.append(TEST_REQ_ID).append(testReqID.incrementAndGet());
         setChecksumAndBodyLength(testRequest);
         if (enabled.get()) {
@@ -580,7 +671,8 @@ public class FixHandler implements AutoCloseable, IHandler {
         else reset = settings.getResetOnLogon();
         if (reset) msgSeqNum.getAndSet(0);
 
-        setHeader(logon, MSG_TYPE_LOGON, msgSeqNum.incrementAndGet());
+        setHeader(logon, MSG_TYPE_LOGON, msgSeqNum.get() + 1, false);
+        if (settings.isMaintainSessionBasedOnNextExpectedSeqNumber()) logon.append(NEXT_EXPECTED_SEQ_NUM).append(msgSeqNum.get() + 2);
         if (settings.getEncryptMethod() != null) logon.append(ENCRYPT_METHOD).append(settings.getEncryptMethod());
         logon.append(HEART_BT_INT).append(settings.getHeartBtInt());
         if (reset) logon.append(RESET_SEQ_NUM).append("Y");
@@ -606,6 +698,26 @@ public class FixHandler implements AutoCloseable, IHandler {
         channel.send(Unpooled.wrappedBuffer(logon.toString().getBytes(StandardCharsets.UTF_8)), Collections.emptyMap(), null, IChannel.SendMode.MANGLE);
     }
 
+    private void sendLogout() {
+        StringBuilder logout = new StringBuilder();
+        setHeader(logout, MSG_TYPE_LOGOUT, msgSeqNum.incrementAndGet(), false);
+        setChecksumAndBodyLength(logout);
+
+        if (enabled.get()) {
+            channel.send(Unpooled.wrappedBuffer(logout.toString().getBytes(StandardCharsets.UTF_8)), Collections.emptyMap(), null, IChannel.SendMode.MANGLE);
+        }
+        disconnectRequest = executorService.schedule(() -> {
+            enabled.set(false);
+            try {
+                Util.writeSequences(msgSeqNum.get(), serverMsgSeqNum.incrementAndGet(), settings.getStateFilePath());
+            } catch (IOException e) {
+                if (LOGGER.isErrorEnabled()) {
+                    LOGGER.error("Sequence number were not saved: clientSeq - {}, serverSeq - {}", msgSeqNum.get(), serverMsgSeqNum.get());
+                }
+            }
+        }, settings.getDisconnectRequestDelay(), TimeUnit.SECONDS);
+    }
+
     private String encrypt(String password) {
         return settings.getPasswordEncryptKeyFileType()
                 .encrypt(Paths.get(settings.getPasswordEncryptKeyFilePath()),
@@ -628,17 +740,10 @@ public class FixHandler implements AutoCloseable, IHandler {
 
     @Override
     public void close() {
-        StringBuilder logout = new StringBuilder();
-        setHeader(logout, MSG_TYPE_LOGOUT, msgSeqNum.incrementAndGet());
-        setChecksumAndBodyLength(logout);
-
-        if (enabled.get()) {
-            channel.send(Unpooled.wrappedBuffer(logout.toString().getBytes(StandardCharsets.UTF_8)), Collections.emptyMap(), null, IChannel.SendMode.MANGLE);
-        }
-        disconnectRequest = executorService.schedule(() -> enabled.set(false), settings.getDisconnectRequestDelay(), TimeUnit.SECONDS);
+        sendLogout();
     }
 
-    private void setHeader(StringBuilder stringBuilder, String msgType, Integer seqNum) {
+    private void setHeader(StringBuilder stringBuilder, String msgType, Integer seqNum, Boolean possDup) {
         stringBuilder.append(BEGIN_STRING_TAG).append("=").append(settings.getBeginString());
         stringBuilder.append(MSG_TYPE).append(msgType);
         stringBuilder.append(MSG_SEQ_NUM).append(seqNum);
@@ -646,6 +751,8 @@ public class FixHandler implements AutoCloseable, IHandler {
         if (settings.getTargetCompID() != null) stringBuilder.append(TARGET_COMP_ID).append(settings.getTargetCompID());
         if (settings.getSenderSubID() != null) stringBuilder.append(SENDER_SUB_ID).append(settings.getSenderSubID());
         stringBuilder.append(SENDING_TIME).append(getTime());
+        if(possDup)
+            stringBuilder.append(POSS_DUP_TAG).append(IS_POSS_DUP);
     }
 
     private void setChecksumAndBodyLength(StringBuilder stringBuilder) {

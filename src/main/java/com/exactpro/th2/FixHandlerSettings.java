@@ -1,5 +1,5 @@
 /*
- * Copyright 2022-2022 Exactpro (Exactpro Systems Limited)
+ * Copyright 2022-2023 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,6 +20,8 @@ import com.exactpro.th2.conn.dirty.fix.KeyFileType;
 import com.exactpro.th2.conn.dirty.tcp.core.api.IChannel.Security;
 import com.exactpro.th2.conn.dirty.tcp.core.api.IHandlerSettings;
 
+import java.time.LocalDateTime;
+
 public class FixHandlerSettings implements IHandlerSettings {
     private String host = null;
     private int port = 0;
@@ -36,6 +38,7 @@ public class FixHandlerSettings implements IHandlerSettings {
     private String newPassword;
     private String passwordEncryptKeyFilePath;
     private KeyFileType passwordEncryptKeyFileType = KeyFileType.PEM_PUBLIC_KEY;
+    private String stateFilePath;
     /**
      * Value from Java Security Standard Algorithm Names
      */
@@ -46,6 +49,9 @@ public class FixHandlerSettings implements IHandlerSettings {
     private String passwordEncryptAlgorithm = "RSA";
     private Boolean resetSeqNumFlag = false;
     private Boolean resetOnLogon = false;
+    private Boolean maintainSessionBasedOnNextExpectedSeqNumber = false;
+    private Boolean isSaveAdminMessages = false;
+    private String startOfADayTime;
     private int testRequestDelay = 60;
     private int reconnectDelay = 5;
     private int disconnectRequestDelay = 5;
@@ -196,6 +202,38 @@ public class FixHandlerSettings implements IHandlerSettings {
 
     public void setPasswordEncryptAlgorithm(String passwordEncryptAlgorithm) {
         this.passwordEncryptAlgorithm = passwordEncryptAlgorithm;
+    }
+
+    public String getStateFilePath() {
+        return stateFilePath;
+    }
+
+    public void setStateFilePath(String stateFilePath) {
+        this.stateFilePath = stateFilePath;
+    }
+
+    public Boolean isMaintainSessionBasedOnNextExpectedSeqNumber() {
+        return maintainSessionBasedOnNextExpectedSeqNumber;
+    }
+
+    public void setMaintainSessionBasedOnNextExpectedSeqNumber(Boolean maintainSessionBasedOnNextExpectedSeqNumber) {
+        this.maintainSessionBasedOnNextExpectedSeqNumber = maintainSessionBasedOnNextExpectedSeqNumber;
+    }
+
+    public Boolean isSaveAdminMessages() {
+        return isSaveAdminMessages;
+    }
+
+    public void setSaveAdminMessages(Boolean saveAdminMessages) {
+        isSaveAdminMessages = saveAdminMessages;
+    }
+
+    public String getStartOfADayTime() {
+        return startOfADayTime;
+    }
+
+    public void setStartOfADayTime(String startOfADayTime) {
+        this.startOfADayTime = startOfADayTime;
     }
 
     public void setResetSeqNumFlag(Boolean resetSeqNumFlag) { this.resetSeqNumFlag = resetSeqNumFlag; }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2022-2022 Exactpro (Exactpro Systems Limited)
+ * Copyright 2022-2023 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -28,6 +28,7 @@ import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
@@ -63,6 +64,8 @@ class FixHandlerTest {
     @BeforeAll
     static void init() {
         fixHandler.onOpen(channel);
+        ByteBuf logonResponse = Unpooled.wrappedBuffer("8=FIXT.1.1\0019=105\00135=A\00134=1\00149=server\00156=client\00150=system\00152=2014-12-22T10:15:30Z\00198=0\001108=30\0011137=9\0011409=0\00110=203\001".getBytes(StandardCharsets.US_ASCII));
+        fixHandler.onIncoming(channel, logonResponse);
         oneMessageBuffer = Unpooled.wrappedBuffer("8=FIXT.1.1\0019=13\00135=AE\001552=1\00110=169\001".getBytes(StandardCharsets.US_ASCII));
         buffer = Unpooled.wrappedBuffer(("8=FIXT.1.1\0019=13\00135=AE\001552=1\00110=169\0018=FIXT.1.1\0019=13\00135=NN" +
                 "\001552=2\00110=100\0018=FIXT.1.1\0019=13\00135=NN\001552=2\00110=100\001").getBytes(StandardCharsets.US_ASCII));
@@ -132,12 +135,15 @@ class FixHandlerTest {
     void sendResendRequestTest() {
         String expectedLogon = "8=FIXT.1.1\u00019=105\u000135=A\u000134=2\u000149=client\u000156=server\u0001" +
                 "50=trader\u000152=2014-12-22T10:15:30Z\u000198=0\u0001108=30\u00011137=9\u0001553=username\u0001554=pass\u000110=204\u0001"; // #1 sent logon
+        ByteBuf logonResponse = Unpooled.wrappedBuffer("8=FIXT.1.1\0019=105\00135=A\00134=2\00149=server\00156=client\00150=system\00152=2014-12-22T10:15:30Z\00198=0\001108=30\0011137=9\0011409=0\00110=203\001".getBytes(StandardCharsets.US_ASCII));
+
         // #2 sent resendRequest
         String expectedResendRequest = "8=FIXT.1.1\u00019=73\u000135=2\u000134=3\u000149=client\u000156=server" +       // #2 sent resendRequest
                 "\u000150=trader\u000152=2014-12-22T10:15:30Z\u00017=1\u000116=0\u000110=227\u0001";
 
         channel.clearQueue();
         fixHandler.sendLogon();
+        fixHandler.onIncoming(channel, logonResponse);
         fixHandler.sendResendRequest(1);
         assertEquals(expectedLogon, new String(channel.getQueue().get(0).array()));
         //assertEquals(expectedHeartbeat, new String(client.getQueue().get(1).array()));
@@ -148,12 +154,14 @@ class FixHandlerTest {
     void onConnectionTest() {
         channel.clearQueue();
         fixHandler.onOpen(channel);
+        ByteBuf logonResponse = Unpooled.wrappedBuffer("8=FIXT.1.1\0019=105\00135=A\00134=1\00149=server\00156=client\00150=system\00152=2014-12-22T10:15:30Z\00198=0\001108=30\0011137=9\0011409=0\00110=203\001".getBytes(StandardCharsets.US_ASCII));
+        fixHandler.onIncoming(channel, logonResponse);
         try {
             Thread.sleep(10000);
         } catch (InterruptedException e) {
             e.printStackTrace();
         }
-        assertEquals("8=FIXT.1.1\u00019=105\u000135=A\u000134=7\u000149=client\u000156=server\u000150=trader\u000152=2014-12-22T10:15:30Z\u000198=0\u0001108=30\u00011137=9\u0001553=username\u0001554=pass\u000110=209\u0001",
+        assertEquals("8=FIXT.1.1\u00019=105\u000135=A\u000134=8\u000149=client\u000156=server\u000150=trader\u000152=2014-12-22T10:15:30Z\u000198=0\u0001108=30\u00011137=9\u0001553=username\u0001554=pass\u000110=210\u0001",
                 new String(channel.getQueue().get(0).array()));
     }
 
@@ -165,9 +173,9 @@ class FixHandlerTest {
         ByteBuf bufferForPrepareMessage4 = Unpooled.buffer().writeBytes("8=FIXT.1.1\0019=192\00135=A\00111=3428785\00122=8\00138=30\00140=2\00144=55\00148=INSTR1\00154=1\00159=0\00160=20220127-18:38:35\001526=11111\001528=A\001581=1\001453=4\001448=DEMO-CONN1\001447=D\001452=76\001448=0\001447=P\001452=3\001448=0\00147=P\001452=122\001448=3\001447=P\001452=12\00110=228\001".getBytes(StandardCharsets.US_ASCII));
 
         String expectedMessage1 = "8=FIXT.1.1\u00019=70\u000135=A\u0001552=1\u000149=client\u000134=8\u000156=server\u000152=2014-12-22T10:15:30Z\u000150=trader\u000110=132\u0001";
-        String expectedMessage2 = "8=FIXT.1.1\u00019=65\u000134=4\u000149=client\u000156=server\u000152=2014-12-22T10:15:30Z\u000150=trader\u0001552=1\u000110=157\u0001";
-        String expectedMessage3 = "8=FIXT.1.1\u00019=243\u000135=A\u000134=5\u000149=client\u000156=server\u000150=trader\u000111=9977764\u000122=8\u000138=100\u000140=2\u000144=55\u000152=20220127-12:00:40.775\u000148=INSTR2\u000154=2\u000159=3\u000160=20220127-15:00:36\u0001528=A\u0001581=1\u0001453=4\u0001448=DEMO-CONN2\u0001447=D\u0001452=76\u0001448=0\u0001447=P\u0001452=3\u0001448=0\u0001447=P\u0001452=122\u0001448=3\u0001447=P\u0001452=12\u000110=120\u0001";
-        String expectedMessage4 = "8=FIXT.1.1\u00019=250\u000135=A\u000134=6\u000149=client\u000156=server\u000152=2014-12-22T10:15:30Z\u000150=trader\u000111=3428785\u000122=8\u000138=30\u000140=2\u000144=55\u000148=INSTR1\u000154=1\u000159=0\u000160=20220127-18:38:35\u0001526=11111\u0001528=A\u0001581=1\u0001453=4\u0001448=DEMO-CONN1\u0001447=D\u0001452=76\u0001448=0\u0001447=P\u0001452=3\u0001448=0\u000147=P\u0001452=122\u0001448=3\u0001447=P\u0001452=12\u000110=235\u0001";
+        String expectedMessage2 = "8=FIXT.1.1\u00019=65\u000134=5\u000149=client\u000156=server\u000152=2014-12-22T10:15:30Z\u000150=trader\u0001552=1\u000110=158\u0001";
+        String expectedMessage3 = "8=FIXT.1.1\u00019=243\u000135=A\u000134=6\u000149=client\u000156=server\u000150=trader\u000111=9977764\u000122=8\u000138=100\u000140=2\u000144=55\u000152=20220127-12:00:40.775\u000148=INSTR2\u000154=2\u000159=3\u000160=20220127-15:00:36\u0001528=A\u0001581=1\u0001453=4\u0001448=DEMO-CONN2\u0001447=D\u0001452=76\u0001448=0\u0001447=P\u0001452=3\u0001448=0\u0001447=P\u0001452=122\u0001448=3\u0001447=P\u0001452=12\u000110=121\u0001";
+        String expectedMessage4 = "8=FIXT.1.1\u00019=250\u000135=A\u000134=7\u000149=client\u000156=server\u000152=2014-12-22T10:15:30Z\u000150=trader\u000111=3428785\u000122=8\u000138=30\u000140=2\u000144=55\u000148=INSTR1\u000154=1\u000159=0\u000160=20220127-18:38:35\u0001526=11111\u0001528=A\u0001581=1\u0001453=4\u0001448=DEMO-CONN1\u0001447=D\u0001452=76\u0001448=0\u0001447=P\u0001452=3\u0001448=0\u000147=P\u0001452=122\u0001448=3\u0001447=P\u0001452=12\u000110=236\u0001";
         Map<String, String> expected = new HashMap<>();
         expected.put("MsgType", "A");
         Map<String, String> expected2 = new HashMap<>();
