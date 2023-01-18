@@ -19,8 +19,11 @@ package com.exactpro.th2;
 import com.exactpro.th2.conn.dirty.fix.KeyFileType;
 import com.exactpro.th2.conn.dirty.tcp.core.api.IChannel.Security;
 import com.exactpro.th2.conn.dirty.tcp.core.api.IHandlerSettings;
+import com.exactpro.th2.util.LocalTimeDeserializer;
+import com.fasterxml.jackson.annotation.JsonFormat;
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 
-import java.time.LocalDateTime;
+import java.time.LocalTime;
 
 public class FixHandlerSettings implements IHandlerSettings {
     private String host = null;
@@ -49,9 +52,17 @@ public class FixHandlerSettings implements IHandlerSettings {
     private String passwordEncryptAlgorithm = "RSA";
     private Boolean resetSeqNumFlag = false;
     private Boolean resetOnLogon = false;
-    private Boolean maintainSessionBasedOnNextExpectedSeqNumber = false;
+    private Boolean useNextExpectedSeqNum = false;
     private Boolean isSaveAdminMessages = false;
-    private String startOfADayTime;
+
+    @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "HH:mm:ss.SSS")
+    @JsonDeserialize(using = LocalTimeDeserializer.class)
+    private LocalTime sessionStartTime;
+
+    @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "HH:mm:ss.SSS")
+    @JsonDeserialize(using = LocalTimeDeserializer.class)
+    private LocalTime sessionEndTime;
+
     private int testRequestDelay = 60;
     private int reconnectDelay = 5;
     private int disconnectRequestDelay = 5;
@@ -212,12 +223,12 @@ public class FixHandlerSettings implements IHandlerSettings {
         this.stateFilePath = stateFilePath;
     }
 
-    public Boolean isMaintainSessionBasedOnNextExpectedSeqNumber() {
-        return maintainSessionBasedOnNextExpectedSeqNumber;
+    public Boolean useNextExpectedSeqNum() {
+        return useNextExpectedSeqNum;
     }
 
-    public void setMaintainSessionBasedOnNextExpectedSeqNumber(Boolean maintainSessionBasedOnNextExpectedSeqNumber) {
-        this.maintainSessionBasedOnNextExpectedSeqNumber = maintainSessionBasedOnNextExpectedSeqNumber;
+    public void setUseNextExpectedSeqNum(Boolean useNextExpectedSeqNum) {
+        this.useNextExpectedSeqNum = useNextExpectedSeqNum;
     }
 
     public Boolean isSaveAdminMessages() {
@@ -228,12 +239,20 @@ public class FixHandlerSettings implements IHandlerSettings {
         isSaveAdminMessages = saveAdminMessages;
     }
 
-    public String getStartOfADayTime() {
-        return startOfADayTime;
+    public LocalTime getSessionStartTime() {
+        return sessionStartTime;
     }
 
-    public void setStartOfADayTime(String startOfADayTime) {
-        this.startOfADayTime = startOfADayTime;
+    public void setSessionStartTime(LocalTime sessionStartTime) {
+        this.sessionStartTime = sessionStartTime;
+    }
+
+    public LocalTime getSessionEndTime() {
+        return sessionEndTime;
+    }
+
+    public void setSessionEndTime(LocalTime sessionEndTime) {
+        this.sessionEndTime = sessionEndTime;
     }
 
     public void setResetSeqNumFlag(Boolean resetSeqNumFlag) { this.resetSeqNumFlag = resetSeqNumFlag; }
