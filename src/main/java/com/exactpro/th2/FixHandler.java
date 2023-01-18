@@ -314,7 +314,7 @@ public class FixHandler implements AutoCloseable, IHandler {
                 if (LOGGER.isInfoEnabled()) LOGGER.info("Logon received - {}", message.toString(US_ASCII));
                 boolean connectionSuccessful = checkLogon(message);
                 if (connectionSuccessful) {
-                    msgSeqNum.incrementAndGet();
+
                     if(settings.useNextExpectedSeqNum()) {
                         FixField nextExpectedSeqField = findField(message, NEXT_EXPECTED_SEQ_NUMBER_TAG);
                         if(nextExpectedSeqField == null) {
@@ -676,7 +676,7 @@ public class FixHandler implements AutoCloseable, IHandler {
         else reset = settings.getResetOnLogon();
         if (reset) msgSeqNum.getAndSet(0);
 
-        setHeader(logon, MSG_TYPE_LOGON, msgSeqNum.get() + 1);
+        setHeader(logon, MSG_TYPE_LOGON, msgSeqNum.incrementAndGet());
         if (settings.useNextExpectedSeqNum()) logon.append(NEXT_EXPECTED_SEQ_NUM).append(serverMsgSeqNum.get() + 1);
         if (settings.getEncryptMethod() != null) logon.append(ENCRYPT_METHOD).append(settings.getEncryptMethod());
         logon.append(HEART_BT_INT).append(settings.getHeartBtInt());
@@ -711,11 +711,13 @@ public class FixHandler implements AutoCloseable, IHandler {
         if (enabled.get()) {
             channel.send(Unpooled.wrappedBuffer(logout.toString().getBytes(StandardCharsets.UTF_8)), Collections.emptyMap(), null, IChannel.SendMode.MANGLE);
         }
-        try {
-            Util.writeSequences(msgSeqNum.get(), serverMsgSeqNum.incrementAndGet(), settings.getStateFilePath());
-        } catch (IOException e) {
-            if (LOGGER.isErrorEnabled()) {
-                LOGGER.error("Sequence number were not saved: clientSeq - {}, serverSeq - {}", msgSeqNum.get(), serverMsgSeqNum.get());
+        if(settings.getStateFilePath() != null) {
+            try {
+                Util.writeSequences(msgSeqNum.get(), serverMsgSeqNum.incrementAndGet(), settings.getStateFilePath());
+            } catch (IOException e) {
+                if (LOGGER.isErrorEnabled()) {
+                    LOGGER.error("Sequence number were not saved: clientSeq - {}, serverSeq - {}", msgSeqNum.get(), serverMsgSeqNum.get());
+                }
             }
         }
         disconnectRequest = executorService.schedule(() -> {
