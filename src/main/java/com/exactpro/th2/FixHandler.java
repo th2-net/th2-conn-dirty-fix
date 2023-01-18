@@ -171,7 +171,7 @@ public class FixHandler implements AutoCloseable, IHandler {
                 scheduleTime = now.plusDays(1).with(resetTime);
             }
             long time = scheduleTime.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli() - System.currentTimeMillis();
-            executorService.scheduleAtFixedRate(() -> reset(settings.getSessionEndTime() == null), time, 24, TimeUnit.HOURS);
+            executorService.scheduleAtFixedRate(this::reset, time, 24, TimeUnit.HOURS);
         }
 
         if(settings.getSessionEndTime() != null) {
@@ -184,7 +184,7 @@ public class FixHandler implements AutoCloseable, IHandler {
                 scheduleTime = now.plusDays(1).with(resetTime);
             }
             long time = scheduleTime.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli() - System.currentTimeMillis();
-            executorService.scheduleAtFixedRate(() -> enabled.set(true), time, 24, TimeUnit.HOURS);
+            executorService.scheduleAtFixedRate(this::close, time, 24, TimeUnit.HOURS);
         }
         String host = settings.getHost();
         if (host == null || host.isBlank()) throw new IllegalArgumentException("host cannot be blank");
@@ -394,10 +394,10 @@ public class FixHandler implements AutoCloseable, IHandler {
         }
     }
 
-    private void reset(Boolean disableClient) {
+    private void reset() {
         msgSeqNum.set(0);
         serverMsgSeqNum.set(0);
-        if(disableClient) enabled.set(false);
+        sendLogon();
     }
 
     public void sendResendRequest(int beginSeqNo, int endSeqNo) { //do private
