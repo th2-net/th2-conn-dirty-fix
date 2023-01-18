@@ -250,7 +250,8 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
                     LOGGER.warn("Received Logout has text (58) tag: {}", text.getValue());
                     String value = StringUtils.substringBetween(text.getValue(), "expecting ", " but received");
                     if (value != null) {
-                        msgSeqNum.getAndSet(Integer.parseInt(value)-2);
+                        msgSeqNum.set(Integer.parseInt(value)-1);
+                        LOGGER.info("Changed sequence number to {}", msgSeqNum.get());
                         serverMsgSeqNum.getAndSet(Integer.parseInt(msgSeqNumValue.getValue()));
                     }
                 }
