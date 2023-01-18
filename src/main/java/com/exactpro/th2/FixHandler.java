@@ -668,7 +668,7 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
     }
 
     public String getTime() {
-        String FIX_DATE_TIME_FORMAT_MS = "yyyyMMdd-HH:mm:ss.SSS";
+        String FIX_DATE_TIME_FORMAT_MS = "yyyyMMdd-HH:mm:ss.SSSSSSSSS";
         LocalDateTime datetime = LocalDateTime.now();
         return DateTimeFormatter.ofPattern(FIX_DATE_TIME_FORMAT_MS).format(datetime);
     }
