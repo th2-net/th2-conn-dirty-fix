@@ -55,11 +55,9 @@ public class FixHandlerSettings implements IHandlerSettings {
     private Boolean useNextExpectedSeqNum = false;
     private Boolean isSaveAdminMessages = false;
 
-    @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "HH:mm:ss.SSS")
     @JsonDeserialize(using = LocalTimeDeserializer.class)
     private LocalTime sessionStartTime;
 
-    @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "HH:mm:ss.SSS")
     @JsonDeserialize(using = LocalTimeDeserializer.class)
     private LocalTime sessionEndTime;
 

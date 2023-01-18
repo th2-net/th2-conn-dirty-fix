@@ -42,7 +42,10 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
+import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
+import java.time.temporal.ChronoUnit;
+import java.time.temporal.TemporalUnit;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
@@ -145,7 +148,6 @@ public class FixHandler implements AutoCloseable, IHandler {
     private Future<?> heartbeatTimer = CompletableFuture.completedFuture(null);
     private Future<?> testRequestTimer = CompletableFuture.completedFuture(null);
     private Future<?> reconnectRequestTimer = CompletableFuture.completedFuture(null);
-    private Future<?> disconnectRequest = CompletableFuture.completedFuture(null);
     private volatile IChannel channel;
     protected FixHandlerSettings settings;
     private long lastSendTime = System.currentTimeMillis();
@@ -162,28 +164,29 @@ public class FixHandler implements AutoCloseable, IHandler {
             serverMsgSeqNum = new AtomicInteger(sequences.getServerSeq());
         }
         if(settings.getSessionStartTime() != null) {
+            Objects.requireNonNull(settings.getSessionEndTime(), "Session end is required when session start is presented");
             LocalTime resetTime = settings.getSessionStartTime();
-            LocalDateTime now = LocalDateTime.now();
-            LocalDateTime scheduleTime;
+            ZonedDateTime now = ZonedDateTime.now(ZoneOffset.UTC);
+            ZonedDateTime scheduleTime;
             if(now.with(resetTime).isAfter(now)) {
                 scheduleTime = now.with(resetTime);
             } else {
                 scheduleTime = now.plusDays(1).with(resetTime);
             }
-            long time = scheduleTime.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli() - System.currentTimeMillis();
+            long time = now.until(scheduleTime, ChronoUnit.HOURS);
             executorService.scheduleAtFixedRate(this::reset, time, 24, TimeUnit.HOURS);
         }
 
         if(settings.getSessionEndTime() != null) {
             LocalTime resetTime = settings.getSessionEndTime();
-            LocalDateTime now = LocalDateTime.now();
-            LocalDateTime scheduleTime;
+            ZonedDateTime now = ZonedDateTime.now(ZoneOffset.UTC);
+            ZonedDateTime scheduleTime;
             if(now.with(resetTime).isAfter(now)) {
                 scheduleTime = now.with(resetTime);
             } else {
                 scheduleTime = now.plusDays(1).with(resetTime);
             }
-            long time = scheduleTime.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli() - System.currentTimeMillis();
+            long time = now.until(scheduleTime, ChronoUnit.HOURS);
             executorService.scheduleAtFixedRate(this::close, time, 24, TimeUnit.HOURS);
         }
         String host = settings.getHost();
@@ -314,7 +317,7 @@ public class FixHandler implements AutoCloseable, IHandler {
                 if (LOGGER.isInfoEnabled()) LOGGER.info("Logon received - {}", message.toString(US_ASCII));
                 boolean connectionSuccessful = checkLogon(message);
                 if (connectionSuccessful) {
-
+                    msgSeqNum.incrementAndGet();
                     if(settings.useNextExpectedSeqNum()) {
                         FixField nextExpectedSeqField = findField(message, NEXT_EXPECTED_SEQ_NUMBER_TAG);
                         if(nextExpectedSeqField == null) {
@@ -357,9 +360,6 @@ public class FixHandler implements AutoCloseable, IHandler {
                         msgSeqNum.getAndSet(Integer.parseInt(value)-2);
                         serverMsgSeqNum.getAndSet(Integer.parseInt(msgSeqNumValue.getValue()));
                     }
-                }
-                if (disconnectRequest != null && !disconnectRequest.isCancelled()) {
-                    disconnectRequest.cancel(false);
                 }
                 enabled.set(false);
                 context.send(CommonUtil.toEvent("logout for sender - " + settings.getSenderCompID()));//make more useful
@@ -426,9 +426,6 @@ public class FixHandler implements AutoCloseable, IHandler {
     }
 
     private void handleResendRequest(ByteBuf message) {
-        if (disconnectRequest != null && !disconnectRequest.isCancelled()) {
-            disconnectRequest.cancel(false);
-        }
 
         FixField strBeginSeqNo = findField(message, BEGIN_SEQ_NO_TAG);
         FixField strEndSeqNo = findField(message, END_SEQ_NO_TAG);
@@ -676,7 +673,7 @@ public class FixHandler implements AutoCloseable, IHandler {
         else reset = settings.getResetOnLogon();
         if (reset) msgSeqNum.getAndSet(0);
 
-        setHeader(logon, MSG_TYPE_LOGON, msgSeqNum.incrementAndGet());
+        setHeader(logon, MSG_TYPE_LOGON, msgSeqNum.get() + 1);
         if (settings.useNextExpectedSeqNum()) logon.append(NEXT_EXPECTED_SEQ_NUM).append(serverMsgSeqNum.get() + 1);
         if (settings.getEncryptMethod() != null) logon.append(ENCRYPT_METHOD).append(settings.getEncryptMethod());
         logon.append(HEART_BT_INT).append(settings.getHeartBtInt());
@@ -720,9 +717,7 @@ public class FixHandler implements AutoCloseable, IHandler {
                 }
             }
         }
-        disconnectRequest = executorService.schedule(() -> {
-            enabled.set(false);
-        }, settings.getDisconnectRequestDelay(), TimeUnit.SECONDS);
+        enabled.set(false);
     }
 
     private String encrypt(String password) {

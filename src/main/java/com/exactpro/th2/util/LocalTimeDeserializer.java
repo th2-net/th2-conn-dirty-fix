@@ -22,6 +22,8 @@ import com.fasterxml.jackson.databind.deser.std.StdDeserializer;
 import java.io.IOException;
 import java.time.LocalTime;
 import java.time.ZoneOffset;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
 
 public class LocalTimeDeserializer extends StdDeserializer<LocalTime> {
 
@@ -31,6 +33,6 @@ public class LocalTimeDeserializer extends StdDeserializer<LocalTime> {
 
     @Override
     public LocalTime deserialize(JsonParser parser, DeserializationContext context) throws IOException {
-        return LocalTime.parse(parser.getValueAsString()).atOffset(ZoneOffset.UTC).toLocalTime();
+        return LocalTime.parse(parser.getValueAsString(), DateTimeFormatter.ISO_TIME);
     }
 }
