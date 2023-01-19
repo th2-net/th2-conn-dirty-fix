@@ -359,7 +359,7 @@ public class FixHandler implements AutoCloseable, IHandler {
                     LOGGER.warn("Received Logout has text (58) tag: {}", text.getValue());
                     String value = StringUtils.substringBetween(text.getValue(), "expecting ", " but received");
                     if (value != null) {
-                        msgSeqNum.getAndSet(Integer.parseInt(value)-1);
+                        msgSeqNum.getAndSet(Integer.parseInt(value) - 2);
                         serverMsgSeqNum.getAndSet(Integer.parseInt(msgSeqNumValue.getValue()));
                     }
                 }
