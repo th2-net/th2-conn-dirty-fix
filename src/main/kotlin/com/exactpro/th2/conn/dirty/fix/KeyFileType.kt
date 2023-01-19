@@ -15,11 +15,11 @@
  */
 package com.exactpro.th2.conn.dirty.fix
 
-import java.nio.charset.Charset
+import org.bouncycastle.util.io.pem.PemReader
 import java.nio.file.Files
 import java.nio.file.Path
 import java.security.KeyFactory
-import java.security.interfaces.RSAPublicKey
+import java.security.PublicKey
 import java.security.spec.X509EncodedKeySpec
 import java.util.*
 import javax.crypto.Cipher
@@ -37,17 +37,17 @@ enum class KeyFileType {
                 "Encryption key file path '$keyFilePath' doesn't exist"
             }
 
-            val privateKeyPEM = Files.readString(keyFilePath, Charset.defaultCharset())
-                .replace(BEGIN_PUBLIC_KEY, "")
-                .replace(System.lineSeparator(), "")
-                .replace(END_PUBLIC_KEY, "")
+            val publicKeyContent: ByteArray = Files.newBufferedReader(keyFilePath).use {
+                val pemObject = PemReader(it).readPemObject()
+                pemObject.content
+            }
 
-            val publicKey = KeyFactory.getInstance(keyEncryptAlgorithm)
-                .generatePublic(X509EncodedKeySpec(Base64.getDecoder().decode(privateKeyPEM))) as RSAPublicKey
+            val publicKey: PublicKey = KeyFactory.getInstance(keyEncryptAlgorithm)
+                .generatePublic(X509EncodedKeySpec(publicKeyContent))
 
             Cipher.getInstance(encryptAlgorithm).apply {
                 init(Cipher.ENCRYPT_MODE, publicKey)
-                return String(Base64.getEncoder().encode(doFinal(value.toByteArray())))
+                return Base64.getEncoder().encodeToString(doFinal(value.toByteArray()))
             }
         }
     };

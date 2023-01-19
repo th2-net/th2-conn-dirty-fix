@@ -54,6 +54,7 @@ dependencies {
     implementation group: 'com.fasterxml.jackson.core', name: 'jackson-databind', version: jackson_version
     implementation group: 'com.fasterxml.jackson.module', name: 'jackson-module-kotlin', version: jackson_version
     implementation group: 'com.fasterxml.jackson.dataformat', name: 'jackson-dataformat-yaml', version: jackson_version
+    implementation 'org.bouncycastle:bcpkix-jdk15on:1.64'
 
     testImplementation 'org.mockito:mockito-all:1.10.19'
     testImplementation 'org.jetbrains.kotlin:kotlin-test-junit5:1.6.21'
