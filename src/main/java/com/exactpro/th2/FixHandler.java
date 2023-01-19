@@ -33,6 +33,7 @@ import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.File;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
@@ -155,7 +156,7 @@ public class FixHandler implements AutoCloseable, IHandler {
     public FixHandler(IHandlerContext context) {
         this.context = context;
         this.settings = (FixHandlerSettings) context.getSettings();
-        if(settings.getStateFilePath() == null) {
+        if(settings.getStateFilePath() == null || !new File(settings.getStateFilePath()).exists()) {
             msgSeqNum = new AtomicInteger(0);
             serverMsgSeqNum = new AtomicInteger(0);
         } else {
