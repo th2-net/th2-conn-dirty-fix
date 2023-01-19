@@ -33,22 +33,21 @@ enum class KeyFileType {
             encryptAlgorithm: String,
             operationMode: OperationMode
         ): String {
-            check(Files.exists(keyFilePath)) {
-                "Encryption key file path '$keyFilePath' doesn't exist"
-            }
-
-            val publicKeyContent: ByteArray = Files.newBufferedReader(keyFilePath).use {
-                val pemObject = PemReader(it).readPemObject()
-                pemObject.content
-            }
-
-            val publicKey: PublicKey = KeyFactory.getInstance(keyEncryptAlgorithm)
-                .generatePublic(X509EncodedKeySpec(publicKeyContent))
-
-            Cipher.getInstance(encryptAlgorithm).apply {
-                init(Cipher.ENCRYPT_MODE, publicKey)
-                return Base64.getEncoder().encodeToString(doFinal(value.toByteArray()))
-            }
+            val encrypted = encryptFromPublicKey(keyFilePath, keyEncryptAlgorithm, encryptAlgorithm, value)
+            return Base64.getEncoder().encodeToString(encrypted)
+        }
+    },
+    PEM_PUBLIC_KEY_REVERSED_RESULT {
+        override fun encrypt(
+            keyFilePath: Path,
+            value: String,
+            keyEncryptAlgorithm: String,
+            encryptAlgorithm: String,
+            operationMode: OperationMode
+        ): String {
+            val encrypted = encryptFromPublicKey(keyFilePath, keyEncryptAlgorithm, encryptAlgorithm, value)
+            encrypted.reverse()
+            return Base64.getEncoder().encodeToString(encrypted)
         }
     };
 
@@ -68,4 +67,29 @@ enum class KeyFileType {
             ENCRYPT_MODE(Cipher.ENCRYPT_MODE),
         }
     }
+}
+
+private fun encryptFromPublicKey(
+    keyFilePath: Path,
+    keyEncryptAlgorithm: String,
+    encryptAlgorithm: String,
+    value: String
+): ByteArray {
+    check(Files.exists(keyFilePath)) {
+        "Encryption key file path '$keyFilePath' doesn't exist"
+    }
+
+    val publicKeyContent: ByteArray = Files.newBufferedReader(keyFilePath).use {
+        val pemObject = PemReader(it).readPemObject()
+        pemObject.content
+    }
+
+    val publicKey: PublicKey = KeyFactory.getInstance(keyEncryptAlgorithm)
+        .generatePublic(X509EncodedKeySpec(publicKeyContent))
+
+    val encrypted = Cipher.getInstance(encryptAlgorithm).run {
+        init(Cipher.ENCRYPT_MODE, publicKey)
+        doFinal(value.toByteArray())
+    }
+    return encrypted
 }
