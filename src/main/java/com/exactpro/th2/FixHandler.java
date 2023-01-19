@@ -711,7 +711,7 @@ public class FixHandler implements AutoCloseable, IHandler {
         }
         if(settings.getStateFilePath() != null) {
             try {
-                Util.writeSequences(msgSeqNum.get(), serverMsgSeqNum.incrementAndGet(), settings.getStateFilePath());
+                Util.writeSequences(msgSeqNum.get(), serverMsgSeqNum.get() + 1, settings.getStateFilePath());
             } catch (IOException e) {
                 if (LOGGER.isErrorEnabled()) {
                     LOGGER.error("Sequence number were not saved: clientSeq - {}, serverSeq - {}", msgSeqNum.get(), serverMsgSeqNum.get());
@@ -743,7 +743,9 @@ public class FixHandler implements AutoCloseable, IHandler {
 
     @Override
     public void close() {
-        sendLogout();
+        if(enabled.get()) {
+            sendLogout();
+        }
     }
 
     private void setHeader(StringBuilder stringBuilder, String msgType, Integer seqNum) {
