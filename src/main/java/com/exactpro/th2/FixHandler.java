@@ -142,6 +142,7 @@ public class FixHandler implements AutoCloseable, IHandler {
     private final AtomicInteger testReqID = new AtomicInteger(0);
     private final AtomicBoolean enabled = new AtomicBoolean(false);
     private final AtomicBoolean connStarted = new AtomicBoolean(false);
+    private final AtomicBoolean logonResponded = new AtomicBoolean(true);
     private final ScheduledExecutorService executorService = Executors.newScheduledThreadPool(1);
     private final IHandlerContext context;
     private final InetSocketAddress address;
@@ -292,11 +293,16 @@ public class FixHandler implements AutoCloseable, IHandler {
             isDup = possDup.getValue().equals(IS_POSS_DUP);
         }
 
+        if(!logonResponded.get()) {
+            msgSeqNum.incrementAndGet();
+            logonResponded.set(true);
+        }
+
         int receivedMsgSeqNum = Integer.parseInt(requireNonNull(msgSeqNumValue.getValue()));
 
         if(receivedMsgSeqNum < serverMsgSeqNum.get() && !isDup) {
             sendLogout();
-            reconnectRequestTimer = executorService.schedule(this::sendLogon, settings.getReconnectDelay() + settings.getDisconnectRequestDelay(), TimeUnit.SECONDS);
+            reconnectRequestTimer = executorService.schedule(this::sendLogon, settings.getReconnectDelay(), TimeUnit.SECONDS);
             metadata.put(REJECT_REASON, "SeqNum is less than expected.");
             if (LOGGER.isErrorEnabled()) LOGGER.error("Invalid message. SeqNum is less than expected {}: {}", serverMsgSeqNum.get(), message.toString(US_ASCII));
             return metadata;
@@ -319,7 +325,6 @@ public class FixHandler implements AutoCloseable, IHandler {
                 if (LOGGER.isInfoEnabled()) LOGGER.info("Logon received - {}", message.toString(US_ASCII));
                 boolean connectionSuccessful = checkLogon(message);
                 if (connectionSuccessful) {
-                    msgSeqNum.incrementAndGet();
                     if(settings.useNextExpectedSeqNum()) {
                         FixField nextExpectedSeqField = findField(message, NEXT_EXPECTED_SEQ_NUMBER_TAG);
                         if(nextExpectedSeqField == null) {
@@ -359,7 +364,13 @@ public class FixHandler implements AutoCloseable, IHandler {
                     LOGGER.warn("Received Logout has text (58) tag: {}", text.getValue());
                     String value = StringUtils.substringBetween(text.getValue(), "expecting ", " but received");
                     if (value != null) {
-                        msgSeqNum.getAndSet(Integer.parseInt(value) - 2);
+                        if (heartbeatTimer != null) {
+                            heartbeatTimer.cancel(false);
+                        }
+                        if (testRequestTimer != null) {
+                            testRequestTimer.cancel(false);
+                        }
+                        msgSeqNum.getAndSet(Integer.parseInt(value) - 1);
                         serverMsgSeqNum.getAndSet(Integer.parseInt(msgSeqNumValue.getValue()));
                     }
                 }
@@ -699,6 +710,7 @@ public class FixHandler implements AutoCloseable, IHandler {
 
         setChecksumAndBodyLength(logon);
         LOGGER.info("Send logon - {}", logon);
+        logonResponded.set(false);
         channel.send(Unpooled.wrappedBuffer(logon.toString().getBytes(StandardCharsets.UTF_8)), Collections.emptyMap(), null, IChannel.SendMode.MANGLE);
     }
 

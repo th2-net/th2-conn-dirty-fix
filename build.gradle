@@ -14,7 +14,15 @@ version release_version
 sourceCompatibility = 11
 targetCompatibility = 11
 
+ext {
+    sharedDir = file("${project.rootDir}/shared")
+}
+
 repositories {
+    maven {
+        name 'MavenLocal'
+        url sharedDir
+    }
     mavenCentral()
 
     maven {
