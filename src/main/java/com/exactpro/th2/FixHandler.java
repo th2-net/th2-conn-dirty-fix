@@ -207,6 +207,7 @@ public class FixHandler implements AutoCloseable, IHandler {
     @Override
     public void onStart() {
         channel = context.createChannel(address, settings.getSecurity(), Map.of(), true, settings.getReconnectDelay() * 1000L, Integer.MAX_VALUE);
+        channel.open();
     }
 
     @NotNull
