@@ -301,7 +301,9 @@ public class FixHandler implements AutoCloseable, IHandler {
         int receivedMsgSeqNum = Integer.parseInt(requireNonNull(msgSeqNumValue.getValue()));
 
         if(receivedMsgSeqNum < serverMsgSeqNum.get() && !isDup) {
-            sendLogout();
+            if(enabled.get()) {
+                sendLogout();
+            }
             reconnectRequestTimer = executorService.schedule(this::sendLogon, settings.getReconnectDelay(), TimeUnit.SECONDS);
             metadata.put(REJECT_REASON, "SeqNum is less than expected.");
             if (LOGGER.isErrorEnabled()) LOGGER.error("Invalid message. SeqNum is less than expected {}: {}", serverMsgSeqNum.get(), message.toString(US_ASCII));
