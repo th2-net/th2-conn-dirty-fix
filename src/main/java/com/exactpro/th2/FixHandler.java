@@ -172,6 +172,8 @@ public class FixHandler implements AutoCloseable, IHandler {
             serverMsgSeqNum.set(settings.getStartServerSeqNum());
         }
 
+        LOGGER.info("Initial sequences are: client - {}, server - {}", msgSeqNum.get(), serverMsgSeqNum.get());
+
         if(settings.getSessionStartTime() != null) {
             Objects.requireNonNull(settings.getSessionEndTime(), "Session end is required when session start is presented");
             LocalTime resetTime = settings.getSessionStartTime();
