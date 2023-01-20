@@ -730,6 +730,7 @@ public class FixHandler implements AutoCloseable, IHandler {
         }
         if(settings.getStateFilePath() != null) {
             try {
+                LOGGER.info("Saving sequences: client - {}, server - {}", msgSeqNum.get(), serverMsgSeqNum.get() + 1);
                 Util.writeSequences(msgSeqNum.get(), serverMsgSeqNum.get() + 1, settings.getStateFilePath());
             } catch (IOException e) {
                 if (LOGGER.isErrorEnabled()) {
