@@ -19,9 +19,7 @@ package com.exactpro.th2;
 import com.exactpro.th2.conn.dirty.fix.KeyFileType;
 import com.exactpro.th2.conn.dirty.tcp.core.api.IChannel.Security;
 import com.exactpro.th2.conn.dirty.tcp.core.api.IHandlerSettings;
-import com.exactpro.th2.util.FileDeserializer;
 import com.exactpro.th2.util.LocalTimeDeserializer;
-import com.fasterxml.jackson.annotation.JsonFormat;
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 
 import java.io.File;
@@ -47,7 +45,6 @@ public class FixHandlerSettings implements IHandlerSettings {
     private Integer startClientSeqNum;
     private Integer startServerSeqNum;
 
-    @JsonDeserialize(using = FileDeserializer.class)
     private File stateFilePath;
     /**
      * Value from Java Security Standard Algorithm Names

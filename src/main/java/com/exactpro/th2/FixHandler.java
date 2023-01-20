@@ -157,8 +157,8 @@ public class FixHandler implements AutoCloseable, IHandler {
         this.context = context;
         this.settings = (FixHandlerSettings) context.getSettings();
         if(settings.getStateFilePath() == null || !settings.getStateFilePath().exists()) {
-            msgSeqNum = new AtomicInteger(settings.getStartClientSeqNum());
-            serverMsgSeqNum = new AtomicInteger(settings.getStartServerSeqNum());
+            msgSeqNum = new AtomicInteger(0);
+            serverMsgSeqNum = new AtomicInteger(0);
         } else {
             SequenceHolder sequences = Util.readSequences(settings.getStateFilePath());
             msgSeqNum = new AtomicInteger(sequences.getClientSeq());
@@ -180,8 +180,8 @@ public class FixHandler implements AutoCloseable, IHandler {
             if(scheduleTime.isBefore(now)) {
                 scheduleTime = now.with(resetTime);
             }
-            long time = now.until(scheduleTime, ChronoUnit.MINUTES);
-            executorService.scheduleAtFixedRate(this::reset, time, 24 * 60, TimeUnit.MINUTES);
+            long time = now.until(scheduleTime, ChronoUnit.SECONDS);
+            executorService.scheduleAtFixedRate(this::reset, time, 24 * 60 * 60, TimeUnit.MINUTES);
         }
 
         if(settings.getSessionEndTime() != null) {
@@ -193,8 +193,8 @@ public class FixHandler implements AutoCloseable, IHandler {
                 scheduleTime = now.plusDays(1).with(resetTime);
             }
 
-            long time = now.until(scheduleTime, ChronoUnit.MINUTES);
-            executorService.scheduleAtFixedRate(this::close, time, 24 * 60, TimeUnit.MINUTES);
+            long time = now.until(scheduleTime, ChronoUnit.SECONDS);
+            executorService.scheduleAtFixedRate(this::close, time, 24 * 60 * 60, TimeUnit.MINUTES);
         }
         String host = settings.getHost();
         if (host == null || host.isBlank()) throw new IllegalArgumentException("host cannot be blank");
