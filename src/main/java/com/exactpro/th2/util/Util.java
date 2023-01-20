@@ -36,10 +36,10 @@ public class Util {
     }
 
     public static void writeSequences(int msgSeqNum, int serverSeqNum, File file) throws IOException {
-        if(!file.exists()) {
+        if(!file.getParentFile().exists()) {
             file.getParentFile().mkdirs();
-            file.createNewFile();
         }
+        file.createNewFile();
         try (BufferedWriter bw = new BufferedWriter(new FileWriter(file))) {
             bw.write(String.valueOf(msgSeqNum));
             bw.newLine();
