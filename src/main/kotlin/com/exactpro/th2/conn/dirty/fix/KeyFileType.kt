@@ -25,6 +25,19 @@ import java.util.*
 import javax.crypto.Cipher
 
 enum class KeyFileType {
+    /**
+     * Returns the exact value that was passed
+     */
+    NOOP {
+        override fun encrypt(
+            keyFilePath: Path,
+            value: String,
+            keyEncryptAlgorithm: String,
+            encryptAlgorithm: String,
+            operationMode: OperationMode
+        ): String = value
+
+    },
     PEM_PUBLIC_KEY {
         override fun encrypt(
             keyFilePath: Path,
