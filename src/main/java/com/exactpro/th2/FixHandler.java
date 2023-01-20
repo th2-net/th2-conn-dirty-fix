@@ -303,9 +303,7 @@ public class FixHandler implements AutoCloseable, IHandler {
         int receivedMsgSeqNum = Integer.parseInt(requireNonNull(msgSeqNumValue.getValue()));
 
         if(receivedMsgSeqNum < serverMsgSeqNum.get() && !isDup) {
-            if(enabled.get()) {
-                sendLogout();
-            }
+            sendLogout();
             reconnectRequestTimer = executorService.schedule(this::sendLogon, settings.getReconnectDelay(), TimeUnit.SECONDS);
             metadata.put(REJECT_REASON, "SeqNum is less than expected.");
             if (LOGGER.isErrorEnabled()) LOGGER.error("Invalid message. SeqNum is less than expected {}: {}", serverMsgSeqNum.get(), message.toString(US_ASCII));
@@ -735,7 +733,7 @@ public class FixHandler implements AutoCloseable, IHandler {
                 Util.writeSequences(msgSeqNum.get(), serverMsgSeqNum.get() + 1, settings.getStateFilePath());
             } catch (IOException e) {
                 if (LOGGER.isErrorEnabled()) {
-                    LOGGER.error("Sequence number were not saved: clientSeq - {}, serverSeq - {}", msgSeqNum.get(), serverMsgSeqNum.get());
+                    LOGGER.error("Sequence number were not saved: clientSeq - {}, serverSeq - {}", msgSeqNum.get(), serverMsgSeqNum.get(), e);
                 }
             }
         }
