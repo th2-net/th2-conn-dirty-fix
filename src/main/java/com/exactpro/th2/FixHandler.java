@@ -374,6 +374,7 @@ public class FixHandler implements AutoCloseable, IHandler {
                             testRequestTimer.cancel(false);
                         }
                         msgSeqNum.set(Integer.parseInt(value) - 1);
+                        serverMsgSeqNum.set(Integer.parseInt(msgSeqNumValue.getValue()));
                     }
                 }
                 enabled.set(false);
