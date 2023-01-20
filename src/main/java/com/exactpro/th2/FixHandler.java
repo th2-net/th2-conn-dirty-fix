@@ -163,6 +163,12 @@ public class FixHandler implements AutoCloseable, IHandler {
             SequenceHolder sequences = Util.readSequences(settings.getStateFilePath());
             msgSeqNum = new AtomicInteger(sequences.getClientSeq());
             serverMsgSeqNum = new AtomicInteger(sequences.getServerSeq());
+            // TODO: delete
+            try {
+                Util.writeSequences(msgSeqNum.get(), serverMsgSeqNum.get(), settings.getStateFilePath());
+            } catch (IOException e) {
+                LOGGER.error("Error while writing to file", e);
+            }
         }
         if(settings.getStartClientSeqNum() != null) {
             msgSeqNum.set(settings.getStartClientSeqNum());
