@@ -163,13 +163,8 @@ public class FixHandler implements AutoCloseable, IHandler {
             SequenceHolder sequences = Util.readSequences(settings.getStateFilePath());
             msgSeqNum = new AtomicInteger(sequences.getClientSeq());
             serverMsgSeqNum = new AtomicInteger(sequences.getServerSeq());
-            // TODO: delete
-            try {
-                Util.writeSequences(msgSeqNum.get(), serverMsgSeqNum.get(), settings.getStateFilePath());
-            } catch (IOException e) {
-                LOGGER.error("Error while writing to file", e);
-            }
         }
+
         if(settings.getStartClientSeqNum() != null) {
             msgSeqNum.set(settings.getStartClientSeqNum());
         }
@@ -727,11 +722,10 @@ public class FixHandler implements AutoCloseable, IHandler {
     }
 
     private void sendLogout() {
-        StringBuilder logout = new StringBuilder();
-        setHeader(logout, MSG_TYPE_LOGOUT, msgSeqNum.incrementAndGet());
-        setChecksumAndBodyLength(logout);
-
         if (enabled.get()) {
+            StringBuilder logout = new StringBuilder();
+            setHeader(logout, MSG_TYPE_LOGOUT, msgSeqNum.incrementAndGet());
+            setChecksumAndBodyLength(logout);
             channel.send(Unpooled.wrappedBuffer(logout.toString().getBytes(StandardCharsets.UTF_8)), Collections.emptyMap(), null, IChannel.SendMode.MANGLE);
         }
         if(settings.getStateFilePath() != null) {
@@ -769,9 +763,7 @@ public class FixHandler implements AutoCloseable, IHandler {
 
     @Override
     public void close() {
-        if(enabled.get()) {
-            sendLogout();
-        }
+        sendLogout();
     }
 
     private void setHeader(StringBuilder stringBuilder, String msgType, Integer seqNum) {
