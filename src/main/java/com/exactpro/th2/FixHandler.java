@@ -470,7 +470,7 @@ public class FixHandler implements AutoCloseable, IHandler {
                 StringBuilder sequenceReset = new StringBuilder();
                 setHeader(sequenceReset, MSG_TYPE_SEQUENCE_RESET, i);
                 sequenceReset.append(GAP_FILL_FLAG).append("Y");
-                sequenceReset.append(NEW_SEQ_NO).append(i);
+                sequenceReset.append(NEW_SEQ_NO).append(i + 1);
                 setChecksumAndBodyLength(sequenceReset);
                 channel.send(Unpooled.wrappedBuffer(sequenceReset.toString().getBytes(StandardCharsets.UTF_8)), Collections.emptyMap(), null, SendMode.MANGLE);
             } else {
