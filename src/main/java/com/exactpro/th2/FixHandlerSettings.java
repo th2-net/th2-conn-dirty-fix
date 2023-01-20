@@ -19,10 +19,12 @@ package com.exactpro.th2;
 import com.exactpro.th2.conn.dirty.fix.KeyFileType;
 import com.exactpro.th2.conn.dirty.tcp.core.api.IChannel.Security;
 import com.exactpro.th2.conn.dirty.tcp.core.api.IHandlerSettings;
+import com.exactpro.th2.util.FileDeserializer;
 import com.exactpro.th2.util.LocalTimeDeserializer;
 import com.fasterxml.jackson.annotation.JsonFormat;
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 
+import java.io.File;
 import java.time.LocalTime;
 
 public class FixHandlerSettings implements IHandlerSettings {
@@ -41,7 +43,9 @@ public class FixHandlerSettings implements IHandlerSettings {
     private String newPassword;
     private String passwordEncryptKeyFilePath;
     private KeyFileType passwordEncryptKeyFileType = KeyFileType.PEM_PUBLIC_KEY;
-    private String stateFilePath;
+
+    @JsonDeserialize(using = FileDeserializer.class)
+    private File stateFilePath;
     /**
      * Value from Java Security Standard Algorithm Names
      */
@@ -213,11 +217,11 @@ public class FixHandlerSettings implements IHandlerSettings {
         this.passwordEncryptAlgorithm = passwordEncryptAlgorithm;
     }
 
-    public String getStateFilePath() {
+    public File getStateFilePath() {
         return stateFilePath;
     }
 
-    public void setStateFilePath(String stateFilePath) {
+    public void setStateFilePath(File stateFilePath) {
         this.stateFilePath = stateFilePath;
     }
 

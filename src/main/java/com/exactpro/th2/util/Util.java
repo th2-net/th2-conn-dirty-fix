@@ -19,23 +19,24 @@ import com.exactpro.th2.SequenceHolder;
 
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
+import java.io.File;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
 
 public class Util {
-    public static SequenceHolder readSequences(String filePath) {
-        try (BufferedReader br = new BufferedReader(new FileReader(filePath))) {
+    public static SequenceHolder readSequences(File file) {
+        try (BufferedReader br = new BufferedReader(new FileReader(file))) {
             int firstLine = Integer.parseInt(br.readLine());
             int secondLine = Integer.parseInt(br.readLine());
             return new SequenceHolder(firstLine, secondLine);
         } catch (IOException e) {
-            throw new IllegalStateException("Error while reading sequence file " + filePath, e);
+            throw new IllegalStateException("Error while reading sequence file " + file, e);
         }
     }
 
-    public static void writeSequences(int msgSeqNum, int serverSeqNum, String filePath) throws IOException {
-        try (BufferedWriter bw = new BufferedWriter(new FileWriter(filePath))) {
+    public static void writeSequences(int msgSeqNum, int serverSeqNum, File file) throws IOException {
+        try (BufferedWriter bw = new BufferedWriter(new FileWriter(file))) {
             bw.write(String.valueOf(msgSeqNum));
             bw.newLine();
             bw.write(String.valueOf(serverSeqNum));

@@ -81,6 +81,7 @@ import static com.exactpro.th2.constants.Constants.ENCRYPTED_PASSWORD;
 import static com.exactpro.th2.constants.Constants.ENCRYPT_METHOD;
 import static com.exactpro.th2.constants.Constants.END_SEQ_NO;
 import static com.exactpro.th2.constants.Constants.END_SEQ_NO_TAG;
+import static com.exactpro.th2.constants.Constants.GAP_FILL_FLAG;
 import static com.exactpro.th2.constants.Constants.GAP_FILL_FLAG_TAG;
 import static com.exactpro.th2.constants.Constants.HEART_BT_INT;
 import static com.exactpro.th2.constants.Constants.IS_POSS_DUP;
@@ -118,7 +119,6 @@ import static com.exactpro.th2.constants.Constants.TEXT_TAG;
 import static com.exactpro.th2.constants.Constants.USERNAME;
 import static com.exactpro.th2.netty.bytebuf.util.ByteBufUtil.indexOf;
 import static com.exactpro.th2.netty.bytebuf.util.ByteBufUtil.isEmpty;
-import static com.exactpro.th2.netty.bytebuf.util.ByteBufUtil.set;
 import static com.exactpro.th2.util.MessageUtil.findByte;
 import static java.nio.charset.StandardCharsets.US_ASCII;
 import static java.util.Objects.requireNonNull;
@@ -142,7 +142,6 @@ public class FixHandler implements AutoCloseable, IHandler {
     private final AtomicInteger testReqID = new AtomicInteger(0);
     private final AtomicBoolean enabled = new AtomicBoolean(false);
     private final AtomicBoolean connStarted = new AtomicBoolean(false);
-    private final AtomicBoolean logonResponded = new AtomicBoolean(true);
     private final ScheduledExecutorService executorService = Executors.newScheduledThreadPool(1);
     private final IHandlerContext context;
     private final InetSocketAddress address;
@@ -157,7 +156,7 @@ public class FixHandler implements AutoCloseable, IHandler {
     public FixHandler(IHandlerContext context) {
         this.context = context;
         this.settings = (FixHandlerSettings) context.getSettings();
-        if(settings.getStateFilePath() == null || !new File(settings.getStateFilePath()).exists()) {
+        if(settings.getStateFilePath() == null || !settings.getStateFilePath().exists()) {
             msgSeqNum = new AtomicInteger(0);
             serverMsgSeqNum = new AtomicInteger(0);
         } else {
@@ -169,27 +168,25 @@ public class FixHandler implements AutoCloseable, IHandler {
             Objects.requireNonNull(settings.getSessionEndTime(), "Session end is required when session start is presented");
             LocalTime resetTime = settings.getSessionStartTime();
             ZonedDateTime now = ZonedDateTime.now(ZoneOffset.UTC);
-            ZonedDateTime scheduleTime;
-            if(now.with(resetTime).isAfter(now)) {
+            ZonedDateTime scheduleTime = now.with(resetTime);
+            if(scheduleTime.isBefore(now)) {
                 scheduleTime = now.with(resetTime);
-            } else {
-                scheduleTime = now.plusDays(1).with(resetTime);
             }
-            long time = now.until(scheduleTime, ChronoUnit.HOURS);
-            executorService.scheduleAtFixedRate(this::reset, time, 24, TimeUnit.HOURS);
+            long time = now.until(scheduleTime, ChronoUnit.MINUTES);
+            executorService.scheduleAtFixedRate(this::reset, time, 24 * 60, TimeUnit.MINUTES);
         }
 
         if(settings.getSessionEndTime() != null) {
             LocalTime resetTime = settings.getSessionEndTime();
             ZonedDateTime now = ZonedDateTime.now(ZoneOffset.UTC);
-            ZonedDateTime scheduleTime;
-            if(now.with(resetTime).isAfter(now)) {
-                scheduleTime = now.with(resetTime);
-            } else {
+            ZonedDateTime scheduleTime = now.with(resetTime);
+
+            if(scheduleTime.isBefore(now)) {
                 scheduleTime = now.plusDays(1).with(resetTime);
             }
-            long time = now.until(scheduleTime, ChronoUnit.HOURS);
-            executorService.scheduleAtFixedRate(this::close, time, 24, TimeUnit.HOURS);
+
+            long time = now.until(scheduleTime, ChronoUnit.MINUTES);
+            executorService.scheduleAtFixedRate(this::close, time, 24 * 60, TimeUnit.MINUTES);
         }
         String host = settings.getHost();
         if (host == null || host.isBlank()) throw new IllegalArgumentException("host cannot be blank");
@@ -293,11 +290,6 @@ public class FixHandler implements AutoCloseable, IHandler {
             isDup = possDup.getValue().equals(IS_POSS_DUP);
         }
 
-        if(!logonResponded.get()) {
-            msgSeqNum.incrementAndGet();
-            logonResponded.set(true);
-        }
-
         int receivedMsgSeqNum = Integer.parseInt(requireNonNull(msgSeqNumValue.getValue()));
 
         if(receivedMsgSeqNum < serverMsgSeqNum.get() && !isDup) {
@@ -325,6 +317,7 @@ public class FixHandler implements AutoCloseable, IHandler {
                 if (LOGGER.isInfoEnabled()) LOGGER.info("Logon received - {}", message.toString(US_ASCII));
                 boolean connectionSuccessful = checkLogon(message);
                 if (connectionSuccessful) {
+                    msgSeqNum.incrementAndGet();
                     if(settings.useNextExpectedSeqNum()) {
                         FixField nextExpectedSeqField = findField(message, NEXT_EXPECTED_SEQ_NUMBER_TAG);
                         if(nextExpectedSeqField == null) {
@@ -370,8 +363,8 @@ public class FixHandler implements AutoCloseable, IHandler {
                         if (testRequestTimer != null) {
                             testRequestTimer.cancel(false);
                         }
-                        msgSeqNum.getAndSet(Integer.parseInt(value) - 1);
-                        serverMsgSeqNum.getAndSet(Integer.parseInt(msgSeqNumValue.getValue()));
+                        msgSeqNum.set(Integer.parseInt(value) - 1);
+                        serverMsgSeqNum.set(Integer.parseInt(msgSeqNumValue.getValue()));
                     }
                 }
                 enabled.set(false);
@@ -464,10 +457,12 @@ public class FixHandler implements AutoCloseable, IHandler {
         for (int i = beginSeqNo; i <= endSeqNo; i++) {
             ByteBuf storedMsg = outgoingMessages.get(i);
             if (storedMsg == null) {
-                StringBuilder heartbeat = new StringBuilder();
-                setHeader(heartbeat, MSG_TYPE_HEARTBEAT, i);
-                setChecksumAndBodyLength(heartbeat);
-                channel.send(Unpooled.wrappedBuffer(heartbeat.toString().getBytes(StandardCharsets.UTF_8)), Collections.emptyMap(), null, SendMode.MANGLE);
+                StringBuilder sequenceReset = new StringBuilder();
+                setHeader(sequenceReset, MSG_TYPE_SEQUENCE_RESET, i);
+                sequenceReset.append(GAP_FILL_FLAG).append("Y");
+                sequenceReset.append(NEW_SEQ_NO).append(i);
+                setChecksumAndBodyLength(sequenceReset);
+                channel.send(Unpooled.wrappedBuffer(sequenceReset.toString().getBytes(StandardCharsets.UTF_8)), Collections.emptyMap(), null, SendMode.MANGLE);
             } else {
                 if (LOGGER.isInfoEnabled()) LOGGER.info("Resending message: {}", storedMsg.toString(US_ASCII));
                 FixField sendingTime = findField(storedMsg, SENDING_TIME_TAG);
@@ -710,7 +705,6 @@ public class FixHandler implements AutoCloseable, IHandler {
 
         setChecksumAndBodyLength(logon);
         LOGGER.info("Send logon - {}", logon);
-        logonResponded.set(false);
         channel.send(Unpooled.wrappedBuffer(logon.toString().getBytes(StandardCharsets.UTF_8)), Collections.emptyMap(), null, IChannel.SendMode.MANGLE);
     }
 
