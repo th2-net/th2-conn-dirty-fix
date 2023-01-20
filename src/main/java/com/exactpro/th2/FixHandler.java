@@ -376,7 +376,6 @@ public class FixHandler implements AutoCloseable, IHandler {
                             testRequestTimer.cancel(false);
                         }
                         msgSeqNum.set(Integer.parseInt(value) - 1);
-                        serverMsgSeqNum.set(Integer.parseInt(msgSeqNumValue.getValue()));
                     }
                 }
                 enabled.set(false);
@@ -406,6 +405,8 @@ public class FixHandler implements AutoCloseable, IHandler {
         FixField seqNumValue = findField(message, NEW_SEQ_NO_TAG);
 
         if (seqNumValue != null && (gapFillFlagValue == null || requireNonNull(gapFillFlagValue.getValue()).equals("N"))) {
+            serverMsgSeqNum.set(Integer.parseInt(requireNonNull(seqNumValue.getValue())));
+        } else if(seqNumValue != null) {
             serverMsgSeqNum.set(Integer.parseInt(requireNonNull(seqNumValue.getValue())));
         } else if (LOGGER.isTraceEnabled()) {
             LOGGER.trace("Failed to reset servers MsgSeqNum. No such tag in message: {}", message.toString(US_ASCII));
