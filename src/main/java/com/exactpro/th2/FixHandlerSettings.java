@@ -44,6 +44,9 @@ public class FixHandlerSettings implements IHandlerSettings {
     private String passwordEncryptKeyFilePath;
     private KeyFileType passwordEncryptKeyFileType = KeyFileType.PEM_PUBLIC_KEY;
 
+    private Integer startClientSeqNum;
+    private Integer startServerSeqNum;
+
     @JsonDeserialize(using = FileDeserializer.class)
     private File stateFilePath;
     /**
@@ -139,6 +142,22 @@ public class FixHandlerSettings implements IHandlerSettings {
 
     public void setSenderSubID(String senderSubID) {
         this.senderSubID = senderSubID;
+    }
+
+    public Integer getStartClientSeqNum() {
+        return startClientSeqNum;
+    }
+
+    public void setStartClientSeqNum(Integer startClientSeqNum) {
+        this.startClientSeqNum = startClientSeqNum;
+    }
+
+    public Integer getStartServerSeqNum() {
+        return startServerSeqNum;
+    }
+
+    public void setStartServerSeqNum(Integer startServerSeqNum) {
+        this.startServerSeqNum = startServerSeqNum;
     }
 
     public String getEncryptMethod() {

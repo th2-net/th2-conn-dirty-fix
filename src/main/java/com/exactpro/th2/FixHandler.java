@@ -157,13 +157,21 @@ public class FixHandler implements AutoCloseable, IHandler {
         this.context = context;
         this.settings = (FixHandlerSettings) context.getSettings();
         if(settings.getStateFilePath() == null || !settings.getStateFilePath().exists()) {
-            msgSeqNum = new AtomicInteger(0);
-            serverMsgSeqNum = new AtomicInteger(0);
+            msgSeqNum = new AtomicInteger(settings.getStartClientSeqNum());
+            serverMsgSeqNum = new AtomicInteger(settings.getStartServerSeqNum());
         } else {
             SequenceHolder sequences = Util.readSequences(settings.getStateFilePath());
             msgSeqNum = new AtomicInteger(sequences.getClientSeq());
             serverMsgSeqNum = new AtomicInteger(sequences.getServerSeq());
         }
+        if(settings.getStartClientSeqNum() != null) {
+            msgSeqNum.set(settings.getStartClientSeqNum());
+        }
+
+        if(settings.getStartServerSeqNum() != null) {
+            serverMsgSeqNum.set(settings.getStartServerSeqNum());
+        }
+
         if(settings.getSessionStartTime() != null) {
             Objects.requireNonNull(settings.getSessionEndTime(), "Session end is required when session start is presented");
             LocalTime resetTime = settings.getSessionStartTime();
