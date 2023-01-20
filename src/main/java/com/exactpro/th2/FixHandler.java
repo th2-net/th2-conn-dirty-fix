@@ -181,7 +181,7 @@ public class FixHandler implements AutoCloseable, IHandler {
             ZonedDateTime now = ZonedDateTime.now(ZoneOffset.UTC);
             ZonedDateTime scheduleTime = now.with(resetTime);
             if(scheduleTime.isBefore(now)) {
-                scheduleTime = now.with(resetTime);
+                scheduleTime = now.plusDays(1).with(resetTime);
             }
             long time = now.until(scheduleTime, ChronoUnit.SECONDS);
             executorService.scheduleAtFixedRate(this::reset, time, 24 * 60 * 60, TimeUnit.MINUTES);
@@ -591,7 +591,7 @@ public class FixHandler implements AutoCloseable, IHandler {
             String value = senderCompID.getValue();
 
             if (value == null || value.isEmpty() || value.equals("null")) {
-                msgSeqNum.setValue(settings.getSenderCompID());
+                senderCompID.setValue(settings.getSenderCompID());
             }
         }
 
@@ -730,8 +730,8 @@ public class FixHandler implements AutoCloseable, IHandler {
         }
         if(settings.getStateFilePath() != null) {
             try {
-                LOGGER.info("Saving sequences: client - {}, server - {}", msgSeqNum.get(), serverMsgSeqNum.get() + 1);
-                Util.writeSequences(msgSeqNum.get(), serverMsgSeqNum.get() + 1, settings.getStateFilePath());
+                LOGGER.info("Saving sequences: client - {}, server - {}", msgSeqNum.get(), serverMsgSeqNum.get());
+                Util.writeSequences(msgSeqNum.get(), serverMsgSeqNum.get(), settings.getStateFilePath());
             } catch (IOException e) {
                 if (LOGGER.isErrorEnabled()) {
                     LOGGER.error("Sequence number were not saved: clientSeq - {}, serverSeq - {}", msgSeqNum.get(), serverMsgSeqNum.get(), e);
