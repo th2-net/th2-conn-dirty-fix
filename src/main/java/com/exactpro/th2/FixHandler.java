@@ -177,6 +177,9 @@ public class FixHandler implements AutoCloseable, IHandler {
 
         if(settings.getSessionStartTime() != null) {
             Objects.requireNonNull(settings.getSessionEndTime(), "Session end is required when session start is presented");
+            if(settings.getSessionStartTime().isBefore(settings.getSessionEndTime())) {
+                throw new IllegalStateException("Session end time must be before session start time in a timeline.");
+            }
             LocalTime resetTime = settings.getSessionStartTime();
             ZonedDateTime now = ZonedDateTime.now(ZoneOffset.UTC);
             ZonedDateTime scheduleTime = now.with(resetTime);
@@ -199,6 +202,7 @@ public class FixHandler implements AutoCloseable, IHandler {
             long time = now.until(scheduleTime, ChronoUnit.SECONDS);
             executorService.scheduleAtFixedRate(this::close, time, 24 * 60 * 60, TimeUnit.MINUTES);
         }
+
         String host = settings.getHost();
         if (host == null || host.isBlank()) throw new IllegalArgumentException("host cannot be blank");
         int port = settings.getPort();
