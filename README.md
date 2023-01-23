@@ -41,9 +41,9 @@ This microservice allows sending and receiving messages via FIX protocol
 + *disconnectRequestDelay* - the interval for the shutdown request
 + *resetSeqNumFlag* - resetting sequence number in initial Logon message (when conn started)
 + *resetOnLogon* - resetting the sequence number in Logon in other cases (e.g. disconnect)
-+ *stateFilePath* - path to file where sequences will be saved to use with next login attempts. It is useful when acceptor is not support sequence reset. (`nullable`)
-+ *startSessionTime* - UTC time when session starts. (`nullable`)
-+ *endSessionTime* - UTC time when session ends. required if startSessionTime is filled.
++ *stateFilePath* - path to file where sequences will be saved to use with next login attempts. It is useful when acceptor does not support sequence reset. (`nullable`)
++ *sessionStartTime* - UTC time when session starts. (`nullable`)
++ *sessionEndTime* - UTC time when session ends. required if startSessionTime is filled.
 + *useNextExpectedSeqNum* - session management based on next expected sequence number. (`false` by default)
 + *saveAdminMessages* - defines if admin messages will be saved to internal outgoing buffer. (`false` by default)
 

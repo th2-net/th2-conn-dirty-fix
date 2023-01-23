@@ -33,20 +33,16 @@ import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.File;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Paths;
-import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
-import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
-import java.time.temporal.TemporalUnit;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
@@ -130,6 +126,8 @@ import static java.util.Objects.requireNonNull;
 
 public class FixHandler implements AutoCloseable, IHandler {
     private static final Logger LOGGER = LoggerFactory.getLogger(FixHandler.class);
+
+    private static final int DAY_SECONDS = 24 * 60 * 60;
     private static final String SOH = "\001";
     private static final byte BYTE_SOH = 1;
     private static final String STRING_MSG_TYPE = "MsgType";
@@ -140,6 +138,7 @@ public class FixHandler implements AutoCloseable, IHandler {
     private final AtomicInteger msgSeqNum;
     private final AtomicInteger serverMsgSeqNum;
     private final AtomicInteger testReqID = new AtomicInteger(0);
+    private final AtomicBoolean sessionActive = new AtomicBoolean(true);
     private final AtomicBoolean enabled = new AtomicBoolean(false);
     private final AtomicBoolean connStarted = new AtomicBoolean(false);
     private final ScheduledExecutorService executorService = Executors.newScheduledThreadPool(1);
@@ -169,17 +168,15 @@ public class FixHandler implements AutoCloseable, IHandler {
 
         if(settings.getSessionStartTime() != null) {
             Objects.requireNonNull(settings.getSessionEndTime(), "Session end is required when session start is presented");
-            if(settings.getSessionStartTime().isBefore(settings.getSessionEndTime())) {
-                throw new IllegalStateException("Session end time must be before session start time in a timeline.");
-            }
             LocalTime resetTime = settings.getSessionStartTime();
             ZonedDateTime now = ZonedDateTime.now(ZoneOffset.UTC);
             ZonedDateTime scheduleTime = now.with(resetTime);
+
             if(scheduleTime.isBefore(now)) {
                 scheduleTime = now.plusDays(1).with(resetTime);
             }
             long time = now.until(scheduleTime, ChronoUnit.SECONDS);
-            executorService.scheduleAtFixedRate(this::reset, time, 24 * 60 * 60, TimeUnit.MINUTES);
+            executorService.scheduleAtFixedRate(this::reset, time, DAY_SECONDS, TimeUnit.SECONDS);
         }
 
         if(settings.getSessionEndTime() != null) {
@@ -189,10 +186,15 @@ public class FixHandler implements AutoCloseable, IHandler {
 
             if(scheduleTime.isBefore(now)) {
                 scheduleTime = now.plusDays(1).with(resetTime);
+            } else if(scheduleTime.isBefore(now.with(settings.getSessionStartTime()))) {
+                sessionActive.set(false);
             }
 
             long time = now.until(scheduleTime, ChronoUnit.SECONDS);
-            executorService.scheduleAtFixedRate(this::close, time, 24 * 60 * 60, TimeUnit.MINUTES);
+            executorService.scheduleAtFixedRate(() -> {
+                this.close();
+                sessionActive.set(false);
+            }, time, DAY_SECONDS, TimeUnit.SECONDS);
         }
 
         String host = settings.getHost();
@@ -218,6 +220,9 @@ public class FixHandler implements AutoCloseable, IHandler {
     @NotNull
     @Override
     public CompletableFuture<MessageID> send(@NotNull RawMessage rawMessage) {
+        if (!sessionActive.get()) {
+            throw new IllegalStateException("Session is not active. It is not possible to send messages.");
+        }
         if (!channel.isOpen()) {
             try {
                 channel.open().get();
@@ -400,11 +405,9 @@ public class FixHandler implements AutoCloseable, IHandler {
         FixField gapFillFlagValue = findField(message, GAP_FILL_FLAG_TAG);
         FixField seqNumValue = findField(message, NEW_SEQ_NO_TAG);
 
-        if (seqNumValue != null && (gapFillFlagValue == null || requireNonNull(gapFillFlagValue.getValue()).equals("N"))) {
+        if(seqNumValue != null) {
             serverMsgSeqNum.set(Integer.parseInt(requireNonNull(seqNumValue.getValue())));
-        } else if(seqNumValue != null) {
-            serverMsgSeqNum.set(Integer.parseInt(requireNonNull(seqNumValue.getValue())));
-        } else if (LOGGER.isTraceEnabled()) {
+        } else {
             LOGGER.trace("Failed to reset servers MsgSeqNum. No such tag in message: {}", message.toString(US_ASCII));
         }
     }
@@ -412,6 +415,7 @@ public class FixHandler implements AutoCloseable, IHandler {
     private void reset() {
         msgSeqNum.set(0);
         serverMsgSeqNum.set(0);
+        sessionActive.set(true);
         sendLogon();
     }
 
@@ -683,6 +687,10 @@ public class FixHandler implements AutoCloseable, IHandler {
     }
 
     public void sendLogon() {
+        if(!sessionActive.get()) {
+            LOGGER.info("Logon is not sent to server because session is not active.");
+            return;
+        }
         lastSendTime = System.currentTimeMillis();
         StringBuilder logon = new StringBuilder();
         Boolean reset;

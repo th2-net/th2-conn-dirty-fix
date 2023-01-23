@@ -97,5 +97,4 @@ public class Constants {
     );
 
     public static final String IS_POSS_DUP = "Y";
-
 }
