@@ -42,9 +42,6 @@ public class FixHandlerSettings implements IHandlerSettings {
     private String passwordEncryptKeyFilePath;
     private KeyFileType passwordEncryptKeyFileType = KeyFileType.PEM_PUBLIC_KEY;
 
-    private Integer startClientSeqNum;
-    private Integer startServerSeqNum;
-
     private File stateFilePath;
     /**
      * Value from Java Security Standard Algorithm Names
@@ -57,7 +54,7 @@ public class FixHandlerSettings implements IHandlerSettings {
     private Boolean resetSeqNumFlag = false;
     private Boolean resetOnLogon = false;
     private Boolean useNextExpectedSeqNum = false;
-    private Boolean isSaveAdminMessages = false;
+    private Boolean saveAdminMessages = false;
 
     @JsonDeserialize(using = LocalTimeDeserializer.class)
     private LocalTime sessionStartTime;
@@ -139,22 +136,6 @@ public class FixHandlerSettings implements IHandlerSettings {
 
     public void setSenderSubID(String senderSubID) {
         this.senderSubID = senderSubID;
-    }
-
-    public Integer getStartClientSeqNum() {
-        return startClientSeqNum;
-    }
-
-    public void setStartClientSeqNum(Integer startClientSeqNum) {
-        this.startClientSeqNum = startClientSeqNum;
-    }
-
-    public Integer getStartServerSeqNum() {
-        return startServerSeqNum;
-    }
-
-    public void setStartServerSeqNum(Integer startServerSeqNum) {
-        this.startServerSeqNum = startServerSeqNum;
     }
 
     public String getEncryptMethod() {
@@ -250,11 +231,11 @@ public class FixHandlerSettings implements IHandlerSettings {
     }
 
     public Boolean isSaveAdminMessages() {
-        return isSaveAdminMessages;
+        return saveAdminMessages;
     }
 
     public void setSaveAdminMessages(Boolean saveAdminMessages) {
-        isSaveAdminMessages = saveAdminMessages;
+        this.saveAdminMessages = saveAdminMessages;
     }
 
     public LocalTime getSessionStartTime() {

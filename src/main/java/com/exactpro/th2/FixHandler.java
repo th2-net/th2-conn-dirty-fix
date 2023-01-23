@@ -165,14 +165,6 @@ public class FixHandler implements AutoCloseable, IHandler {
             serverMsgSeqNum = new AtomicInteger(sequences.getServerSeq());
         }
 
-        if(settings.getStartClientSeqNum() != null) {
-            msgSeqNum.set(settings.getStartClientSeqNum());
-        }
-
-        if(settings.getStartServerSeqNum() != null) {
-            serverMsgSeqNum.set(settings.getStartServerSeqNum());
-        }
-
         LOGGER.info("Initial sequences are: client - {}, server - {}", msgSeqNum.get(), serverMsgSeqNum.get());
 
         if(settings.getSessionStartTime() != null) {

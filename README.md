@@ -1,4 +1,4 @@
-# th2-conn-dirty-fix (0.0.2)
+# th2-conn-dirty-fix (0.0.4)
 
 This microservice allows sending and receiving messages via FIX protocol
 
@@ -41,6 +41,11 @@ This microservice allows sending and receiving messages via FIX protocol
 + *disconnectRequestDelay* - the interval for the shutdown request
 + *resetSeqNumFlag* - resetting sequence number in initial Logon message (when conn started)
 + *resetOnLogon* - resetting the sequence number in Logon in other cases (e.g. disconnect)
++ *stateFilePath* - path to file where sequences will be saved to use with next login attempts. It is useful when acceptor is not support sequence reset. (`nullable`)
++ *startSessionTime* - UTC time when session starts. (`nullable`)
++ *endSessionTime* - UTC time when session ends. required if startSessionTime is filled.
++ *useNextExpectedSeqNum* - session management based on next expected sequence number. (`false` by default)
++ *saveAdminMessages* - defines if admin messages will be saved to internal outgoing buffer. (`false` by default)
 
 ### Security settings
 
@@ -300,6 +305,13 @@ spec:
 ```
 
 # Changelog
+
+## 0.0.4
+* Session management based on NextExpectedSeqNum field.
+* Recovery handling
+  * outgoing messages are now saved
+  * if message wasn't saved sequence reset message with gap fill mode flag is sent.
+* Session start and Session end configuration to handle sequence reset by exchange schedule.
 
 ## 0.0.3
 
