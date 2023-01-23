@@ -1,4 +1,4 @@
-# th2-conn-dirty-fix (0.0.2)
+# th2-conn-dirty-fix (1.0.0)
 
 This microservice allows sending and receiving messages via FIX protocol
 
@@ -13,6 +13,7 @@ This microservice allows sending and receiving messages via FIX protocol
 
 ## Session settings
 
++ *sessionGroup* - session group for incoming/outgoing th2 messages (equal to session alias by default)
 + *sessionAlias* - session alias for incoming/outgoing th2 messages
 + *handler* - handler settings
 + *mangler* - mangler settings
@@ -216,12 +217,12 @@ metadata:
   name: fix-client
 spec:
   image-name: ghcr.io/th2-net/th2-conn-dirty-fix
-  image-version: 0.0.1
+  image-version: 1.0.0
   type: th2-conn
   custom-config:
     maxBatchSize: 1000
     maxFlushTime: 1000
-    batchByGroup: false
+    batchByGroup: true
     publishSentEvents: true
     publishConnectEvents: true
     sessions:
@@ -301,10 +302,14 @@ spec:
 
 # Changelog
 
+## 1.0.0
+
+* Bump `conn-dirty-tcp-core` to `3.0.0` for books and pages support
+
 ## 0.0.3
 
 * Added new password option into settings
-* Provided ability to specify encrypt algorithm for reading key from file and encrypting password and new password fields 
+* Provided ability to specify encrypt algorithm for reading key from file and encrypting password and new password fields
 
 ## 0.0.2
 
