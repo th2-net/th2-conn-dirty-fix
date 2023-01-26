@@ -37,12 +37,12 @@ import java.time.ZoneOffset
 
 class SequenceLoader(
     private val dataProvider: DataProviderService,
-    sessionStartTime: LocalTime?,
+    private val sessionStartTime: LocalTime?,
     private val sessionAlias: String,
 ) {
     private val sessionStartDateTime = OffsetDateTime
         .now(ZoneOffset.UTC)
-        .with(sessionStartTime)
+        .with(sessionStartTime ?: LocalTime.now())
         .atZoneSameInstant(ZoneId.systemDefault())
         .toLocalDateTime()
         .toTimestamp()
@@ -61,8 +61,10 @@ class SequenceLoader(
         var message: MessageSearchResponse? = null
         while (iterator.hasNext()) {
             message = iterator.next()
-            if(Timestamps.compare(sessionStartDateTime, message.message.timestamp) > 0) {
-                return 0
+            if(sessionStartTime != null) {
+                if(Timestamps.compare(sessionStartDateTime, message.message.timestamp) > 0) {
+                    return 0
+                }
             }
             val msg = Unpooled.copiedBuffer(message.message.bodyRaw.toByteArray())
             return msg.findField(MSG_SEQ_NUM_TAG)?.value?.toInt() ?: continue
