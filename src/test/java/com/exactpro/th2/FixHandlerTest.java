@@ -28,7 +28,6 @@ import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
@@ -191,7 +190,6 @@ class FixHandlerTest {
         Map<String, String> actual2 = new HashMap<>();
         fixHandler.onOutgoing(channel, bufferForPrepareMessage2, actual2);
         assertEquals(expected2, actual2);
-
         fixHandler.onOutgoing(channel, bufferForPrepareMessage3, expected3);
         fixHandler.onOutgoing(channel, bufferForPrepareMessage4, expected4);
 
@@ -368,7 +366,7 @@ class Channel implements IChannel {
 
     @Override
     public boolean isOpen() {
-        return false;
+        return true;
     }
 
     @Override

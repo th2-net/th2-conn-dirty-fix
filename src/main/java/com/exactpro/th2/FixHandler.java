@@ -19,12 +19,13 @@ package com.exactpro.th2;
 import com.exactpro.th2.common.grpc.MessageID;
 import com.exactpro.th2.common.grpc.RawMessage;
 import com.exactpro.th2.conn.dirty.fix.FixField;
+import com.exactpro.th2.conn.dirty.fix.SequenceLoader;
 import com.exactpro.th2.conn.dirty.tcp.core.api.IChannel;
 import com.exactpro.th2.conn.dirty.tcp.core.api.IChannel.SendMode;
 import com.exactpro.th2.conn.dirty.tcp.core.api.IHandler;
 import com.exactpro.th2.conn.dirty.tcp.core.api.IHandlerContext;
 import com.exactpro.th2.conn.dirty.tcp.core.util.CommonUtil;
-import com.exactpro.th2.util.Util;
+import com.exactpro.th2.dataprovider.grpc.DataProviderService;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import org.apache.commons.lang3.StringUtils;
@@ -33,7 +34,6 @@ import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Paths;
@@ -78,7 +78,6 @@ import static com.exactpro.th2.constants.Constants.ENCRYPT_METHOD;
 import static com.exactpro.th2.constants.Constants.END_SEQ_NO;
 import static com.exactpro.th2.constants.Constants.END_SEQ_NO_TAG;
 import static com.exactpro.th2.constants.Constants.GAP_FILL_FLAG;
-import static com.exactpro.th2.constants.Constants.GAP_FILL_FLAG_TAG;
 import static com.exactpro.th2.constants.Constants.HEART_BT_INT;
 import static com.exactpro.th2.constants.Constants.IS_POSS_DUP;
 import static com.exactpro.th2.constants.Constants.MSG_SEQ_NUM;
@@ -135,8 +134,8 @@ public class FixHandler implements AutoCloseable, IHandler {
     private static final String STUBBING_VALUE = "XXX";
 
     private final Log outgoingMessages = new Log(10000);
-    private final AtomicInteger msgSeqNum;
-    private final AtomicInteger serverMsgSeqNum;
+    private final AtomicInteger msgSeqNum = new AtomicInteger(0);
+    private final AtomicInteger serverMsgSeqNum = new AtomicInteger(0);
     private final AtomicInteger testReqID = new AtomicInteger(0);
     private final AtomicBoolean sessionActive = new AtomicBoolean(true);
     private final AtomicBoolean enabled = new AtomicBoolean(false);
@@ -144,6 +143,7 @@ public class FixHandler implements AutoCloseable, IHandler {
     private final ScheduledExecutorService executorService = Executors.newScheduledThreadPool(1);
     private final IHandlerContext context;
     private final InetSocketAddress address;
+    private final DataProviderService dataProvider;
 
     private Future<?> heartbeatTimer = CompletableFuture.completedFuture(null);
     private Future<?> testRequestTimer = CompletableFuture.completedFuture(null);
@@ -155,16 +155,7 @@ public class FixHandler implements AutoCloseable, IHandler {
     public FixHandler(IHandlerContext context) {
         this.context = context;
         this.settings = (FixHandlerSettings) context.getSettings();
-        if(settings.getStateFilePath() == null || !settings.getStateFilePath().exists()) {
-            msgSeqNum = new AtomicInteger(0);
-            serverMsgSeqNum = new AtomicInteger(0);
-        } else {
-            SequenceHolder sequences = Util.readSequences(settings.getStateFilePath());
-            msgSeqNum = new AtomicInteger(sequences.getClientSeq());
-            serverMsgSeqNum = new AtomicInteger(sequences.getServerSeq());
-        }
-
-        LOGGER.info("Initial sequences are: client - {}, server - {}", msgSeqNum.get(), serverMsgSeqNum.get());
+        this.dataProvider = context.getGrpcService(DataProviderService.class);
 
         if(settings.getSessionStartTime() != null) {
             Objects.requireNonNull(settings.getSessionEndTime(), "Session end is required when session start is presented");
@@ -214,6 +205,13 @@ public class FixHandler implements AutoCloseable, IHandler {
     @Override
     public void onStart() {
         channel = context.createChannel(address, settings.getSecurity(), Map.of(), true, settings.getReconnectDelay() * 1000L, Integer.MAX_VALUE);
+        if(settings.getLoadSequencesFromCradle()) {
+            SequenceLoader seqLoader = new SequenceLoader(dataProvider, settings.getSessionStartTime(), channel.getSessionAlias());
+            SequenceHolder sequences = seqLoader.load();
+            LOGGER.info("Loaded sequences are: client - {}, server - {}", sequences.getClientSeq(), sequences.getServerSeq());
+            msgSeqNum.set(sequences.getClientSeq());
+            serverMsgSeqNum.set(sequences.getServerSeq());
+        }
         channel.open();
     }
 
@@ -329,7 +327,6 @@ public class FixHandler implements AutoCloseable, IHandler {
                 if (LOGGER.isInfoEnabled()) LOGGER.info("Logon received - {}", message.toString(US_ASCII));
                 boolean connectionSuccessful = checkLogon(message);
                 if (connectionSuccessful) {
-                    msgSeqNum.incrementAndGet();
                     if(settings.useNextExpectedSeqNum()) {
                         FixField nextExpectedSeqField = findField(message, NEXT_EXPECTED_SEQ_NUMBER_TAG);
                         if(nextExpectedSeqField == null) {
@@ -402,7 +399,6 @@ public class FixHandler implements AutoCloseable, IHandler {
     }
 
     private void resetSequence(ByteBuf message) {
-        FixField gapFillFlagValue = findField(message, GAP_FILL_FLAG_TAG);
         FixField seqNumValue = findField(message, NEW_SEQ_NO_TAG);
 
         if(seqNumValue != null) {
@@ -722,6 +718,9 @@ public class FixHandler implements AutoCloseable, IHandler {
 
         setChecksumAndBodyLength(logon);
         LOGGER.info("Send logon - {}", logon);
+        if(channel.isOpen()) {
+            msgSeqNum.incrementAndGet();
+        }
         channel.send(Unpooled.wrappedBuffer(logon.toString().getBytes(StandardCharsets.UTF_8)), Collections.emptyMap(), null, IChannel.SendMode.MANGLE);
     }
 
@@ -731,16 +730,6 @@ public class FixHandler implements AutoCloseable, IHandler {
             setHeader(logout, MSG_TYPE_LOGOUT, msgSeqNum.incrementAndGet());
             setChecksumAndBodyLength(logout);
             channel.send(Unpooled.wrappedBuffer(logout.toString().getBytes(StandardCharsets.UTF_8)), Collections.emptyMap(), null, IChannel.SendMode.MANGLE);
-        }
-        if(settings.getStateFilePath() != null) {
-            try {
-                LOGGER.info("Saving sequences: client - {}, server - {}", msgSeqNum.get(), serverMsgSeqNum.get());
-                Util.writeSequences(msgSeqNum.get(), serverMsgSeqNum.get(), settings.getStateFilePath());
-            } catch (IOException e) {
-                if (LOGGER.isErrorEnabled()) {
-                    LOGGER.error("Sequence number were not saved: clientSeq - {}, serverSeq - {}", msgSeqNum.get(), serverMsgSeqNum.get(), e);
-                }
-            }
         }
         enabled.set(false);
     }

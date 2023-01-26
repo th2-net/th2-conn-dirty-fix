@@ -41,8 +41,6 @@ public class FixHandlerSettings implements IHandlerSettings {
     private String newPassword;
     private String passwordEncryptKeyFilePath;
     private KeyFileType passwordEncryptKeyFileType = KeyFileType.PEM_PUBLIC_KEY;
-
-    private File stateFilePath;
     /**
      * Value from Java Security Standard Algorithm Names
      */
@@ -55,6 +53,7 @@ public class FixHandlerSettings implements IHandlerSettings {
     private Boolean resetOnLogon = false;
     private Boolean useNextExpectedSeqNum = false;
     private Boolean saveAdminMessages = false;
+    private Boolean loadSequencesFromCradle = false;
 
     @JsonDeserialize(using = LocalTimeDeserializer.class)
     private LocalTime sessionStartTime;
@@ -214,12 +213,12 @@ public class FixHandlerSettings implements IHandlerSettings {
         this.passwordEncryptAlgorithm = passwordEncryptAlgorithm;
     }
 
-    public File getStateFilePath() {
-        return stateFilePath;
+    public Boolean getLoadSequencesFromCradle() {
+        return loadSequencesFromCradle;
     }
 
-    public void setStateFilePath(File stateFilePath) {
-        this.stateFilePath = stateFilePath;
+    public void setLoadSequencesFromCradle(Boolean loadSequencesFromCradle) {
+        this.loadSequencesFromCradle = loadSequencesFromCradle;
     }
 
     public Boolean useNextExpectedSeqNum() {
