@@ -44,7 +44,7 @@ class SequenceLoader(
         .now(ZoneOffset.UTC)
         .with(sessionStartTime ?: LocalTime.now())
         .atZoneSameInstant(ZoneId.systemDefault())
-        .toLocalDateTime()
+        .toInstant()
         .toTimestamp()
 
     fun load(): SequenceHolder {
