@@ -22,7 +22,6 @@ import com.exactpro.th2.conn.dirty.tcp.core.api.IHandlerSettings;
 import com.exactpro.th2.util.LocalTimeDeserializer;
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 
-import java.io.File;
 import java.time.LocalTime;
 
 public class FixHandlerSettings implements IHandlerSettings {
@@ -213,7 +212,7 @@ public class FixHandlerSettings implements IHandlerSettings {
         this.passwordEncryptAlgorithm = passwordEncryptAlgorithm;
     }
 
-    public Boolean getLoadSequencesFromCradle() {
+    public Boolean isLoadSequencesFromCradle() {
         return loadSequencesFromCradle;
     }
 

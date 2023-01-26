@@ -155,7 +155,11 @@ public class FixHandler implements AutoCloseable, IHandler {
     public FixHandler(IHandlerContext context) {
         this.context = context;
         this.settings = (FixHandlerSettings) context.getSettings();
-        this.dataProvider = context.getGrpcService(DataProviderService.class);
+        if(settings.isLoadSequencesFromCradle()) {
+            this.dataProvider = context.getGrpcService(DataProviderService.class);
+        } else {
+            this.dataProvider = null;
+        }
 
         if(settings.getSessionStartTime() != null) {
             Objects.requireNonNull(settings.getSessionEndTime(), "Session end is required when session start is presented");
@@ -205,7 +209,7 @@ public class FixHandler implements AutoCloseable, IHandler {
     @Override
     public void onStart() {
         channel = context.createChannel(address, settings.getSecurity(), Map.of(), true, settings.getReconnectDelay() * 1000L, Integer.MAX_VALUE);
-        if(settings.getLoadSequencesFromCradle()) {
+        if(settings.isLoadSequencesFromCradle()) {
             SequenceLoader seqLoader = new SequenceLoader(dataProvider, settings.getSessionStartTime(), channel.getSessionAlias());
             SequenceHolder sequences = seqLoader.load();
             LOGGER.info("Loaded sequences are: client - {}, server - {}", sequences.getClientSeq(), sequences.getServerSeq());
