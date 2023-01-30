@@ -106,6 +106,7 @@ import static com.exactpro.th2.constants.Constants.SENDER_SUB_ID_TAG;
 import static com.exactpro.th2.constants.Constants.SENDING_TIME;
 import static com.exactpro.th2.constants.Constants.SENDING_TIME_TAG;
 import static com.exactpro.th2.constants.Constants.SESSION_STATUS_TAG;
+import static com.exactpro.th2.constants.Constants.SUCCESSFUL_LOGOUT_CODE;
 import static com.exactpro.th2.constants.Constants.TARGET_COMP_ID;
 import static com.exactpro.th2.constants.Constants.TARGET_COMP_ID_TAG;
 import static com.exactpro.th2.constants.Constants.TEST_REQ_ID;
@@ -365,18 +366,29 @@ public class FixHandler implements AutoCloseable, IHandler {
                 break;
             case MSG_TYPE_LOGOUT: //extract logout reason
                 if (LOGGER.isInfoEnabled()) LOGGER.info("Logout received - {}", message.toString(US_ASCII));
-                FixField text = findField(message, TEXT_TAG);
-                if (text != null) {
-                    LOGGER.warn("Received Logout has text (58) tag: {}", text.getValue());
-                    String value = StringUtils.substringBetween(text.getValue(), "expecting ", " but received");
-                    if (value != null) {
+                FixField sessionStatus = findField(message, SESSION_STATUS_TAG);
+
+                if(sessionStatus != null) {
+                    int statusCode = Integer.parseInt(Objects.requireNonNull(sessionStatus.getValue()));
+                    if(statusCode != SUCCESSFUL_LOGOUT_CODE) {
                         if (heartbeatTimer != null) {
                             heartbeatTimer.cancel(false);
                         }
                         if (testRequestTimer != null) {
                             testRequestTimer.cancel(false);
                         }
-                        msgSeqNum.set(Integer.parseInt(value) - 1);
+                        FixField text = findField(message, TEXT_TAG);
+                        if (text != null) {
+                            LOGGER.warn("Received Logout has text (58) tag: {}", text.getValue());
+                            String value = StringUtils.substringBetween(text.getValue(), "expecting ", " but received");
+                            if (value != null) {
+                                msgSeqNum.set(Integer.parseInt(value) - 1);
+                            } else {
+                                msgSeqNum.set(msgSeqNum.get() - 1);
+                            }
+                        } else {
+                            msgSeqNum.set(msgSeqNum.get() - 1);
+                        }
                         serverMsgSeqNum.set(Integer.parseInt(msgSeqNumValue.getValue()) - 1);
                     }
                 }
