@@ -371,12 +371,6 @@ public class FixHandler implements AutoCloseable, IHandler {
                 if(sessionStatus != null) {
                     int statusCode = Integer.parseInt(Objects.requireNonNull(sessionStatus.getValue()));
                     if(statusCode != SUCCESSFUL_LOGOUT_CODE) {
-                        if (heartbeatTimer != null) {
-                            heartbeatTimer.cancel(false);
-                        }
-                        if (testRequestTimer != null) {
-                            testRequestTimer.cancel(false);
-                        }
                         FixField text = findField(message, TEXT_TAG);
                         if (text != null) {
                             LOGGER.warn("Received Logout has text (58) tag: {}", text.getValue());
@@ -391,6 +385,12 @@ public class FixHandler implements AutoCloseable, IHandler {
                         }
                         serverMsgSeqNum.set(Integer.parseInt(msgSeqNumValue.getValue()) - 1);
                     }
+                }
+                if (heartbeatTimer != null) {
+                    heartbeatTimer.cancel(false);
+                }
+                if (testRequestTimer != null) {
+                    testRequestTimer.cancel(false);
                 }
                 enabled.set(false);
                 context.send(CommonUtil.toEvent("logout for sender - " + settings.getSenderCompID()));//make more useful
