@@ -368,7 +368,7 @@ class Channel implements IChannel {
 
     @Override
     public boolean isOpen() {
-        return false;
+        return true;
     }
 
     @Override
