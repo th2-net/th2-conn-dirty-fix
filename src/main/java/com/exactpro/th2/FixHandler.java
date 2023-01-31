@@ -414,11 +414,15 @@ public class FixHandler implements AutoCloseable, IHandler {
     }
 
     private void resetSequence(ByteBuf message) {
-        FixField gapFillFlagValue = findField(message, GAP_FILL_FLAG_TAG);
+        FixField gapFillMode = findField(message, GAP_FILL_FLAG_TAG);
         FixField seqNumValue = findField(message, NEW_SEQ_NO_TAG);
 
         if(seqNumValue != null) {
-            serverMsgSeqNum.set(Integer.parseInt(requireNonNull(seqNumValue.getValue())));
+            if(gapFillMode == null || gapFillMode.equals("N")) {
+                serverMsgSeqNum.set(Integer.parseInt(requireNonNull(seqNumValue.getValue())));
+            } else {
+                serverMsgSeqNum.set(Integer.parseInt(requireNonNull(seqNumValue.getValue())) - 1);
+            }
         } else {
             LOGGER.trace("Failed to reset servers MsgSeqNum. No such tag in message: {}", message.toString(US_ASCII));
         }
@@ -699,7 +703,7 @@ public class FixHandler implements AutoCloseable, IHandler {
     }
 
     public void sendLogon() {
-        if(!sessionActive.get()) {
+        if(!sessionActive.get() || !channel.isOpen()) {
             LOGGER.info("Logon is not sent to server because session is not active.");
             return;
         }
@@ -710,7 +714,7 @@ public class FixHandler implements AutoCloseable, IHandler {
         else reset = settings.getResetOnLogon();
         if (reset) msgSeqNum.getAndSet(0);
 
-        setHeader(logon, MSG_TYPE_LOGON, msgSeqNum.get() + 1);
+        setHeader(logon, MSG_TYPE_LOGON, msgSeqNum.incrementAndGet());
         if (settings.useNextExpectedSeqNum()) logon.append(NEXT_EXPECTED_SEQ_NUM).append(serverMsgSeqNum.get() + 1);
         if (settings.getEncryptMethod() != null) logon.append(ENCRYPT_METHOD).append(settings.getEncryptMethod());
         logon.append(HEART_BT_INT).append(settings.getHeartBtInt());
