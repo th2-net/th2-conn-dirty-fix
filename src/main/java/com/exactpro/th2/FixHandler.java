@@ -183,7 +183,7 @@ public class FixHandler implements AutoCloseable, IHandler {
 
             if(scheduleTime.isBefore(now)) {
                 scheduleTime = now.plusDays(1).with(resetTime);
-            } else if(scheduleTime.isBefore(now.with(settings.getSessionStartTime()))) {
+            } else if(now.isBefore(now.with(settings.getSessionStartTime()))) {
                 sessionActive.set(false);
             }
 
