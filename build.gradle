@@ -53,7 +53,7 @@ dependencies {
         because 'Projects should use only slf4j-api, without coupling to a sertain implementation'
     }
 
-    implementation 'org.slf4j:slf4j-api:1.7.33'
+    implementation 'org.slf4j:slf4j-api'
     implementation 'io.github.microutils:kotlin-logging:2.1.23'
 
     implementation 'io.netty:netty-all:4.1.86.Final'
