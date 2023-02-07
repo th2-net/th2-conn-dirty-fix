@@ -48,9 +48,12 @@ dependencies {
 
     implementation 'com.exactpro.th2:common:3.44.0'
     implementation 'com.exactpro.th2:netty-bytebuf-utils:0.0.1'
-    implementation 'com.exactpro.th2:conn-dirty-tcp-core:2.0.4'
+    implementation ('com.exactpro.th2:conn-dirty-tcp-core:2.0.5') {
+        exclude group: 'org.slf4j', module: 'slf4j-log4j12'
+        because 'Projects should use only slf4j-api, without coupling to a sertain implementation'
+    }
 
-    implementation 'org.slf4j:slf4j-api:1.7.33'
+    implementation 'org.slf4j:slf4j-api'
     implementation 'io.github.microutils:kotlin-logging:2.1.23'
 
     implementation 'io.netty:netty-all:4.1.86.Final'
