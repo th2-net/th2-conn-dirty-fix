@@ -50,7 +50,7 @@ dependencies {
     implementation 'com.exactpro.th2:netty-bytebuf-utils:0.0.1'
     implementation ('com.exactpro.th2:conn-dirty-tcp-core:2.0.5') {
         exclude group: 'org.slf4j', module: 'slf4j-log4j12'
-        because 'Projects should use only slf4j-api, without coupling to a sertain implementation'
+        because 'Projects should use only slf4j-api, without coupling to a certain implementation'
     }
 
     implementation 'org.slf4j:slf4j-api'

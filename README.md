@@ -7,7 +7,6 @@ This microservice allows sending and receiving messages via FIX protocol
 + *sessions* - list of session settings
 + *maxBatchSize* - max size of outgoing message batch (`1000` by default)
 + *maxFlushTime* - max message batch flush time (`1000` by default)
-+ *batchByGroup* - batch messages by group instead of session alias and direction (`true` by default)
 + *publishSentEvents* - enables/disables publish of "message sent" events (`true` by default)
 + *publishConnectEvents* - enables/disables publish of "connect/disconnect" events (`true` by default)
 
@@ -226,7 +225,6 @@ spec:
   custom-config:
     maxBatchSize: 1000
     maxFlushTime: 1000
-    batchByGroup: false
     publishSentEvents: true
     publishConnectEvents: true
     sessions:
@@ -284,12 +282,28 @@ spec:
       settings:
         storageOnDemand: false
         queueLength: 1000
-    - name: outgoing
+    - name: incoming_messages
       connection-type: mq
       attributes:
         - publish
         - store
         - raw
+      filters:
+        - metadata:
+            - field-name: direction
+              expected-value: FIRST
+              operation: EQUAL
+    - name: outgoing_messages
+      connection-type: mq
+      attributes:
+        - publish
+        - store
+        - raw
+      filters:
+        - metadata:
+            - field-name: direction
+              expected-value: SECOND
+              operation: EQUAL
   extended-settings:
     externalBox:
       enabled: false
