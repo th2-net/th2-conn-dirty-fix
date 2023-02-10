@@ -1,5 +1,5 @@
 /*
- * Copyright 2022-2022 Exactpro (Exactpro Systems Limited)
+ * Copyright 2022-2023 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,12 +17,18 @@
 package com.exactpro.th2;
 
 import com.exactpro.th2.conn.dirty.fix.KeyFileType;
-import com.exactpro.th2.conn.dirty.tcp.core.api.IProtocolHandlerSettings;
-import com.google.auto.service.AutoService;
+import com.exactpro.th2.conn.dirty.tcp.core.api.IChannel.Security;
+import com.exactpro.th2.conn.dirty.tcp.core.api.IHandlerSettings;
+import com.exactpro.th2.util.LocalTimeDeserializer;
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 
-@AutoService(IProtocolHandlerSettings.class)
-public class FixHandlerSettings implements IProtocolHandlerSettings {
+import java.io.File;
+import java.time.LocalTime;
 
+public class FixHandlerSettings implements IHandlerSettings {
+    private String host = null;
+    private int port = 0;
+    private Security security = new Security();
     private String beginString = "FIXT.1.1";
     private long heartBtInt = 30;
     private String senderCompID;
@@ -35,6 +41,8 @@ public class FixHandlerSettings implements IProtocolHandlerSettings {
     private String newPassword;
     private String passwordEncryptKeyFilePath;
     private KeyFileType passwordEncryptKeyFileType = KeyFileType.PEM_PUBLIC_KEY;
+
+    private File stateFilePath;
     /**
      * Value from Java Security Standard Algorithm Names
      */
@@ -45,9 +53,42 @@ public class FixHandlerSettings implements IProtocolHandlerSettings {
     private String passwordEncryptAlgorithm = "RSA";
     private Boolean resetSeqNumFlag = false;
     private Boolean resetOnLogon = false;
+    private Boolean useNextExpectedSeqNum = false;
+    private Boolean saveAdminMessages = false;
+
+    @JsonDeserialize(using = LocalTimeDeserializer.class)
+    private LocalTime sessionStartTime;
+
+    @JsonDeserialize(using = LocalTimeDeserializer.class)
+    private LocalTime sessionEndTime;
+
     private int testRequestDelay = 60;
     private int reconnectDelay = 5;
     private int disconnectRequestDelay = 5;
+
+    public String getHost() {
+        return host;
+    }
+
+    public void setHost(String host) {
+        this.host = host;
+    }
+
+    public int getPort() {
+        return port;
+    }
+
+    public void setPort(int port) {
+        this.port = port;
+    }
+
+    public Security getSecurity() {
+        return security;
+    }
+
+    public void setSecurity(Security security) {
+        this.security = security;
+    }
 
     public String getBeginString() {
         return beginString;
@@ -171,6 +212,46 @@ public class FixHandlerSettings implements IProtocolHandlerSettings {
 
     public void setPasswordEncryptAlgorithm(String passwordEncryptAlgorithm) {
         this.passwordEncryptAlgorithm = passwordEncryptAlgorithm;
+    }
+
+    public File getStateFilePath() {
+        return stateFilePath;
+    }
+
+    public void setStateFilePath(File stateFilePath) {
+        this.stateFilePath = stateFilePath;
+    }
+
+    public Boolean useNextExpectedSeqNum() {
+        return useNextExpectedSeqNum;
+    }
+
+    public void setUseNextExpectedSeqNum(Boolean useNextExpectedSeqNum) {
+        this.useNextExpectedSeqNum = useNextExpectedSeqNum;
+    }
+
+    public Boolean isSaveAdminMessages() {
+        return saveAdminMessages;
+    }
+
+    public void setSaveAdminMessages(Boolean saveAdminMessages) {
+        this.saveAdminMessages = saveAdminMessages;
+    }
+
+    public LocalTime getSessionStartTime() {
+        return sessionStartTime;
+    }
+
+    public void setSessionStartTime(LocalTime sessionStartTime) {
+        this.sessionStartTime = sessionStartTime;
+    }
+
+    public LocalTime getSessionEndTime() {
+        return sessionEndTime;
+    }
+
+    public void setSessionEndTime(LocalTime sessionEndTime) {
+        this.sessionEndTime = sessionEndTime;
     }
 
     public void setResetSeqNumFlag(Boolean resetSeqNumFlag) { this.resetSeqNumFlag = resetSeqNumFlag; }

@@ -101,7 +101,6 @@ class TestMessageTransformer {
         private infix fun Int.eq(value: String) = field(this, value)
         private infix fun Int.to(value: String) = field(this, value)
         private infix fun Int.oneOf(value: List<String>) = FieldDefinition(this, null, null, value)
-        private infix fun List<Int>.oneOf(value: List<String>) = FieldDefinition(null, null, this, value)
         private infix fun Int.matches(pattern: String) = select(this, pattern)
         private infix fun Int.matching(pattern: String) = select(this, pattern)
         private fun set(field: FieldDefinition) = Action(set = field)
