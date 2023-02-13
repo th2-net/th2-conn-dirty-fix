@@ -649,9 +649,9 @@ public class FixHandler implements AutoCloseable, IHandler {
         }
 
         if(settings.isSaveAdminMessages()) {
-            outgoingMessages.put(msgSeqNumValue, message);
+            outgoingMessages.put(msgSeqNumValue, message.copy());
         } else if(msgType != null && !ADMIN_MESSAGES.contains(msgType)) {
-            outgoingMessages.put(msgSeqNumValue, message);
+            outgoingMessages.put(msgSeqNumValue, message.copy());
         }
 
         updateLength(message);
