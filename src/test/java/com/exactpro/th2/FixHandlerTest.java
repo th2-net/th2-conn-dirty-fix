@@ -165,6 +165,21 @@ class FixHandlerTest {
     }
 
     @Test
+    void logoutDisconnectTest() {
+        channel.clearQueue();
+        channel.close();
+        fixHandler.onOpen(channel);
+        channel.close();
+        var logon = "8=FIXT.1.1\u00019=105\u000135=A\u000134=7\u000149=client\u000156=server\u000150=trader\u000152=2014-12-22T10:15:30Z\u000198=0\u0001108=30\u00011137=9\u0001553=username\u0001554=pass\u000110=209\u0001";
+        assertEquals(channel.getQueue().size(), 1);
+        assertEquals(logon, new String(channel.getQueue().get(0).array()));
+        channel.clearQueue();
+        fixHandler.onOpen(channel);
+        assertEquals(channel.getQueue().size(), 1);
+        assertEquals(logon, new String(channel.getQueue().get(0).array()));
+    }
+
+    @Test
     void onOutgoingMessageTest() {
         ByteBuf bufferForPrepareMessage1 = Unpooled.buffer().writeBytes("8=FIXT.1.1\0019=13\001552=1\00149=client\00134=8\00156=null\00110=169\001".getBytes(StandardCharsets.US_ASCII));
         ByteBuf bufferForPrepareMessage2 = Unpooled.buffer(11).writeBytes("552=1\001".getBytes(StandardCharsets.US_ASCII));
