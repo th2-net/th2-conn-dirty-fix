@@ -1,4 +1,4 @@
-# th2-conn-dirty-fix (0.0.5)
+# th2-conn-dirty-fix (0.0.6)
 
 This microservice allows sending and receiving messages via FIX protocol
 
@@ -220,7 +220,7 @@ metadata:
   name: fix-client
 spec:
   image-name: ghcr.io/th2-net/th2-conn-dirty-fix
-  image-version: 0.0.1
+  image-version: 0.0.6
   type: th2-conn
   custom-config:
     maxBatchSize: 1000
@@ -320,15 +320,20 @@ spec:
 
 # Changelog
 
+## 0.0.6
+
+* wait for logout to be sent
+
 ## 0.0.5
 
 * copy messages before putting them into cache
 
 ## 0.0.4
+
 * Session management based on NextExpectedSeqNum field.
 * Recovery handling
-  * outgoing messages are now saved
-  * if message wasn't saved sequence reset message with gap fill mode flag is sent.
+    * outgoing messages are now saved
+    * if message wasn't saved sequence reset message with gap fill mode flag is sent.
 * Session start and Session end configuration to handle sequence reset by exchange schedule.
 
 ## 0.0.3
