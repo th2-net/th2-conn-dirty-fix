@@ -48,8 +48,8 @@ dependencies {
 
     implementation 'com.exactpro.th2:common:3.44.0'
     implementation 'com.exactpro.th2:netty-bytebuf-utils:0.0.1'
-    implementation 'com.exactpro.th2:conn-dirty-tcp-core:2.0.5-ts-1225-4014592604-SNAPSHOT'
-    implementation 'com.exactpro.th2:grpc-data-provider:1.1.0-TS-1083-response-formats-2759013731-SNAPSHOT'
+    implementation 'com.exactpro.th2:conn-dirty-tcp-core:2.1.0-dev-version-2-4142070999-SNAPSHOT'
+    implementation 'com.exactpro.th2:grpc-data-provider:1.1.1'
 
     implementation 'org.slf4j:slf4j-api:1.7.33'
     implementation 'io.github.microutils:kotlin-logging:2.1.23'

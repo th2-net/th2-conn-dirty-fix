@@ -40,10 +40,17 @@ class SequenceLoader(
     private val sessionStartTime: LocalTime?,
     private val sessionAlias: String,
 ) {
-    private val sessionStartDateTime = OffsetDateTime
+    private val sessionStart = OffsetDateTime
         .now(ZoneOffset.UTC)
         .with(sessionStartTime ?: LocalTime.now())
-        .atZoneSameInstant(ZoneId.systemDefault())
+        .atZoneSameInstant(ZoneId.systemDefault());
+
+    private val sessionStartDateTime = sessionStart
+        .toInstant()
+        .toTimestamp()
+
+    private val sessionStartYesterday = sessionStart
+        .minusDays(1)
         .toInstant()
         .toTimestamp()
 
@@ -55,9 +62,6 @@ class SequenceLoader(
 
     private fun searchSeq(request: MessageSearchRequest): Int {
         val iterator = dataProvider.searchMessages(request)
-        if(!iterator.hasNext()) {
-            return 0
-        }
         var message: MessageSearchResponse? = null
         while (iterator.hasNext()) {
             message = iterator.next()
@@ -69,14 +73,17 @@ class SequenceLoader(
             val msg = Unpooled.copiedBuffer(message.message.bodyRaw.toByteArray())
             return msg.findField(MSG_SEQ_NUM_TAG)?.value?.toInt() ?: continue
         }
-        return searchSeq(createSearchRequest(message!!.message.timestamp, message!!.message.messageId.direction))
+        return message?.let {
+            searchSeq(createSearchRequest(message.message.timestamp, message.message.messageId.direction))
+        } ?: 0
     }
 
     private fun createSearchRequest(timestamp: Timestamp, direction: Direction): MessageSearchRequest {
         return MessageSearchRequest.newBuilder().apply {
             startTimestamp = timestamp
+            endTimestamp = sessionStartYesterday
             searchDirection = TimeRelation.PREVIOUS
-            addResponseFormats(MessageSearchRequest.ResponseFormat.BASE_64)
+            addResponseFormats(BASE_64_FORMAT)
             addStream(
                 MessageStream.newBuilder()
                 .setName(sessionAlias)
@@ -84,5 +91,9 @@ class SequenceLoader(
             )
             resultCountLimit = Int32Value.of(5)
         }.build()
+    }
+
+    companion object {
+        const val BASE_64_FORMAT = "BASE64_FORMAT"
     }
 }
