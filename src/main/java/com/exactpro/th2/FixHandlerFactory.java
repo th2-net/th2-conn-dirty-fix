@@ -16,19 +16,18 @@
 
 package com.exactpro.th2;
 
-import com.exactpro.th2.conn.dirty.tcp.core.api.IContext;
-import com.exactpro.th2.conn.dirty.tcp.core.api.IProtocolHandler;
-import com.exactpro.th2.conn.dirty.tcp.core.api.IProtocolHandlerFactory;
-import com.exactpro.th2.conn.dirty.tcp.core.api.IProtocolHandlerSettings;
+import com.exactpro.th2.conn.dirty.tcp.core.api.IHandler;
+import com.exactpro.th2.conn.dirty.tcp.core.api.IHandlerContext;
+import com.exactpro.th2.conn.dirty.tcp.core.api.IHandlerFactory;
+import com.exactpro.th2.conn.dirty.tcp.core.api.IHandlerSettings;
 import com.google.auto.service.AutoService;
 import org.jetbrains.annotations.NotNull;
 
-@AutoService(IProtocolHandlerFactory.class)
-public class FixHandlerFactory implements IProtocolHandlerFactory {
-
+@AutoService(IHandlerFactory.class)
+public class FixHandlerFactory implements IHandlerFactory {
     @NotNull
     @Override
-    public Class<? extends IProtocolHandlerSettings> getSettings() {
+    public Class<? extends IHandlerSettings> getSettings() {
         return FixHandlerSettings.class;
     }
 
@@ -38,9 +37,10 @@ public class FixHandlerFactory implements IProtocolHandlerFactory {
         return FixHandlerFactory.class.getSimpleName();
     }
 
+    @NotNull
     @Override
-    public IProtocolHandler create(@NotNull IContext<IProtocolHandlerSettings> iContext) {
-        return new FixHandler(iContext);
+    public IHandler create(@NotNull IHandlerContext context) {
+        return new FixHandler(context);
     }
 }
 

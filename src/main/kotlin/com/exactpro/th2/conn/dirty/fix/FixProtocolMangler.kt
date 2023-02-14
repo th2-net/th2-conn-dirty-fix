@@ -21,10 +21,11 @@ import com.exactpro.th2.common.event.Event.Status.PASSED
 import com.exactpro.th2.common.event.EventUtils.createMessageBean
 import com.exactpro.th2.common.event.bean.IRow
 import com.exactpro.th2.common.event.bean.builder.TableBuilder
-import com.exactpro.th2.conn.dirty.tcp.core.api.IContext
-import com.exactpro.th2.conn.dirty.tcp.core.api.IProtocolMangler
-import com.exactpro.th2.conn.dirty.tcp.core.api.IProtocolManglerFactory
-import com.exactpro.th2.conn.dirty.tcp.core.api.IProtocolManglerSettings
+import com.exactpro.th2.conn.dirty.tcp.core.api.IChannel
+import com.exactpro.th2.conn.dirty.tcp.core.api.IMangler
+import com.exactpro.th2.conn.dirty.tcp.core.api.IManglerContext
+import com.exactpro.th2.conn.dirty.tcp.core.api.IManglerFactory
+import com.exactpro.th2.conn.dirty.tcp.core.api.IManglerSettings
 import com.fasterxml.jackson.dataformat.yaml.YAMLMapper
 import com.fasterxml.jackson.module.kotlin.KotlinModule
 import com.fasterxml.jackson.module.kotlin.readValue
@@ -42,10 +43,10 @@ private val MAPPER = YAMLMapper.builder()
 private const val RULE_NAME_PROPERTY = "rule-name"
 private const val RULE_ACTIONS_PROPERTY = "rule-actions"
 
-class FixProtocolMangler(context: IContext<IProtocolManglerSettings>) : IProtocolMangler {
+class FixProtocolMangler(context: IManglerContext) : IMangler {
     private val rules = (context.settings as FixProtocolManglerSettings).rules
 
-    override fun onOutgoing(message: ByteBuf, metadata: MutableMap<String, String>): Event? {
+    override fun onOutgoing(channel: IChannel, message: ByteBuf, metadata: MutableMap<String, String>): Event? {
         LOGGER.trace { "Processing message: ${message.toString(Charsets.UTF_8)}" }
 
         val (rule, unconditionally) = getRule(message, metadata) ?: return null
@@ -102,14 +103,14 @@ class FixProtocolMangler(context: IContext<IProtocolManglerSettings>) : IProtoco
     }
 }
 
-@AutoService(IProtocolManglerFactory::class)
-class FixProtocolManglerFactory : IProtocolManglerFactory {
+@AutoService(IManglerFactory::class)
+class FixProtocolManglerFactory : IManglerFactory {
     override val name = "demo-fix-mangler"
     override val settings = FixProtocolManglerSettings::class.java
-    override fun create(context: IContext<IProtocolManglerSettings>) = FixProtocolMangler(context)
+    override fun create(context: IManglerContext) = FixProtocolMangler(context)
 }
 
-class FixProtocolManglerSettings(val rules: List<Rule> = emptyList()) : IProtocolManglerSettings
+class FixProtocolManglerSettings(val rules: List<Rule> = emptyList()) : IManglerSettings
 
 private data class ActionRow(
     val corruptionType: String,
