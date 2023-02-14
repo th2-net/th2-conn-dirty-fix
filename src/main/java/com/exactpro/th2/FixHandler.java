@@ -745,7 +745,21 @@ public class FixHandler implements AutoCloseable, IHandler {
             StringBuilder logout = new StringBuilder();
             setHeader(logout, MSG_TYPE_LOGOUT, msgSeqNum.incrementAndGet());
             setChecksumAndBodyLength(logout);
-            channel.send(Unpooled.wrappedBuffer(logout.toString().getBytes(StandardCharsets.UTF_8)), Collections.emptyMap(), null, IChannel.SendMode.MANGLE);
+
+            LOGGER.debug("Sending logout - {}", logout);
+
+            try {
+                channel.send(
+                        Unpooled.wrappedBuffer(logout.toString().getBytes(StandardCharsets.UTF_8)),
+                        Collections.emptyMap(),
+                        null,
+                        IChannel.SendMode.MANGLE
+                ).get();
+
+                LOGGER.info("Sent logout - {}", logout);
+            } catch (Exception e) {
+                LOGGER.error("Failed to send logout - {}", logout, e);
+            }
         }
         if(settings.getStateFilePath() != null) {
             try {
