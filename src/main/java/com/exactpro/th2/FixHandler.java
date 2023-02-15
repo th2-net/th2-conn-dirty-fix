@@ -809,7 +809,7 @@ public class FixHandler implements AutoCloseable, IHandler {
         // FIXME: find better approach. This is here because logout messages are not saved
         if (LOGGER.isWarnEnabled()) LOGGER.warn("Waiting session logout for 2 seconds: {}", channel.getSessionAlias());
         try {
-            Thread.sleep(2000);
+            Thread.sleep(5000);
         } catch (InterruptedException e) {
             e.printStackTrace();
         }
