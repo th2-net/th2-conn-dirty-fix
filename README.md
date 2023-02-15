@@ -1,4 +1,4 @@
-# th2-conn-dirty-fix (0.0.6)
+# th2-conn-dirty-fix (0.0.7)
 
 This microservice allows sending and receiving messages via FIX protocol
 
@@ -319,6 +319,11 @@ spec:
 ```
 
 # Changelog
+
+## 0.0.7
+
+* wait for acceptor logout response on close
+* load sequences from lwdp
 
 ## 0.0.6
 
