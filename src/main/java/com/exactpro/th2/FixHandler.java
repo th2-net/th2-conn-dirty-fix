@@ -218,7 +218,8 @@ public class FixHandler implements AutoCloseable, IHandler {
             SequenceLoader seqLoader = new SequenceLoader(dataProvider, settings.getSessionStartTime(), channel.getSessionAlias());
             SequenceHolder sequences = seqLoader.load();
             LOGGER.info("Loaded sequences are: client - {}, server - {}", sequences.getClientSeq(), sequences.getServerSeq());
-            msgSeqNum.set(sequences.getClientSeq());
+            // FIXME: delete `... + 1` when logout on close will consistently be saved to cradle
+            msgSeqNum.set(sequences.getClientSeq() + 1);
             serverMsgSeqNum.set(sequences.getServerSeq());
         }
         channel.open();
@@ -804,14 +805,6 @@ public class FixHandler implements AutoCloseable, IHandler {
             } catch (InterruptedException e) {
                 LOGGER.error("Error while sleeping.");
             }
-        }
-
-        // FIXME: find better approach. This is here because logout messages are not saved
-        if (LOGGER.isWarnEnabled()) LOGGER.warn("Waiting session logout for 2 seconds: {}", channel.getSessionAlias());
-        try {
-            Thread.sleep(5000);
-        } catch (InterruptedException e) {
-            e.printStackTrace();
         }
     }
 
