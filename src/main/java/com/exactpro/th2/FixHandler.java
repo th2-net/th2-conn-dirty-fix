@@ -239,13 +239,11 @@ public class FixHandler implements AutoCloseable, IHandler {
         }
 
         while (channel.isOpen() && !enabled.get()) {
-            if(LOGGER.isWarnEnabled()) LOGGER.warn("Waiting for login to send");
+            if (LOGGER.isWarnEnabled()) LOGGER.warn("Session is not yet logged in: {}", channel.getSessionAlias());
             try {
                 Thread.sleep(1000);
             } catch (InterruptedException e) {
-                if(LOGGER.isErrorEnabled()) {
-                    LOGGER.error("Error while sleeping.");
-                }
+                LOGGER.error("Error while sleeping.");
             }
         }
 
@@ -773,7 +771,6 @@ public class FixHandler implements AutoCloseable, IHandler {
                 LOGGER.error("Failed to send logout - {}", logout, e);
             }
         }
-        enabled.set(false);
     }
 
     private String encrypt(String password) {
@@ -799,6 +796,15 @@ public class FixHandler implements AutoCloseable, IHandler {
     @Override
     public void close() {
         sendLogout();
+        long start = System.currentTimeMillis();
+        while(System.currentTimeMillis() - start > settings.getDisconnectRequestDelay() && enabled.get()) {
+            if (LOGGER.isWarnEnabled()) LOGGER.warn("Waiting session logout: {}", channel.getSessionAlias());
+            try {
+                Thread.sleep(1000);
+            } catch (InterruptedException e) {
+                LOGGER.error("Error while sleeping.");
+            }
+        }
     }
 
     private void setHeader(StringBuilder stringBuilder, String msgType, Integer seqNum) {

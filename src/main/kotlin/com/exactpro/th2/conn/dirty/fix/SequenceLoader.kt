@@ -20,6 +20,7 @@ import com.exactpro.th2.common.grpc.Direction
 import com.exactpro.th2.common.message.toTimestamp
 import com.exactpro.th2.constants.Constants.MSG_SEQ_NUM_TAG
 import com.exactpro.th2.dataprovider.grpc.DataProviderService
+import com.exactpro.th2.dataprovider.grpc.MessageGroupResponse
 import com.exactpro.th2.dataprovider.grpc.MessageSearchRequest
 import com.exactpro.th2.dataprovider.grpc.MessageSearchResponse
 import com.exactpro.th2.dataprovider.grpc.MessageStream
@@ -27,6 +28,7 @@ import com.exactpro.th2.dataprovider.grpc.TimeRelation
 import com.google.protobuf.Int32Value
 import com.google.protobuf.Timestamp
 import com.google.protobuf.util.Timestamps
+import com.google.protobuf.util.Timestamps.compare
 import io.netty.buffer.Unpooled
 import java.time.Instant
 import java.time.LocalTime
@@ -61,25 +63,23 @@ class SequenceLoader(
     }
 
     private fun searchSeq(request: MessageSearchRequest): Int {
-        val iterator = dataProvider.searchMessages(request)
-        var message: MessageSearchResponse? = null
-        while (iterator.hasNext()) {
-            message = iterator.next()
-            if(sessionStartTime != null) {
-                if(Timestamps.compare(sessionStartDateTime, message.message.timestamp) > 0) {
-                    return 0
-                }
+        var message: MessageGroupResponse? = null
+        for (response in dataProvider.searchMessages(request)) {
+            message = response.message
+            if (sessionStartTime != null && compare(sessionStartDateTime, message.timestamp) > 0) {
+                return 0
             }
-            val msg = Unpooled.copiedBuffer(message.message.bodyRaw.toByteArray())
-            return msg.findField(MSG_SEQ_NUM_TAG)?.value?.toInt() ?: continue
+            val buffer = Unpooled.wrappedBuffer(message.bodyRaw.asReadOnlyByteBuffer())
+            return buffer.findField(MSG_SEQ_NUM_TAG)?.value?.toInt() ?: continue
         }
-        return message?.let {
-            searchSeq(createSearchRequest(message.message.timestamp, message.message.messageId.direction))
-        } ?: 0
+        return when (message) {
+            null -> 0
+            else -> searchSeq(createSearchRequest(message.timestamp, message.messageId.direction))
+        }
     }
 
-    private fun createSearchRequest(timestamp: Timestamp, direction: Direction): MessageSearchRequest {
-        return MessageSearchRequest.newBuilder().apply {
+    private fun createSearchRequest(timestamp: Timestamp, direction: Direction) =
+        MessageSearchRequest.newBuilder().apply {
             startTimestamp = timestamp
             endTimestamp = sessionStartYesterday
             searchDirection = TimeRelation.PREVIOUS
@@ -91,7 +91,6 @@ class SequenceLoader(
             )
             resultCountLimit = Int32Value.of(5)
         }.build()
-    }
 
     companion object {
         const val BASE_64_FORMAT = "BASE_64"
