@@ -797,7 +797,7 @@ public class FixHandler implements AutoCloseable, IHandler {
     public void close() {
         sendLogout();
         long start = System.currentTimeMillis();
-        while(System.currentTimeMillis() - start > settings.getDisconnectRequestDelay() && enabled.get()) {
+        while(System.currentTimeMillis() - start < settings.getDisconnectRequestDelay() && enabled.get()) {
             if (LOGGER.isWarnEnabled()) LOGGER.warn("Waiting session logout: {}", channel.getSessionAlias());
             try {
                 Thread.sleep(1000);
