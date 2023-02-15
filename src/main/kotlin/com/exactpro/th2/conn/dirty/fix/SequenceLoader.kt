@@ -94,6 +94,6 @@ class SequenceLoader(
     }
 
     companion object {
-        const val BASE_64_FORMAT = "BASE64_FORMAT"
+        const val BASE_64_FORMAT = "BASE_64"
     }
 }
