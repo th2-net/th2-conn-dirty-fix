@@ -356,10 +356,10 @@ public class FixHandler implements AutoCloseable, IHandler {
                         }
 
                         int nextExpectedSeqNumber = Integer.parseInt(requireNonNull(nextExpectedSeqField.getValue()));
-                        int seqNum = msgSeqNum.incrementAndGet();
+                        int seqNum = msgSeqNum.incrementAndGet() + 1;
                         if(nextExpectedSeqNumber < seqNum) {
-                            recovery(nextExpectedSeqNumber, seqNum + 1);
-                        } else {
+                            recovery(nextExpectedSeqNumber, seqNum);}
+                        else {
                             context.send(
                                     Event.start()
                                             .name(String.format("Corrected next client seq num from %s to %s", seqNum, nextExpectedSeqNumber))
