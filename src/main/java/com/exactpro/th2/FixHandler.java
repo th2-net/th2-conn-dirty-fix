@@ -805,6 +805,14 @@ public class FixHandler implements AutoCloseable, IHandler {
                 LOGGER.error("Error while sleeping.");
             }
         }
+
+        // FIXME: find better approach. This is here because logout messages are not saved
+        if (LOGGER.isWarnEnabled()) LOGGER.warn("Waiting session logout for 2 seconds: {}", channel.getSessionAlias());
+        try {
+            Thread.sleep(2000);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
     }
 
     private void setHeader(StringBuilder stringBuilder, String msgType, Integer seqNum) {
