@@ -1,5 +1,5 @@
 /*
- * Copyright 2022-2022 Exactpro (Exactpro Systems Limited)
+ * Copyright 2022-2023 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,6 +19,10 @@ package com.exactpro.th2;
 import com.exactpro.th2.conn.dirty.fix.KeyFileType;
 import com.exactpro.th2.conn.dirty.tcp.core.api.IChannel.Security;
 import com.exactpro.th2.conn.dirty.tcp.core.api.IHandlerSettings;
+import com.exactpro.th2.util.LocalTimeDeserializer;
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
+
+import java.time.LocalTime;
 
 public class FixHandlerSettings implements IHandlerSettings {
     private String host = null;
@@ -46,6 +50,16 @@ public class FixHandlerSettings implements IHandlerSettings {
     private String passwordEncryptAlgorithm = "RSA";
     private Boolean resetSeqNumFlag = false;
     private Boolean resetOnLogon = false;
+    private Boolean useNextExpectedSeqNum = false;
+    private Boolean saveAdminMessages = false;
+    private Boolean loadSequencesFromCradle = false;
+
+    @JsonDeserialize(using = LocalTimeDeserializer.class)
+    private LocalTime sessionStartTime;
+
+    @JsonDeserialize(using = LocalTimeDeserializer.class)
+    private LocalTime sessionEndTime;
+
     private int testRequestDelay = 60;
     private int reconnectDelay = 5;
     private int disconnectRequestDelay = 5;
@@ -196,6 +210,46 @@ public class FixHandlerSettings implements IHandlerSettings {
 
     public void setPasswordEncryptAlgorithm(String passwordEncryptAlgorithm) {
         this.passwordEncryptAlgorithm = passwordEncryptAlgorithm;
+    }
+
+    public Boolean isLoadSequencesFromCradle() {
+        return loadSequencesFromCradle;
+    }
+
+    public void setLoadSequencesFromCradle(Boolean loadSequencesFromCradle) {
+        this.loadSequencesFromCradle = loadSequencesFromCradle;
+    }
+
+    public Boolean useNextExpectedSeqNum() {
+        return useNextExpectedSeqNum;
+    }
+
+    public void setUseNextExpectedSeqNum(Boolean useNextExpectedSeqNum) {
+        this.useNextExpectedSeqNum = useNextExpectedSeqNum;
+    }
+
+    public Boolean isSaveAdminMessages() {
+        return saveAdminMessages;
+    }
+
+    public void setSaveAdminMessages(Boolean saveAdminMessages) {
+        this.saveAdminMessages = saveAdminMessages;
+    }
+
+    public LocalTime getSessionStartTime() {
+        return sessionStartTime;
+    }
+
+    public void setSessionStartTime(LocalTime sessionStartTime) {
+        this.sessionStartTime = sessionStartTime;
+    }
+
+    public LocalTime getSessionEndTime() {
+        return sessionEndTime;
+    }
+
+    public void setSessionEndTime(LocalTime sessionEndTime) {
+        this.sessionEndTime = sessionEndTime;
     }
 
     public void setResetSeqNumFlag(Boolean resetSeqNumFlag) { this.resetSeqNumFlag = resetSeqNumFlag; }

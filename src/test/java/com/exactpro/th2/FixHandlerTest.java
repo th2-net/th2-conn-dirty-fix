@@ -1,5 +1,5 @@
 /*
- * Copyright 2022-2022 Exactpro (Exactpro Systems Limited)
+ * Copyright 2022-2023 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -63,6 +63,8 @@ class FixHandlerTest {
     @BeforeAll
     static void init() {
         fixHandler.onOpen(channel);
+        ByteBuf logonResponse = Unpooled.wrappedBuffer("8=FIXT.1.1\0019=105\00135=A\00134=1\00149=server\00156=client\00150=system\00152=2014-12-22T10:15:30Z\00198=0\001108=30\0011137=9\0011409=0\00110=203\001".getBytes(StandardCharsets.US_ASCII));
+        fixHandler.onIncoming(channel, logonResponse);
         oneMessageBuffer = Unpooled.wrappedBuffer("8=FIXT.1.1\0019=13\00135=AE\001552=1\00110=169\001".getBytes(StandardCharsets.US_ASCII));
         buffer = Unpooled.wrappedBuffer(("8=FIXT.1.1\0019=13\00135=AE\001552=1\00110=169\0018=FIXT.1.1\0019=13\00135=NN" +
                 "\001552=2\00110=100\0018=FIXT.1.1\0019=13\00135=NN\001552=2\00110=100\001").getBytes(StandardCharsets.US_ASCII));
@@ -132,12 +134,15 @@ class FixHandlerTest {
     void sendResendRequestTest() {
         String expectedLogon = "8=FIXT.1.1\u00019=105\u000135=A\u000134=2\u000149=client\u000156=server\u0001" +
                 "50=trader\u000152=2014-12-22T10:15:30Z\u000198=0\u0001108=30\u00011137=9\u0001553=username\u0001554=pass\u000110=204\u0001"; // #1 sent logon
+        ByteBuf logonResponse = Unpooled.wrappedBuffer("8=FIXT.1.1\0019=105\00135=A\00134=2\00149=server\00156=client\00150=system\00152=2014-12-22T10:15:30Z\00198=0\001108=30\0011137=9\0011409=0\00110=203\001".getBytes(StandardCharsets.US_ASCII));
+
         // #2 sent resendRequest
         String expectedResendRequest = "8=FIXT.1.1\u00019=73\u000135=2\u000134=3\u000149=client\u000156=server" +       // #2 sent resendRequest
                 "\u000150=trader\u000152=2014-12-22T10:15:30Z\u00017=1\u000116=0\u000110=227\u0001";
 
         channel.clearQueue();
         fixHandler.sendLogon();
+        fixHandler.onIncoming(channel, logonResponse);
         fixHandler.sendResendRequest(1);
         assertEquals(expectedLogon, new String(channel.getQueue().get(0).array()));
         //assertEquals(expectedHeartbeat, new String(client.getQueue().get(1).array()));
@@ -148,6 +153,8 @@ class FixHandlerTest {
     void onConnectionTest() {
         channel.clearQueue();
         fixHandler.onOpen(channel);
+        ByteBuf logonResponse = Unpooled.wrappedBuffer("8=FIXT.1.1\0019=105\00135=A\00134=1\00149=server\00156=client\00150=system\00152=2014-12-22T10:15:30Z\00198=0\001108=30\0011137=9\0011409=0\00110=203\001".getBytes(StandardCharsets.US_ASCII));
+        fixHandler.onIncoming(channel, logonResponse);
         try {
             Thread.sleep(10000);
         } catch (InterruptedException e) {
@@ -155,6 +162,21 @@ class FixHandlerTest {
         }
         assertEquals("8=FIXT.1.1\u00019=105\u000135=A\u000134=7\u000149=client\u000156=server\u000150=trader\u000152=2014-12-22T10:15:30Z\u000198=0\u0001108=30\u00011137=9\u0001553=username\u0001554=pass\u000110=209\u0001",
                 new String(channel.getQueue().get(0).array()));
+    }
+
+    @Test
+    void logoutDisconnectTest() {
+        channel.clearQueue();
+        channel.close();
+        fixHandler.onOpen(channel);
+        channel.close();
+        var logon = "8=FIXT.1.1\u00019=105\u000135=A\u000134=7\u000149=client\u000156=server\u000150=trader\u000152=2014-12-22T10:15:30Z\u000198=0\u0001108=30\u00011137=9\u0001553=username\u0001554=pass\u000110=209\u0001";
+        assertEquals(channel.getQueue().size(), 1);
+        assertEquals(logon, new String(channel.getQueue().get(0).array()));
+        channel.clearQueue();
+        fixHandler.onOpen(channel);
+        assertEquals(channel.getQueue().size(), 1);
+        assertEquals(logon, new String(channel.getQueue().get(0).array()));
     }
 
     @Test
@@ -183,7 +205,6 @@ class FixHandlerTest {
         Map<String, String> actual2 = new HashMap<>();
         fixHandler.onOutgoing(channel, bufferForPrepareMessage2, actual2);
         assertEquals(expected2, actual2);
-
         fixHandler.onOutgoing(channel, bufferForPrepareMessage3, expected3);
         fixHandler.onOutgoing(channel, bufferForPrepareMessage4, expected4);
 
@@ -360,7 +381,7 @@ class Channel implements IChannel {
 
     @Override
     public boolean isOpen() {
-        return false;
+        return true;
     }
 
     @Override
