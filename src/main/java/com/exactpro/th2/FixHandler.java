@@ -16,27 +16,28 @@
 
 package com.exactpro.th2;
 
+import com.exactpro.th2.common.event.Event;
 import com.exactpro.th2.common.grpc.MessageID;
 import com.exactpro.th2.common.grpc.RawMessage;
 import com.exactpro.th2.conn.dirty.fix.FixField;
+import com.exactpro.th2.conn.dirty.fix.SequenceLoader;
 import com.exactpro.th2.conn.dirty.tcp.core.api.IChannel;
 import com.exactpro.th2.conn.dirty.tcp.core.api.IChannel.SendMode;
 import com.exactpro.th2.conn.dirty.tcp.core.api.IHandler;
 import com.exactpro.th2.conn.dirty.tcp.core.api.IHandlerContext;
 import com.exactpro.th2.conn.dirty.tcp.core.util.CommonUtil;
+import com.exactpro.th2.dataprovider.lw.grpc.DataProviderService;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
-import org.apache.commons.lang3.StringUtils;
-import org.apache.commons.lang3.exception.ExceptionUtils;
-import org.jetbrains.annotations.NotNull;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Paths;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.time.ZoneOffset;
+import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
+import java.time.temporal.ChronoUnit;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
@@ -48,6 +49,11 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.lang3.exception.ExceptionUtils;
+import org.jetbrains.annotations.NotNull;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import static com.exactpro.th2.conn.dirty.fix.FixByteBufUtilKt.findField;
 import static com.exactpro.th2.conn.dirty.fix.FixByteBufUtilKt.findLastField;
@@ -55,9 +61,9 @@ import static com.exactpro.th2.conn.dirty.fix.FixByteBufUtilKt.firstField;
 import static com.exactpro.th2.conn.dirty.fix.FixByteBufUtilKt.lastField;
 import static com.exactpro.th2.conn.dirty.fix.FixByteBufUtilKt.updateChecksum;
 import static com.exactpro.th2.conn.dirty.fix.FixByteBufUtilKt.updateLength;
+import static com.exactpro.th2.conn.dirty.fix.KeyFileType.Companion.OperationMode.ENCRYPT_MODE;
 import static com.exactpro.th2.conn.dirty.tcp.core.util.CommonUtil.getEventId;
 import static com.exactpro.th2.conn.dirty.tcp.core.util.CommonUtil.toByteBuf;
-import static com.exactpro.th2.conn.dirty.fix.KeyFileType.Companion.OperationMode.ENCRYPT_MODE;
 import static com.exactpro.th2.constants.Constants.BEGIN_SEQ_NO;
 import static com.exactpro.th2.constants.Constants.BEGIN_SEQ_NO_TAG;
 import static com.exactpro.th2.constants.Constants.BEGIN_STRING_TAG;
@@ -70,8 +76,10 @@ import static com.exactpro.th2.constants.Constants.ENCRYPTED_PASSWORD;
 import static com.exactpro.th2.constants.Constants.ENCRYPT_METHOD;
 import static com.exactpro.th2.constants.Constants.END_SEQ_NO;
 import static com.exactpro.th2.constants.Constants.END_SEQ_NO_TAG;
+import static com.exactpro.th2.constants.Constants.GAP_FILL_FLAG;
 import static com.exactpro.th2.constants.Constants.GAP_FILL_FLAG_TAG;
 import static com.exactpro.th2.constants.Constants.HEART_BT_INT;
+import static com.exactpro.th2.constants.Constants.IS_POSS_DUP;
 import static com.exactpro.th2.constants.Constants.MSG_SEQ_NUM;
 import static com.exactpro.th2.constants.Constants.MSG_SEQ_NUM_TAG;
 import static com.exactpro.th2.constants.Constants.MSG_TYPE;
@@ -86,7 +94,10 @@ import static com.exactpro.th2.constants.Constants.NEW_ENCRYPTED_PASSWORD;
 import static com.exactpro.th2.constants.Constants.NEW_PASSWORD;
 import static com.exactpro.th2.constants.Constants.NEW_SEQ_NO;
 import static com.exactpro.th2.constants.Constants.NEW_SEQ_NO_TAG;
+import static com.exactpro.th2.constants.Constants.NEXT_EXPECTED_SEQ_NUM;
+import static com.exactpro.th2.constants.Constants.NEXT_EXPECTED_SEQ_NUMBER_TAG;
 import static com.exactpro.th2.constants.Constants.PASSWORD;
+import static com.exactpro.th2.constants.Constants.POSS_DUP_TAG;
 import static com.exactpro.th2.constants.Constants.RESET_SEQ_NUM;
 import static com.exactpro.th2.constants.Constants.SENDER_COMP_ID;
 import static com.exactpro.th2.constants.Constants.SENDER_COMP_ID_TAG;
@@ -95,6 +106,7 @@ import static com.exactpro.th2.constants.Constants.SENDER_SUB_ID_TAG;
 import static com.exactpro.th2.constants.Constants.SENDING_TIME;
 import static com.exactpro.th2.constants.Constants.SENDING_TIME_TAG;
 import static com.exactpro.th2.constants.Constants.SESSION_STATUS_TAG;
+import static com.exactpro.th2.constants.Constants.SUCCESSFUL_LOGOUT_CODE;
 import static com.exactpro.th2.constants.Constants.TARGET_COMP_ID;
 import static com.exactpro.th2.constants.Constants.TARGET_COMP_ID_TAG;
 import static com.exactpro.th2.constants.Constants.TEST_REQ_ID;
@@ -114,26 +126,28 @@ import static java.util.Objects.requireNonNull;
 
 public class FixHandler implements AutoCloseable, IHandler {
     private static final Logger LOGGER = LoggerFactory.getLogger(FixHandler.class);
+
+    private static final int DAY_SECONDS = 24 * 60 * 60;
     private static final String SOH = "\001";
     private static final byte BYTE_SOH = 1;
     private static final String STRING_MSG_TYPE = "MsgType";
     private static final String REJECT_REASON = "Reject reason";
     private static final String STUBBING_VALUE = "XXX";
 
-    private final Log outgoingMessages = new Log(10000);
     private final AtomicInteger msgSeqNum = new AtomicInteger(0);
     private final AtomicInteger serverMsgSeqNum = new AtomicInteger(0);
     private final AtomicInteger testReqID = new AtomicInteger(0);
+    private final AtomicBoolean sessionActive = new AtomicBoolean(true);
     private final AtomicBoolean enabled = new AtomicBoolean(false);
     private final AtomicBoolean connStarted = new AtomicBoolean(false);
     private final ScheduledExecutorService executorService = Executors.newScheduledThreadPool(1);
     private final IHandlerContext context;
     private final InetSocketAddress address;
+    private final DataProviderService dataProvider;
 
     private Future<?> heartbeatTimer = CompletableFuture.completedFuture(null);
     private Future<?> testRequestTimer = CompletableFuture.completedFuture(null);
     private Future<?> reconnectRequestTimer = CompletableFuture.completedFuture(null);
-    private Future<?> disconnectRequest = CompletableFuture.completedFuture(null);
     private volatile IChannel channel;
     protected FixHandlerSettings settings;
     private long lastSendTime = System.currentTimeMillis();
@@ -141,6 +155,43 @@ public class FixHandler implements AutoCloseable, IHandler {
     public FixHandler(IHandlerContext context) {
         this.context = context;
         this.settings = (FixHandlerSettings) context.getSettings();
+        if(settings.isLoadSequencesFromCradle()) {
+            this.dataProvider = context.getGrpcService(DataProviderService.class);
+        } else {
+            this.dataProvider = null;
+        }
+
+        if(settings.getSessionStartTime() != null) {
+            Objects.requireNonNull(settings.getSessionEndTime(), "Session end is required when session start is presented");
+            LocalTime resetTime = settings.getSessionStartTime();
+            ZonedDateTime now = ZonedDateTime.now(ZoneOffset.UTC);
+            ZonedDateTime scheduleTime = now.with(resetTime);
+
+            if(scheduleTime.isBefore(now)) {
+                scheduleTime = now.plusDays(1).with(resetTime);
+            }
+            long time = now.until(scheduleTime, ChronoUnit.SECONDS);
+            executorService.scheduleAtFixedRate(this::reset, time, DAY_SECONDS, TimeUnit.SECONDS);
+        }
+
+        if(settings.getSessionEndTime() != null) {
+            LocalTime resetTime = settings.getSessionEndTime();
+            ZonedDateTime now = ZonedDateTime.now(ZoneOffset.UTC);
+            ZonedDateTime scheduleTime = now.with(resetTime);
+
+            if(scheduleTime.isBefore(now)) {
+                scheduleTime = now.plusDays(1).with(resetTime);
+            } else if(now.isBefore(now.with(settings.getSessionStartTime()))) {
+                sessionActive.set(false);
+            }
+
+            long time = now.until(scheduleTime, ChronoUnit.SECONDS);
+            executorService.scheduleAtFixedRate(() -> {
+                this.close();
+                sessionActive.set(false);
+            }, time, DAY_SECONDS, TimeUnit.SECONDS);
+        }
+
         String host = settings.getHost();
         if (host == null || host.isBlank()) throw new IllegalArgumentException("host cannot be blank");
         int port = settings.getPort();
@@ -158,16 +209,37 @@ public class FixHandler implements AutoCloseable, IHandler {
     @Override
     public void onStart() {
         channel = context.createChannel(address, settings.getSecurity(), Map.of(), true, settings.getReconnectDelay() * 1000L, Integer.MAX_VALUE);
+        if(settings.isLoadSequencesFromCradle()) {
+            SequenceLoader seqLoader = new SequenceLoader(dataProvider, settings.getSessionStartTime(), channel.getSessionAlias());
+            SequenceHolder sequences = seqLoader.load();
+            LOGGER.info("Loaded sequences are: client - {}, server - {}", sequences.getClientSeq(), sequences.getServerSeq());
+            // FIXME: delete `... + 1` when logout on close will consistently be saved to cradle
+            msgSeqNum.set(sequences.getClientSeq() + 1);
+            serverMsgSeqNum.set(sequences.getServerSeq());
+        }
+        channel.open();
     }
 
     @NotNull
     @Override
     public CompletableFuture<MessageID> send(@NotNull RawMessage rawMessage) {
+        if (!sessionActive.get()) {
+            throw new IllegalStateException("Session is not active. It is not possible to send messages.");
+        }
         if (!channel.isOpen()) {
             try {
                 channel.open().get();
             } catch (Exception e) {
                 ExceptionUtils.rethrow(e);
+            }
+        }
+
+        while (channel.isOpen() && !enabled.get()) {
+            if (LOGGER.isWarnEnabled()) LOGGER.warn("Session is not yet logged in: {}", channel.getSessionAlias());
+            try {
+                Thread.sleep(1000);
+            } catch (InterruptedException e) {
+                LOGGER.error("Error while sleeping.");
             }
         }
 
@@ -236,13 +308,26 @@ public class FixHandler implements AutoCloseable, IHandler {
             return metadata;
         }
 
-        serverMsgSeqNum.incrementAndGet();
+        FixField possDup = findField(message, POSS_DUP_TAG);
+        boolean isDup = false;
+        if(possDup != null) {
+            isDup = possDup.getValue().equals(IS_POSS_DUP);
+        }
+
         int receivedMsgSeqNum = Integer.parseInt(requireNonNull(msgSeqNumValue.getValue()));
 
-        if (serverMsgSeqNum.get() < receivedMsgSeqNum) {
-            if (enabled.get()) {
-                sendResendRequest(serverMsgSeqNum.get(), receivedMsgSeqNum);
-            }
+        if(receivedMsgSeqNum < serverMsgSeqNum.get() && !isDup) {
+            sendLogout();
+            reconnectRequestTimer = executorService.schedule(this::sendLogon, settings.getReconnectDelay(), TimeUnit.SECONDS);
+            metadata.put(REJECT_REASON, "SeqNum is less than expected.");
+            if (LOGGER.isErrorEnabled()) LOGGER.error("Invalid message. SeqNum is less than expected {}: {}", serverMsgSeqNum.get(), message.toString(US_ASCII));
+            return metadata;
+        }
+
+        serverMsgSeqNum.incrementAndGet();
+
+        if (serverMsgSeqNum.get() < receivedMsgSeqNum && !isDup && enabled.get()) {
+            sendResendRequest(serverMsgSeqNum.get(), receivedMsgSeqNum);
         }
 
         String msgTypeValue = requireNonNull(msgType.getValue());
@@ -255,8 +340,33 @@ public class FixHandler implements AutoCloseable, IHandler {
             case MSG_TYPE_LOGON:
                 if (LOGGER.isInfoEnabled()) LOGGER.info("Logon received - {}", message.toString(US_ASCII));
                 boolean connectionSuccessful = checkLogon(message);
-                enabled.set(connectionSuccessful);
                 if (connectionSuccessful) {
+                    if(settings.useNextExpectedSeqNum()) {
+                        FixField nextExpectedSeqField = findField(message, NEXT_EXPECTED_SEQ_NUMBER_TAG);
+                        if(nextExpectedSeqField == null) {
+                            metadata.put(REJECT_REASON, "No NextExpectedSeqNum field");
+                            if (LOGGER.isErrorEnabled()) LOGGER.error("Invalid message. No NextExpectedSeqNum in message: {}", message.toString(US_ASCII));
+                            return metadata;
+                        }
+
+                        int nextExpectedSeqNumber = Integer.parseInt(requireNonNull(nextExpectedSeqField.getValue()));
+                        int seqNum = msgSeqNum.incrementAndGet() + 1;
+                        if(nextExpectedSeqNumber < seqNum) {
+                            recovery(nextExpectedSeqNumber, seqNum);}
+                        else if (nextExpectedSeqNumber > seqNum) {
+                            context.send(
+                                    Event.start()
+                                            .name(String.format("Corrected next client seq num from %s to %s", seqNum, nextExpectedSeqNumber))
+                                            .type("Logon")
+                            );
+                            msgSeqNum.set(nextExpectedSeqNumber - 1);
+                        }
+                    } else {
+                        msgSeqNum.incrementAndGet();
+                    }
+
+                    enabled.set(true);
+
                     if (!connStarted.get()){
                         connStarted.set(true);
                     }
@@ -268,22 +378,37 @@ public class FixHandler implements AutoCloseable, IHandler {
 
                     testRequestTimer = executorService.schedule(this::sendTestRequest, settings.getTestRequestDelay(), TimeUnit.SECONDS);
                 } else {
+                    enabled.set(false);
                     reconnectRequestTimer = executorService.schedule(this::sendLogon, settings.getReconnectDelay(), TimeUnit.SECONDS);
                 }
                 break;
             case MSG_TYPE_LOGOUT: //extract logout reason
                 if (LOGGER.isInfoEnabled()) LOGGER.info("Logout received - {}", message.toString(US_ASCII));
-                FixField text = findField(message, TEXT_TAG);
-                if (text != null) {
-                    LOGGER.warn("Received Logout has text (58) tag: {}", text.getValue());
-                    String value = StringUtils.substringBetween(text.getValue(), "expecting ", " but received");
-                    if (value != null) {
-                        msgSeqNum.getAndSet(Integer.parseInt(value)-2);
-                        serverMsgSeqNum.getAndSet(Integer.parseInt(msgSeqNumValue.getValue()));
+                FixField sessionStatus = findField(message, SESSION_STATUS_TAG);
+                boolean isSequenceChanged = false;
+                if(sessionStatus != null) {
+                    int statusCode = Integer.parseInt(Objects.requireNonNull(sessionStatus.getValue()));
+                    if(statusCode != SUCCESSFUL_LOGOUT_CODE) {
+                        FixField text = findField(message, TEXT_TAG);
+                        if (text != null) {
+                            LOGGER.warn("Received Logout has text (58) tag: {}", text.getValue());
+                            String value = StringUtils.substringBetween(text.getValue(), "expecting ", " but received");
+                            if (value != null) {
+                                msgSeqNum.set(Integer.parseInt(value) - 1);
+                                isSequenceChanged = true;
+                            }
+                        }
+                        serverMsgSeqNum.set(Integer.parseInt(msgSeqNumValue.getValue()) - 1);
                     }
                 }
-                if (disconnectRequest != null && !disconnectRequest.isCancelled()) {
-                    disconnectRequest.cancel(false);
+                if(!enabled.get() && !isSequenceChanged) {
+                    msgSeqNum.incrementAndGet();
+                }
+                if (heartbeatTimer != null) {
+                    heartbeatTimer.cancel(false);
+                }
+                if (testRequestTimer != null) {
+                    testRequestTimer.cancel(false);
                 }
                 enabled.set(false);
                 context.send(CommonUtil.toEvent("logout for sender - " + settings.getSenderCompID()));//make more useful
@@ -308,14 +433,25 @@ public class FixHandler implements AutoCloseable, IHandler {
     }
 
     private void resetSequence(ByteBuf message) {
-        FixField gapFillFlagValue = findField(message, GAP_FILL_FLAG_TAG);
+        FixField gapFillMode = findField(message, GAP_FILL_FLAG_TAG);
         FixField seqNumValue = findField(message, NEW_SEQ_NO_TAG);
 
-        if (seqNumValue != null && (gapFillFlagValue == null || requireNonNull(gapFillFlagValue.getValue()).equals("N"))) {
-            serverMsgSeqNum.set(Integer.parseInt(requireNonNull(seqNumValue.getValue())));
-        } else if (LOGGER.isTraceEnabled()) {
+        if(seqNumValue != null) {
+            if(gapFillMode == null || gapFillMode.equals("N")) {
+                serverMsgSeqNum.set(Integer.parseInt(requireNonNull(seqNumValue.getValue())));
+            } else {
+                serverMsgSeqNum.set(Integer.parseInt(requireNonNull(seqNumValue.getValue())) - 1);
+            }
+        } else {
             LOGGER.trace("Failed to reset servers MsgSeqNum. No such tag in message: {}", message.toString(US_ASCII));
         }
+    }
+
+    private void reset() {
+        msgSeqNum.set(0);
+        serverMsgSeqNum.set(0);
+        sessionActive.set(true);
+        sendLogon();
     }
 
     public void sendResendRequest(int beginSeqNo, int endSeqNo) { //do private
@@ -344,9 +480,6 @@ public class FixHandler implements AutoCloseable, IHandler {
     }
 
     private void handleResendRequest(ByteBuf message) {
-        if (disconnectRequest != null && !disconnectRequest.isCancelled()) {
-            disconnectRequest.cancel(false);
-        }
 
         FixField strBeginSeqNo = findField(message, BEGIN_SEQ_NO_TAG);
         FixField strEndSeqNo = findField(message, END_SEQ_NO_TAG);
@@ -357,26 +490,26 @@ public class FixHandler implements AutoCloseable, IHandler {
 
             try {
                 // FIXME: there is not syn on the outgoing sequence. Should make operations with seq more careful
-                if (endSeqNo == 0) {
-                    endSeqNo = msgSeqNum.get();
-                }
-                LOGGER.info("Returning messages from {} to {}", beginSeqNo, endSeqNo);
-                for (int i = beginSeqNo; i <= endSeqNo; i++) {
-                    ByteBuf storedMsg = outgoingMessages.get(i);
-                    if (storedMsg == null) {
-                        StringBuilder heartbeat = new StringBuilder();
-                        setHeader(heartbeat, MSG_TYPE_HEARTBEAT, i);
-                        setChecksumAndBodyLength(heartbeat);
-                        channel.send(Unpooled.wrappedBuffer(heartbeat.toString().getBytes(StandardCharsets.UTF_8)), Collections.emptyMap(), null, IChannel.SendMode.MANGLE);
-                    } else {
-                        if (LOGGER.isInfoEnabled()) LOGGER.info("Resending message: {}", storedMsg.toString(US_ASCII));
-                        channel.send(storedMsg, Collections.emptyMap(), null, IChannel.SendMode.MANGLE);
-                    }
-                }
+                recovery(beginSeqNo, endSeqNo);
             } catch (Exception e) {
                 sendSequenceReset();
             }
         }
+    }
+
+    private void recovery(int beginSeqNo, int endSeqNo) {
+        if (endSeqNo == 0) {
+            endSeqNo = msgSeqNum.get();
+        }
+        LOGGER.info("Returning messages from {} to {}", beginSeqNo, endSeqNo);
+
+        StringBuilder sequenceReset = new StringBuilder();
+        setHeader(sequenceReset, MSG_TYPE_SEQUENCE_RESET, beginSeqNo);
+        sequenceReset.append(GAP_FILL_FLAG).append("Y");
+        sequenceReset.append(NEW_SEQ_NO).append(endSeqNo);
+        setChecksumAndBodyLength(sequenceReset);
+
+        channel.send(Unpooled.wrappedBuffer(sequenceReset.toString().getBytes(StandardCharsets.UTF_8)), Collections.emptyMap(), null, SendMode.MANGLE);
     }
 
     private void sendSequenceReset() {
@@ -475,6 +608,8 @@ public class FixHandler implements AutoCloseable, IHandler {
             }
         }
 
+        int msgSeqNumValue = Integer.parseInt(msgSeqNum.getValue());
+
         FixField senderCompID = findField(message, SENDER_COMP_ID_TAG, US_ASCII, bodyLength);
 
         if (senderCompID == null) {
@@ -483,7 +618,7 @@ public class FixHandler implements AutoCloseable, IHandler {
             String value = senderCompID.getValue();
 
             if (value == null || value.isEmpty() || value.equals("null")) {
-                msgSeqNum.setValue(settings.getSenderCompID());
+                senderCompID.setValue(settings.getSenderCompID());
             }
         }
 
@@ -573,6 +708,10 @@ public class FixHandler implements AutoCloseable, IHandler {
     }
 
     public void sendLogon() {
+        if(!sessionActive.get() || !channel.isOpen()) {
+            LOGGER.info("Logon is not sent to server because session is not active.");
+            return;
+        }
         lastSendTime = System.currentTimeMillis();
         StringBuilder logon = new StringBuilder();
         Boolean reset;
@@ -580,7 +719,8 @@ public class FixHandler implements AutoCloseable, IHandler {
         else reset = settings.getResetOnLogon();
         if (reset) msgSeqNum.getAndSet(0);
 
-        setHeader(logon, MSG_TYPE_LOGON, msgSeqNum.incrementAndGet());
+        setHeader(logon, MSG_TYPE_LOGON, msgSeqNum.get() + 1);
+        if (settings.useNextExpectedSeqNum()) logon.append(NEXT_EXPECTED_SEQ_NUM).append(serverMsgSeqNum.get() + 1);
         if (settings.getEncryptMethod() != null) logon.append(ENCRYPT_METHOD).append(settings.getEncryptMethod());
         logon.append(HEART_BT_INT).append(settings.getHeartBtInt());
         if (reset) logon.append(RESET_SEQ_NUM).append("Y");
@@ -606,6 +746,29 @@ public class FixHandler implements AutoCloseable, IHandler {
         channel.send(Unpooled.wrappedBuffer(logon.toString().getBytes(StandardCharsets.UTF_8)), Collections.emptyMap(), null, IChannel.SendMode.MANGLE);
     }
 
+    private void sendLogout() {
+        if (enabled.get()) {
+            StringBuilder logout = new StringBuilder();
+            setHeader(logout, MSG_TYPE_LOGOUT, msgSeqNum.incrementAndGet());
+            setChecksumAndBodyLength(logout);
+
+            LOGGER.debug("Sending logout - {}", logout);
+
+            try {
+                channel.send(
+                        Unpooled.wrappedBuffer(logout.toString().getBytes(StandardCharsets.UTF_8)),
+                        Collections.emptyMap(),
+                        null,
+                        IChannel.SendMode.MANGLE
+                ).get();
+
+                LOGGER.info("Sent logout - {}", logout);
+            } catch (Exception e) {
+                LOGGER.error("Failed to send logout - {}", logout, e);
+            }
+        }
+    }
+
     private String encrypt(String password) {
         return settings.getPasswordEncryptKeyFileType()
                 .encrypt(Paths.get(settings.getPasswordEncryptKeyFilePath()),
@@ -628,14 +791,16 @@ public class FixHandler implements AutoCloseable, IHandler {
 
     @Override
     public void close() {
-        StringBuilder logout = new StringBuilder();
-        setHeader(logout, MSG_TYPE_LOGOUT, msgSeqNum.incrementAndGet());
-        setChecksumAndBodyLength(logout);
-
-        if (enabled.get()) {
-            channel.send(Unpooled.wrappedBuffer(logout.toString().getBytes(StandardCharsets.UTF_8)), Collections.emptyMap(), null, IChannel.SendMode.MANGLE);
+        sendLogout();
+        long start = System.currentTimeMillis();
+        while(System.currentTimeMillis() - start < settings.getDisconnectRequestDelay() && enabled.get()) {
+            if (LOGGER.isWarnEnabled()) LOGGER.warn("Waiting session logout: {}", channel.getSessionAlias());
+            try {
+                Thread.sleep(1000);
+            } catch (InterruptedException e) {
+                LOGGER.error("Error while sleeping.");
+            }
         }
-        disconnectRequest = executorService.schedule(() -> enabled.set(false), settings.getDisconnectRequestDelay(), TimeUnit.SECONDS);
     }
 
     private void setHeader(StringBuilder stringBuilder, String msgType, Integer seqNum) {
@@ -696,16 +861,12 @@ public class FixHandler implements AutoCloseable, IHandler {
     }
 
     public String getTime() {
-        String FIX_DATE_TIME_FORMAT_MS = "yyyyMMdd-HH:mm:ss.SSS";
+        String FIX_DATE_TIME_FORMAT_MS = "yyyyMMdd-HH:mm:ss.SSSSSSSSS";
         LocalDateTime datetime = LocalDateTime.now();
         return DateTimeFormatter.ofPattern(FIX_DATE_TIME_FORMAT_MS).format(datetime);
     }
 
     public AtomicBoolean getEnabled() {
         return enabled;
-    }
-
-    public Log getOutgoingMessages() {
-        return outgoingMessages;
     }
 }

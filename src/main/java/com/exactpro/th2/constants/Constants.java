@@ -16,6 +16,10 @@
 
 package com.exactpro.th2.constants;
 
+
+import java.util.Collections;
+import java.util.Set;
+
 public class Constants {
 
     public static final String SOH = "\001";
@@ -46,6 +50,8 @@ public class Constants {
     public static final Integer GAP_FILL_FLAG_TAG = 123;
     public static final Integer TEXT_TAG = 58;
     public static final Integer RESET_SEQ_NUM_TAG = 141;
+    public static final Integer NEXT_EXPECTED_SEQ_NUMBER_TAG = 789;
+    public static final Integer POSS_DUP_TAG = 43;
 
     //Fields
     public static final String BEGIN_STRING = SOH + BEGIN_STRING_TAG + "=";
@@ -71,6 +77,8 @@ public class Constants {
     public static final String DEFAULT_APPL_VER_ID = SOH + DEFAULT_APPL_VER_ID_TAG + "=";
     public static final String SENDER_SUB_ID = SOH + SENDER_SUB_ID_TAG + "=";
     public static final String RESET_SEQ_NUM = SOH + RESET_SEQ_NUM_TAG + "=";
+    public static final String NEXT_EXPECTED_SEQ_NUM = SOH + NEXT_EXPECTED_SEQ_NUMBER_TAG + "=";
+    public static final String POSS_DUP = SOH + NEXT_EXPECTED_SEQ_NUMBER_TAG + "=";
 
     //message types
     public static final String MSG_TYPE_LOGON = "A";
@@ -80,4 +88,14 @@ public class Constants {
     public static final String MSG_TYPE_RESEND_REQUEST = "2";
     public static final String MSG_TYPE_SEQUENCE_RESET = "4";
 
+    public static final Set<String> ADMIN_MESSAGES = Collections.unmodifiableSet(
+            Set.of(
+                    MSG_TYPE_LOGON, MSG_TYPE_LOGOUT,
+                    MSG_TYPE_HEARTBEAT, MSG_TYPE_RESEND_REQUEST,
+                    MSG_TYPE_SEQUENCE_RESET, MSG_TYPE_TEST_REQUEST
+            )
+    );
+
+    public static final String IS_POSS_DUP = "Y";
+    public static final int SUCCESSFUL_LOGOUT_CODE = 4;
 }

@@ -7,7 +7,6 @@ This microservice allows sending and receiving messages via FIX protocol
 + *sessions* - list of session settings
 + *maxBatchSize* - max size of outgoing message batch (`1000` by default)
 + *maxFlushTime* - max message batch flush time (`1000` by default)
-+ *batchByGroup* - batch messages by group instead of session alias and direction (`true` by default)
 + *publishSentEvents* - enables/disables publish of "message sent" events (`true` by default)
 + *publishConnectEvents* - enables/disables publish of "connect/disconnect" events (`true` by default)
 
@@ -42,6 +41,11 @@ This microservice allows sending and receiving messages via FIX protocol
 + *disconnectRequestDelay* - the interval for the shutdown request
 + *resetSeqNumFlag* - resetting sequence number in initial Logon message (when conn started)
 + *resetOnLogon* - resetting the sequence number in Logon in other cases (e.g. disconnect)
++ *stateFilePath* - path to file where sequences will be saved to use with next login attempts. It is useful when acceptor does not support sequence reset. (`nullable`)
++ *sessionStartTime* - UTC time when session starts. (`nullable`)
++ *sessionEndTime* - UTC time when session ends. required if startSessionTime is filled.
++ *useNextExpectedSeqNum* - session management based on next expected sequence number. (`false` by default)
++ *saveAdminMessages* - defines if admin messages will be saved to internal outgoing buffer. (`false` by default)
 
 ### Security settings
 
@@ -280,12 +284,28 @@ spec:
       settings:
         storageOnDemand: false
         queueLength: 1000
-    - name: outgoing
+    - name: incoming_messages
       connection-type: mq
       attributes:
         - publish
         - store
         - raw
+      filters:
+        - metadata:
+            - field-name: direction
+              expected-value: FIRST
+              operation: EQUAL
+    - name: outgoing_messages
+      connection-type: mq
+      attributes:
+        - publish
+        - store
+        - raw
+      filters:
+        - metadata:
+            - field-name: direction
+              expected-value: SECOND
+              operation: EQUAL
   extended-settings:
     externalBox:
       enabled: false
@@ -305,6 +325,28 @@ spec:
 ## 1.0.0
 
 * Bump `conn-dirty-tcp-core` to `3.0.0` for books and pages support
+
+
+## 0.0.7
+
+* wait for acceptor logout response on close
+* load sequences from lwdp
+
+## 0.0.6
+
+* wait for logout to be sent
+
+## 0.0.5
+
+* copy messages before putting them into cache
+
+## 0.0.4
+
+* Session management based on NextExpectedSeqNum field.
+* Recovery handling
+    * outgoing messages are now saved
+    * if message wasn't saved sequence reset message with gap fill mode flag is sent.
+* Session start and Session end configuration to handle sequence reset by exchange schedule.
 
 ## 0.0.3
 
