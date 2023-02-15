@@ -365,7 +365,7 @@ public class FixHandler implements AutoCloseable, IHandler {
                                             .name(String.format("Corrected next client seq num from %s to %s", seqNum, nextExpectedSeqNumber))
                                             .type("Logon")
                             );
-                            msgSeqNum.set(nextExpectedSeqNumber);
+                            msgSeqNum.set(nextExpectedSeqNumber - 1);
                         }
                     } else {
                         msgSeqNum.incrementAndGet();
