@@ -437,7 +437,7 @@ public class FixHandler implements AutoCloseable, IHandler {
         FixField seqNumValue = findField(message, NEW_SEQ_NO_TAG);
 
         if(seqNumValue != null) {
-            if(gapFillMode == null || gapFillMode.equals("N")) {
+            if(gapFillMode == null || gapFillMode.getValue().equals("N")) {
                 serverMsgSeqNum.set(Integer.parseInt(requireNonNull(seqNumValue.getValue())));
             } else {
                 serverMsgSeqNum.set(Integer.parseInt(requireNonNull(seqNumValue.getValue())) - 1);
@@ -651,7 +651,7 @@ public class FixHandler implements AutoCloseable, IHandler {
         FixField sendingTime = findField(message, SENDING_TIME_TAG, US_ASCII, bodyLength);
 
         if (sendingTime == null) {
-            sendingTime = targetCompID.insertNext(SENDING_TIME_TAG, getTime());
+            targetCompID.insertNext(SENDING_TIME_TAG, getTime());
         } else {
             String value = sendingTime.getValue();
 
