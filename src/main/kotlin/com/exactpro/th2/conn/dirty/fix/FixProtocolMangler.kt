@@ -1,5 +1,5 @@
 /*
- * Copyright 2022-2022 Exactpro (Exactpro Systems Limited)
+ * Copyright 2022-2023 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -89,9 +89,7 @@ class FixProtocolMangler(context: IManglerContext) : IMangler {
         if (rules.isEmpty()) return null
 
         val rule = rules.filter { rule ->
-            rule.transform.any { transform ->
-                transform.conditions.all { it.matches(message) }
-            }
+            rule.transform.any { it.conditions.all(message::contains) }
         }.randomOrNull()
 
         if (rule == null) {
@@ -110,7 +108,14 @@ class FixProtocolManglerFactory : IManglerFactory {
     override fun create(context: IManglerContext) = FixProtocolMangler(context)
 }
 
-class FixProtocolManglerSettings(val rules: List<Rule> = emptyList()) : IManglerSettings
+class FixProtocolManglerSettings(
+    val context: Context = Context(),
+    val rules: List<Rule> = emptyList(),
+) : IManglerSettings {
+    init {
+        rules.forEach { it.init(context) }
+    }
+}
 
 private data class ActionRow(
     val corruptionType: String,
