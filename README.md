@@ -275,7 +275,7 @@ spec:
                     - remove: { tag: 110, matches: (.*) }
                   update-checksum: false
   pins:
-  - name: to_data_provider
+    - name: to_data_provider
       connection-type: grpc-client
       service-class: com.exactpro.th2.dataprovider.grpc.DataProviderService
     - name: to_send
