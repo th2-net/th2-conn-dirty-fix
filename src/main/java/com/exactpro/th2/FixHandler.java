@@ -210,7 +210,12 @@ public class FixHandler implements AutoCloseable, IHandler {
     public void onStart() {
         channel = context.createChannel(address, settings.getSecurity(), Map.of(), true, settings.getReconnectDelay() * 1000L, Integer.MAX_VALUE);
         if(settings.isLoadSequencesFromCradle()) {
-            SequenceLoader seqLoader = new SequenceLoader(dataProvider, settings.getSessionStartTime(), channel.getSessionAlias());
+            SequenceLoader seqLoader = new SequenceLoader(
+                    dataProvider,
+                    settings.getSessionStartTime(),
+                    channel.getSessionAlias(),
+                    context.getBookName()
+            );
             SequenceHolder sequences = seqLoader.load();
             LOGGER.info("Loaded sequences are: client - {}, server - {}", sequences.getClientSeq(), sequences.getServerSeq());
             // FIXME: delete `... + 1` when logout on close will consistently be saved to cradle
