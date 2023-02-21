@@ -325,6 +325,9 @@ spec:
 
 # Changelog
 
+## 1.0.1
+* Add bookId to lw data provider query
+
 ## 1.0.0
 
 * Bump `conn-dirty-tcp-core` to `3.0.0` for books and pages support
