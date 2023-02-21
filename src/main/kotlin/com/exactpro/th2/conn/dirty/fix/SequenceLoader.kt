@@ -39,6 +39,7 @@ class SequenceLoader(
     private val dataProvider: DataProviderService,
     private val sessionStartTime: LocalTime?,
     private val sessionAlias: String,
+    private val bookName: String
 ) {
     private val sessionStart = OffsetDateTime
         .now(ZoneOffset.UTC)
@@ -87,6 +88,7 @@ class SequenceLoader(
                     .setName(sessionAlias)
                     .setDirection(direction)
             )
+            bookIdBuilder.name = bookName
             resultCountLimit = Int32Value.of(5)
         }.build()
 
