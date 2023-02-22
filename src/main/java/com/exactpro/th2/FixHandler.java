@@ -146,8 +146,8 @@ public class FixHandler implements AutoCloseable, IHandler {
     private final InetSocketAddress address;
     private final DataProviderService dataProvider;
 
-    private AtomicReference<Future<?>> heartbeatTimer = new AtomicReference(CompletableFuture.completedFuture(null));
-    private AtomicReference<Future<?>> testRequestTimer = new AtomicReference(CompletableFuture.completedFuture(null));
+    private AtomicReference<Future<?>> heartbeatTimer = new AtomicReference<>(CompletableFuture.completedFuture(null));
+    private AtomicReference<Future<?>> testRequestTimer = new AtomicReference<>(CompletableFuture.completedFuture(null));
     private Future<?> reconnectRequestTimer = CompletableFuture.completedFuture(null);
     private volatile IChannel channel;
     protected FixHandlerSettings settings;
@@ -875,9 +875,7 @@ public class FixHandler implements AutoCloseable, IHandler {
                         TimeUnit.SECONDS
                 )
         );
-        if(old != null) {
-            old.cancel(false);
-        }
+        old.cancel(false);
     }
 
     private void resetTestRequestTask() {
@@ -894,10 +892,6 @@ public class FixHandler implements AutoCloseable, IHandler {
     }
 
     private void cancelFuture(AtomicReference<Future<?>> future) {
-        if(future == null) return;
-        Future<?> referenceFuture = future.get();
-        if(referenceFuture != null) {
-            referenceFuture.cancel(false);
-        }
+        future.get().cancel(false);
     }
 }
