@@ -1,4 +1,4 @@
-# th2-conn-dirty-fix (0.0.7)
+# th2-conn-dirty-fix (0.0.8)
 
 This microservice allows sending and receiving messages via FIX protocol
 
@@ -319,6 +319,11 @@ spec:
 ```
 
 # Changelog
+
+## 0.0.8
+
+* th2-common upgrade to `3.44.1`
+* th2-bom upgrade to `4.2.0`
 
 ## 0.0.7
 
