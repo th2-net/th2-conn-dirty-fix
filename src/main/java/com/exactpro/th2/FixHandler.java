@@ -868,27 +868,23 @@ public class FixHandler implements AutoCloseable, IHandler {
     }
 
     private void resetHeartbeatTask() {
-        Future<?> old = heartbeatTimer.getAndSet(
+        heartbeatTimer.getAndSet(
                 executorService.schedule(
                         this::sendHeartbeat,
                         settings.getHeartBtInt(),
                         TimeUnit.SECONDS
                 )
-        );
-        old.cancel(false);
+        ).cancel(false);
     }
 
     private void resetTestRequestTask() {
-        Future<?> old = testRequestTimer.getAndSet(
+        testRequestTimer.getAndSet(
             executorService.schedule(
                     this::sendTestRequest,
                     settings.getHeartBtInt(),
                     TimeUnit.SECONDS
             )
-        );
-        if(old != null) {
-            old.cancel(false);
-        }
+        ).cancel(false);
     }
 
     private void cancelFuture(AtomicReference<Future<?>> future) {
