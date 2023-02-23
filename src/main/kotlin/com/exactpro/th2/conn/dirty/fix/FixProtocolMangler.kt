@@ -26,7 +26,7 @@ import com.exactpro.th2.conn.dirty.tcp.core.api.IMangler
 import com.exactpro.th2.conn.dirty.tcp.core.api.IManglerContext
 import com.exactpro.th2.conn.dirty.tcp.core.api.IManglerFactory
 import com.exactpro.th2.conn.dirty.tcp.core.api.IManglerSettings
-import com.fasterxml.jackson.dataformat.yaml.YAMLMapper
+import com.fasterxml.jackson.databind.json.JsonMapper
 import com.fasterxml.jackson.module.kotlin.KotlinModule
 import com.fasterxml.jackson.module.kotlin.readValue
 import com.google.auto.service.AutoService
@@ -36,7 +36,7 @@ import mu.KotlinLogging
 
 private val LOGGER = KotlinLogging.logger {}
 
-private val MAPPER = YAMLMapper.builder()
+private val MAPPER = JsonMapper.builder()
     .addModule(KotlinModule(nullIsSameAsDefault = true))
     .build()
 
