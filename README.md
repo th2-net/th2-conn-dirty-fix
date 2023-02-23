@@ -1,4 +1,4 @@
-# th2-conn-dirty-fix (0.0.7)
+# th2-conn-dirty-fix (0.0.8)
 
 This microservice allows sending and receiving messages via FIX protocol
 
@@ -40,7 +40,7 @@ This microservice allows sending and receiving messages via FIX protocol
 + *disconnectRequestDelay* - the interval for the shutdown request
 + *resetSeqNumFlag* - resetting sequence number in initial Logon message (when conn started)
 + *resetOnLogon* - resetting the sequence number in Logon in other cases (e.g. disconnect)
-+ *stateFilePath* - path to file where sequences will be saved to use with next login attempts. It is useful when acceptor does not support sequence reset. (`nullable`)
++ *loadSequencesFromCradle* - defines if sequences will be loaded from cradle to use them in logon message.
 + *sessionStartTime* - UTC time when session starts. (`nullable`)
 + *sessionEndTime* - UTC time when session ends. required if startSessionTime is filled.
 + *useNextExpectedSeqNum* - session management based on next expected sequence number. (`false` by default)
@@ -273,6 +273,9 @@ spec:
                     - remove: { tag: 110, matches: (.*) }
                   update-checksum: false
   pins:
+  - name: to_data_provider
+      connection-type: grpc-client
+      service-class: com.exactpro.th2.dataprovider.grpc.DataProviderService
     - name: to_send
       connection-type: mq
       attributes:
@@ -319,6 +322,11 @@ spec:
 ```
 
 # Changelog
+
+## 0.0.8
+
+* th2-common upgrade to `3.44.1`
+* th2-bom upgrade to `4.2.0`
 
 ## 0.0.7
 
