@@ -1,4 +1,4 @@
-# th2-conn-dirty-fix (0.0.8)
+# th2-conn-dirty-fix (0.1.0)
 
 This microservice allows sending and receiving messages via FIX protocol
 
@@ -58,14 +58,29 @@ This microservice allows sending and receiving messages via FIX protocol
 Mangler is configured by specifying a list of transformations which it will try to apply to outgoing messages.   
 Each transformation has a list of conditions which message must meet for transformation actions to be applied.
 
-Condition is basically a field value check:
+Condition can be one of the following:
 
-```yaml
-tag: 35
-matches: (8|D)
-```
+1. field selector:
 
-Where `tag` is a field tag to match and `matches` is a regex pattern for the field value.
+   ```yaml
+    tag: 35
+    matches: (8|D)
+   ```
+
+   Where `tag` is a field tag to match and `matches` is a regex pattern for the field value.
+
+2. group selector:
+
+    ```yaml
+      group: group-name
+      contains:
+        - tag: 100
+          matching: A
+        - tag: 101
+          matching: C
+    ```
+
+   Where `group` is a name of a predefined group and `contains` is a list of field selectors
 
 Conditions are specified in `when` block of transformation definition:
 
@@ -77,6 +92,19 @@ when:
     matches: SENDER(.*)
 ```
 
+Groups are defined in `context.groups` map of mangler configuration
+
+```yaml
+context:
+  groups:
+    group-name:
+      counter: 99
+      delimiter: 100
+      tags: [ 101, 102, 103 ]
+```
+
+Where `counter` is a counter tag, `delimiter` is a delimiter tag and `tags` is a set of tags that could follow delimiter
+
 Actions describe modifications which will be applied to a message. There are 4 types of actions:
 
 * set - sets value of an existing field to the specified value:
@@ -84,7 +112,7 @@ Actions describe modifications which will be applied to a message. There are 4 t
   ```yaml
   set:
     tag: 1
-    value: new account
+    to: new account
   ```
 
 * add - adds new field before or after an existing field:
@@ -92,7 +120,7 @@ Actions describe modifications which will be applied to a message. There are 4 t
   ```yaml
   add:
     tag: 15
-    value: USD
+    equal: USD
   after: # or before
     tag: 58
     matches: (.*)
@@ -103,7 +131,7 @@ Actions describe modifications which will be applied to a message. There are 4 t
   ```yaml
   move:
     tag: 49
-    matches: (.*)
+    matching: (.*)
   after: # or before
     tag: 56
     matches: (.*)
@@ -114,10 +142,10 @@ Actions describe modifications which will be applied to a message. There are 4 t
   ```yaml
   replace:
     tag: 64
-    matches: (.*)
+    matching: (.*)
   with:
     tag: 63
-    value: 1
+    equal: 1
   ```
 
 * remove - removes an existing field:
@@ -125,8 +153,23 @@ Actions describe modifications which will be applied to a message. There are 4 t
   ```yaml
   remove:
     tag: 110
-    matches: (.*)
+    matching: (.*)
   ```
+
+Action scope could be limited to a certain group by specifying group selector in `in` field:
+
+```yaml
+set:
+  tag: 100
+  to: ABC
+in:
+  group: group-name
+  where:
+    - tag: 101
+      matches: C
+```
+
+**NOTE**: When multiple groups match the specified selector the first one matching will be selected
 
 Actions are specified in `then` block of transformation definition:
 
@@ -158,6 +201,12 @@ Complete mangler configuration would look something like this:
 
 ```yaml
 mangler:
+  context:
+    groups:
+      NoPartyIDs:
+        counter: 453
+        delimiter: 448
+        tags: [ 447, 452 ]
   rules:
     - name: rule-1
       transform:
@@ -166,13 +215,17 @@ mangler:
               matches: FIXT.1.1
             - tag: 35
               matches: D
+            - group: NoPartyIDs
+              contains:
+                - tag: 448
+                  matching: ABC
           then:
             - set:
                 tag: 1
-                value: new account
+                to: new account
             - add:
                 tag: 15
-                value: USD
+                equal: USD
               after:
                 tag: 58
                 matches: (.*)
@@ -185,14 +238,26 @@ mangler:
           then:
             - replace:
                 tag: 64
-                matches: (.*)
+                matching: (.*)
               with:
                 tag: 63
-                value: 1
+                equal: 1
             - remove:
                 tag: 110
-                matches: (.*)
+                matching: (.*)
           update-checksum: false
+        - when:
+            - tag: 35
+              matches: 8
+          then:
+            set:
+              tag: 448
+              to: ABC
+            in:
+              group: NoPartyIDs
+              where:
+                - tag: 452
+                  matches: 3
 ```
 
 ### Ways to use mangler:
@@ -253,27 +318,34 @@ spec:
           reconnectDelay": 5
           disconnectRequestDelay: 5
         mangler:
+          context:
+            groups:
+              NoPartyIDs:
+                counter: 453
+                delimiter: 448
+                tags: [ 447, 452 ]
           rules:
             - name: rule-1
               transform:
                 - when:
                     - { tag: 8, matches: FIXT.1.1 }
                     - { tag: 35, matches: D }
+                    - { group: NoPartyIDs, contains: [ { tag: 448, matching: ABC } ] }
                   then:
-                    - set: { tag: 1, value: new account }
-                    - add: { tag: 15, valueOneOf: ["USD", "EUR"] }
+                    - set: { tag: 1, to: new account }
+                    - add: { tag: 15, equal-one-of: [ "USD", "EUR" ] }
                       after: { tag: 58, matches: (.*) }
                   update-length: false
                 - when:
                     - { tag: 8, matches: FIXT.1.1 }
                     - { tag: 35, matches: 8 }
                   then:
-                    - replace: { tag: 64, matches: (.*) }
-                      with: { tag: 63, value: 1 }
-                    - remove: { tag: 110, matches: (.*) }
+                    - replace: { tag: 64, matching: (.*) }
+                      with: { tag: 63, equal: 1 }
+                    - remove: { tag: 110, matching: (.*) }
                   update-checksum: false
   pins:
-  - name: to_data_provider
+    - name: to_data_provider
       connection-type: grpc-client
       service-class: com.exactpro.th2.dataprovider.grpc.DataProviderService
     - name: to_send
@@ -314,14 +386,18 @@ spec:
       enabled: false
     resources:
       limits:
-        memory: 200Mi
-        cpu: 600m
+        memory: 500Mi
+        cpu: 1000m
       requests:
         memory: 100Mi
-        cpu: 20m
+        cpu: 200m
 ```
 
 # Changelog
+
+## 0.1.0
+
+* add basic support for repeating groups to mangler
 
 ## 0.0.8
 

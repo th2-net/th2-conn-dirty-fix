@@ -16,11 +16,17 @@
 
 package com.exactpro.th2.conn.dirty.fix
 
+import com.exactpro.th2.conn.dirty.fix.FixField.FixGroup
 import com.fasterxml.jackson.annotation.JsonAlias
 import com.fasterxml.jackson.annotation.JsonIgnore
+import com.fasterxml.jackson.annotation.JsonSubTypes
+import com.fasterxml.jackson.annotation.JsonSubTypes.Type
+import com.fasterxml.jackson.annotation.JsonTypeInfo
+import com.fasterxml.jackson.annotation.JsonTypeInfo.Id.DEDUCTION
 import io.netty.buffer.ByteBuf
 import mu.KotlinLogging
 import java.util.regex.Pattern
+import kotlin.properties.Delegates.notNull
 
 typealias RuleID = String
 typealias Tag = Int
@@ -35,7 +41,7 @@ object MessageTransformer {
 
         val results = mutableListOf<ActionResult>().apply {
             for ((conditions, actions) in rule.transform) {
-                if (unconditionally || conditions.all { it.matches(message) }) {
+                if (unconditionally || conditions.all(message::contains)) {
                     this += transform(message, actions)
                 }
             }
@@ -62,12 +68,19 @@ object MessageTransformer {
     }
 
     private fun transform(message: ByteBuf, actions: List<Action>) = sequence {
-        actions.forEach { action ->
+        for (action in actions) {
+            val context = when (val group = action.group) {
+                null -> message.fields
+                else -> group.find(message) ?: continue
+            }
+
             action.set?.apply {
                 val tag = singleTag
                 val value = singleValue
+                val field = context.find { it.tag == tag }
 
-                if (message.setField(tag, value)) {
+                if (field != null) {
+                    field.value = singleValue
                     yield(ActionResult(tag, value, action))
                 }
             }
@@ -76,41 +89,41 @@ object MessageTransformer {
                 val tag = field.singleTag
                 val value = field.singleValue
 
-                action.before?.find(message)?.let { next ->
+                action.before?.find(context)?.let { next ->
                     next.insertPrevious(tag, value)
                     yield(ActionResult(tag, value, action))
                 }
 
-                action.after?.find(message)?.let { previous ->
+                action.after?.find(context)?.let { previous ->
                     previous.insertNext(tag, value)
                     yield(ActionResult(tag, value, action))
                 }
             }
 
-            action.move?.find(message)?.let { field ->
+            action.move?.find(context)?.let { field ->
                 val tag = checkNotNull(field.tag) { "Field tag for move was empty" }
                 val value = field.value
 
-                action.before?.find(message)?.let { next ->
+                action.before?.find(context)?.let { next ->
                     field.clear()
                     next.insertPrevious(tag, value)
                     yield(ActionResult(tag, value, action))
                 }
 
-                action.after?.find(message)?.let { previous ->
+                action.after?.find(context)?.let { previous ->
                     previous.insertNext(tag, value)
                     field.clear()
                     yield(ActionResult(tag, value, action))
                 }
             }
 
-            action.remove?.find(message)?.let { field ->
+            action.remove?.find(context)?.let { field ->
                 val tag = checkNotNull(field.tag) { "Field tag for remove was empty" }
                 field.clear()
                 yield(ActionResult(tag, null, action))
             }
 
-            action.replace?.find(message)?.let { field ->
+            action.replace?.find(context)?.let { field ->
                 val with = action.with!!
                 val tag = with.singleTag
                 val value = with.singleValue
@@ -124,51 +137,111 @@ object MessageTransformer {
     }
 }
 
-data class FieldSelector(
-    val tag: Tag?,
-    val tagOneOf: List<Tag>?,
-    val matches: Pattern,
+data class Group(
+    val counter: Int,
+    val delimiter: Int,
+    val tags: Set<Int>,
 ) {
     init {
-        require((tag != null) xor !tagOneOf.isNullOrEmpty()) { "Either 'tag' or 'tagOneOf' must be specified" }
+        check(counter != delimiter) { "'counter' is equal to 'delimiter': $counter" }
+        check(counter !in tags) { "'tags' cannot contain 'counter' tag: $counter" }
+        check(delimiter !in tags) { "'tags' cannot contain 'delimiter' tag: $delimiter" }
+    }
+}
+
+data class Context(val groups: Map<String, Group> = mapOf())
+
+@JsonTypeInfo(use = DEDUCTION)
+@JsonSubTypes(Type(FieldSelector::class), Type(GroupSelector::class))
+interface Selector {
+    fun init(context: Context) = Unit
+    fun find(message: ByteBuf): FixElement?
+    fun find(fields: Iterable<FixField>): FixElement?
+}
+
+fun ByteBuf.contains(selector: Selector): Boolean = selector.find(this) != null
+fun Iterable<FixField>.contains(selector: Selector): Boolean = selector.find(this) != null
+
+data class FieldSelector(
+    val tag: Tag?,
+    @JsonAlias("one-of-tags", "tagOneOf") val tags: List<Tag>?,
+    @JsonAlias("matching") val matches: Pattern,
+) : Selector {
+    init {
+        require((tag != null) xor !tags.isNullOrEmpty()) { "Either 'tag' or 'one-of-tags' must be specified" }
     }
 
     @JsonIgnore private val predicate = matches.asMatchPredicate()
 
-    fun matches(message: ByteBuf): Boolean = find(message) != null
-
-    fun find(message: ByteBuf): FixField? = when {
-        tag != null -> message.findField { it.tag == tag && it.value?.run(predicate::test) ?: false }
-        else -> message.findFields { it.tag in tagOneOf!! && it.value?.run(predicate::test) ?: false }.randomOrNull()
+    override fun find(fields: Iterable<FixField>): FixField? = when (tags) {
+        null -> fields.find { it.tag == tag && it.value?.run(predicate::test) ?: false }
+        else -> fields.filter { it.tag in tags && it.value?.run(predicate::test) ?: false }.randomOrNull()
     }
+
+    override fun find(message: ByteBuf): FixField? = find(message.fields)
 
     override fun toString() = buildString {
         tag?.apply { append("tag $tag") }
-        tagOneOf?.apply { append("one of tags $tagOneOf") }
+        tags?.apply { append("one of tags $tags") }
         append(" ~= /$matches/")
     }
 }
 
-data class FieldDefinition(
-    val tag: Tag?,
-    val value: String?,
-    val tagOneOf: List<Tag>?,
-    val valueOneOf: List<String>?
-) {
+data class GroupSelector(
+    val group: String,
+    @JsonAlias("contains", "where") val selectors: List<FieldSelector>,
+) : Selector {
+    private var counter by notNull<Int>()
+    private var delimiter by notNull<Int>()
+    private lateinit var tags: Iterable<Int>
+
     init {
-        require((tag != null) xor !tagOneOf.isNullOrEmpty()) { "Either 'tag' or 'tagOneOf' must be specified" }
-        require((value != null) xor !valueOneOf.isNullOrEmpty()) { "Either 'value' or 'valueOneOf' must be specified" }
+        require(selectors.isNotEmpty()) { "group selector has no fields: $group" }
     }
 
-    @JsonIgnore val singleTag: Tag = tag ?: tagOneOf!!.random()
-    @JsonIgnore val singleValue: String = value ?: valueOneOf!!.random()
+    override fun init(context: Context) {
+        val group = context.groups[group] ?: error("Unknown group: $group")
+        counter = group.counter
+        delimiter = group.delimiter
+        tags = group.tags
+    }
+
+    override fun find(fields: Iterable<FixField>): FixGroup? {
+        var group = fields.findGroup(counter, delimiter, tags)
+
+        while (group != null) {
+            if (selectors.all(group::contains)) return group
+            group = group.next()
+        }
+
+        return null
+    }
+
+    override fun find(message: ByteBuf): FixGroup? = find(message.fields)
+
+    override fun toString() = "group '$group' where ${selectors.joinToString(" && ")}"
+}
+
+data class FieldDefinition(
+    val tag: Tag?,
+    @JsonAlias("to", "equal") val value: String?,
+    @JsonAlias("one-of-tags", "tagOneOf") val tags: List<Tag>?,
+    @JsonAlias("valueOneOf", "to-one-of", "equal-one-of") val values: List<String>?,
+) {
+    init {
+        require((tag != null) xor !tags.isNullOrEmpty()) { "Either 'tag' or 'one-of-tags' must be specified" }
+        require((value != null) xor !values.isNullOrEmpty()) { "'to/equal' and 'equal-one-of/to-one-of' are mutually exclusive" }
+    }
+
+    @JsonIgnore val singleTag: Tag = tag ?: tags!!.random()
+    @JsonIgnore val singleValue: String = value ?: values!!.random()
 
     override fun toString() = buildString {
         tag?.apply { append("tag $tag") }
-        tagOneOf?.apply { append("one of tags $tagOneOf") }
+        tags?.apply { append("one of $tags") }
         append(" = ")
         value?.apply { append("'$value'") }
-        valueOneOf?.apply { append("one of $valueOneOf") }
+        values?.apply { append("one of $values") }
     }
 }
 
@@ -181,6 +254,7 @@ data class Action(
     val with: FieldDefinition? = null,
     val before: FieldSelector? = null,
     val after: FieldSelector? = null,
+    @JsonAlias("in") val group: GroupSelector? = null,
 ) {
     init {
         val operations = listOfNotNull(set, add, move, remove, replace)
@@ -209,6 +283,15 @@ data class Action(
         }
     }
 
+    fun init(context: Context) {
+        move?.init(context)
+        replace?.init(context)
+        remove?.init(context)
+        before?.init(context)
+        after?.init(context)
+        group?.init(context)
+    }
+
     override fun toString() = buildString {
         set?.apply { append("set $this") }
         add?.apply { append("add $this") }
@@ -218,12 +301,12 @@ data class Action(
         with?.apply { append(" with $this") }
         before?.apply { append(" before $this") }
         after?.apply { append(" after $this") }
+        group?.apply { append(" on $this") }
     }
 }
 
-
 data class Transform(
-    @JsonAlias("when") val conditions: List<FieldSelector>,
+    @JsonAlias("when") val conditions: List<Selector>,
     @JsonAlias("then") val actions: List<Action>,
     @JsonAlias("update-length") val updateLength: Boolean = true,
     @JsonAlias("update-checksum") val updateChecksum: Boolean = true,
@@ -231,6 +314,11 @@ data class Transform(
     init {
         require(conditions.isNotEmpty()) { "Transformation must have at least one condition" }
         require(actions.isNotEmpty()) { "Transformation must have at least one action" }
+    }
+
+    fun init(context: Context) {
+        conditions.forEach { it.init(context) }
+        actions.forEach { it.init(context) }
     }
 
     override fun toString() = buildString {
@@ -248,6 +336,8 @@ data class Rule(
     init {
         require(transform.isNotEmpty()) { "Rule must have at least one transform" }
     }
+
+    fun init(context: Context) = transform.forEach { it.init(context) }
 
     override fun toString() = buildString {
         appendLine("name: $name")
