@@ -110,7 +110,7 @@ compileTestKotlin {
 dependencyCheck {
     formats=['SARIF', 'JSON', 'HTML']
     failBuildOnCVSS=5
-    suppressionFile="C:\\programming\\th2-conn-dirty-fix\\suppressions.xml"
+    suppressionFile="suppressions.xml"
 
     analyzers {
         assemblyEnabled = false
