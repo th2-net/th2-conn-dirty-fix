@@ -33,9 +33,8 @@ import org.mockito.Mockito;
 
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
-import java.time.Clock;
-import java.time.Instant;
-import java.time.ZoneId;
+import java.time.*;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -59,6 +58,7 @@ class FixHandlerTest {
     private static ByteBuf oneMessageBuffer;
     private static ByteBuf brokenBuffer;
     private static FixHandler fixHandler = channel.getFixHandler();
+    private static FixHandler originalfixHandler = channel.getOriginalFixHandler();
 
     @BeforeAll
     static void init() {
@@ -148,6 +148,30 @@ class FixHandlerTest {
         //assertEquals(expectedHeartbeat, new String(client.getQueue().get(1).array()));
         assertEquals(expectedResendRequest, new String(channel.getQueue().get(1).array()));
     }
+
+    @Test
+    void getTimeTestWithSendingDateTimeFormatBeingNull() {
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyyMMdd-HH:mm:ss.SSSSSSSSS");
+        originalfixHandler.settings.setSendingDateTimeFormat(null);
+        String actual = originalfixHandler.getTime();
+        LocalDateTime time = LocalDateTime.parse(actual, formatter);
+        String expected = formatter.format(time);
+
+        assertEquals(expected, actual);
+    }
+
+    @Test
+    void getTimeTestWithNewSendingDateTimeFormat() {
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyyMMdd-HH:mm:ss.SSS");
+        originalfixHandler.settings.setSendingDateTimeFormat(formatter);
+        String actual = originalfixHandler.getTime();
+
+        LocalDateTime time = LocalDateTime.parse(actual, formatter);
+        String expected = formatter.format(time);
+
+        assertEquals(expected, actual);
+    }
+
 
     @Test
     void onConnectionTest() {
@@ -341,6 +365,7 @@ class FixHandlerTest {
 class Channel implements IChannel {
     private final FixHandlerSettings fixHandlerSettings;
     private final MyFixHandler fixHandler;
+    private final FixHandler originalFixHandler;
     private final List<ByteBuf> queue = new ArrayList<>();
 
     Channel() {
@@ -365,6 +390,7 @@ class Channel implements IChannel {
         Mockito.when(context.getSettings()).thenReturn(fixHandlerSettings);
 
         this.fixHandler = new MyFixHandler(context);
+        this.originalFixHandler = new FixHandler(context);
     }
 
     @Override
@@ -395,6 +421,10 @@ class Channel implements IChannel {
 
     public MyFixHandler getFixHandler() {
         return fixHandler;
+    }
+
+    public FixHandler getOriginalFixHandler() {
+        return this.originalFixHandler;
     }
 
     public List<ByteBuf> getQueue() {

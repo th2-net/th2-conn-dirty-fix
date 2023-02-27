@@ -858,9 +858,14 @@ public class FixHandler implements AutoCloseable, IHandler {
     }
 
     public String getTime() {
-        String FIX_DATE_TIME_FORMAT_MS = "yyyyMMdd-HH:mm:ss.SSSSSSSSS";
+        DateTimeFormatter formatter = settings.getSendingDateTimeFormat();
+        if (formatter == null) {
+            String FIX_DATE_TIME_FORMAT_MS = "yyyyMMdd-HH:mm:ss.SSSSSSSSS";
+            formatter = DateTimeFormatter.ofPattern(FIX_DATE_TIME_FORMAT_MS);
+        }
+
         LocalDateTime datetime = LocalDateTime.now();
-        return DateTimeFormatter.ofPattern(FIX_DATE_TIME_FORMAT_MS).format(datetime);
+        return formatter.format(datetime);
     }
 
     public AtomicBoolean getEnabled() {
