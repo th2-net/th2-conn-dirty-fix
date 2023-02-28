@@ -188,7 +188,6 @@ public class FixHandler implements AutoCloseable, IHandler {
 
             long time = now.until(scheduleTime, ChronoUnit.SECONDS);
             executorService.scheduleAtFixedRate(() -> {
-                sendLogout();
                 channel.close();
                 sessionActive.set(false);
             }, time, DAY_SECONDS, TimeUnit.SECONDS);
