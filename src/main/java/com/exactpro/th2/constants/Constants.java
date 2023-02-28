@@ -98,4 +98,7 @@ public class Constants {
 
     public static final String IS_POSS_DUP = "Y";
     public static final int SUCCESSFUL_LOGOUT_CODE = 4;
+
+    // Sending Time Format
+    public static final String FIX_DATE_TIME_FORMAT_MS = "yyyyMMdd-HH:mm:ss.SSSSSSSSS";
 }

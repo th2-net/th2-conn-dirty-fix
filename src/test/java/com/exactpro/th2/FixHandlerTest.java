@@ -33,7 +33,10 @@ import org.mockito.Mockito;
 
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
-import java.time.*;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -58,7 +61,6 @@ class FixHandlerTest {
     private static ByteBuf oneMessageBuffer;
     private static ByteBuf brokenBuffer;
     private static FixHandler fixHandler = channel.getFixHandler();
-    private static FixHandler originalfixHandler = channel.getOriginalFixHandler();
 
     @BeforeAll
     static void init() {
@@ -149,11 +151,22 @@ class FixHandlerTest {
         assertEquals(expectedResendRequest, new String(channel.getQueue().get(1).array()));
     }
 
+    @NotNull
+    private static FixHandler createFixHandler() {
+        IHandlerContext context = Mockito.mock(IHandlerContext.class);
+        Mockito.when(context.getSettings()).thenReturn(fixHandler.settings);
+        FixHandler originalFixHandler = new FixHandler(context);
+
+        return originalFixHandler;
+    }
+
     @Test
     void getTimeTestWithSendingDateTimeFormatBeingNull() {
+        FixHandler originalFixHandler = createFixHandler();
+
         DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyyMMdd-HH:mm:ss.SSSSSSSSS");
-        originalfixHandler.settings.setSendingDateTimeFormat(null);
-        String actual = originalfixHandler.getTime();
+        originalFixHandler.settings.setSendingDateTimeFormat(null);
+        String actual = originalFixHandler.getTime();
         LocalDateTime time = LocalDateTime.parse(actual, formatter);
         String expected = formatter.format(time);
 
@@ -162,9 +175,10 @@ class FixHandlerTest {
 
     @Test
     void getTimeTestWithNewSendingDateTimeFormat() {
+        FixHandler originalFixHandler = createFixHandler();
         DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyyMMdd-HH:mm:ss.SSS");
-        originalfixHandler.settings.setSendingDateTimeFormat(formatter);
-        String actual = originalfixHandler.getTime();
+        originalFixHandler.settings.setSendingDateTimeFormat(formatter);
+        String actual = originalFixHandler.getTime();
 
         LocalDateTime time = LocalDateTime.parse(actual, formatter);
         String expected = formatter.format(time);
@@ -365,7 +379,6 @@ class FixHandlerTest {
 class Channel implements IChannel {
     private final FixHandlerSettings fixHandlerSettings;
     private final MyFixHandler fixHandler;
-    private final FixHandler originalFixHandler;
     private final List<ByteBuf> queue = new ArrayList<>();
 
     Channel() {
@@ -390,7 +403,6 @@ class Channel implements IChannel {
         Mockito.when(context.getSettings()).thenReturn(fixHandlerSettings);
 
         this.fixHandler = new MyFixHandler(context);
-        this.originalFixHandler = new FixHandler(context);
     }
 
     @Override
@@ -421,10 +433,6 @@ class Channel implements IChannel {
 
     public MyFixHandler getFixHandler() {
         return fixHandler;
-    }
-
-    public FixHandler getOriginalFixHandler() {
-        return this.originalFixHandler;
     }
 
     public List<ByteBuf> getQueue() {
