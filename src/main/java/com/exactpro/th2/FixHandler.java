@@ -189,6 +189,7 @@ public class FixHandler implements AutoCloseable, IHandler {
             long time = now.until(scheduleTime, ChronoUnit.SECONDS);
             executorService.scheduleAtFixedRate(() -> {
                 sendLogout();
+                waitLogoutResponse();
                 channel.close();
                 sessionActive.set(false);
             }, time, DAY_SECONDS, TimeUnit.SECONDS);
@@ -791,6 +792,10 @@ public class FixHandler implements AutoCloseable, IHandler {
     @Override
     public void close() {
         sendLogout();
+        waitLogoutResponse();
+    }
+
+    private void waitLogoutResponse() {
         long start = System.currentTimeMillis();
         while(System.currentTimeMillis() - start < settings.getDisconnectRequestDelay() && enabled.get()) {
             if (LOGGER.isWarnEnabled()) LOGGER.warn("Waiting session logout: {}", channel.getSessionAlias());
