@@ -1,4 +1,4 @@
-# th2-conn-dirty-fix (0.0.8)
+# th2-conn-dirty-fix (0.1.0)
 
 This microservice allows sending and receiving messages via FIX protocol
 
@@ -76,6 +76,8 @@ when:
   - tag: 49
     matches: SENDER(.*)
 ```
+
+**NOTE**: List of conditions can be empty - in this case transformation will be applied unconditionally
 
 Actions describe modifications which will be applied to a message. There are 4 types of actions:
 
@@ -322,6 +324,10 @@ spec:
 ```
 
 # Changelog
+
+## 0.1.0
+
+* allow transformations without conditions in mangler
 
 ## 0.0.8
 
