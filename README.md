@@ -325,7 +325,6 @@ spec:
 
 # Changelog
 
-<<<<<<< HEAD
 ## 1.0.1
 * Add bookId to lw data provider query
 
@@ -333,7 +332,6 @@ spec:
 
 * Bump `conn-dirty-tcp-core` to `3.0.0` for books and pages support
 
-=======
 ## 0.0.9
 * correct heartbeat and test request handling
 
@@ -341,7 +339,6 @@ spec:
 
 * th2-common upgrade to `3.44.1`
 * th2-bom upgrade to `4.2.0`
->>>>>>> dev-version-0
 
 ## 0.0.7
 
