@@ -1,4 +1,4 @@
-# th2-conn-dirty-fix (1.0.0)
+# th2-conn-dirty-fix (1.0.3)
 
 This microservice allows sending and receiving messages via FIX protocol
 
@@ -325,6 +325,7 @@ spec:
 
 # Changelog
 
+<<<<<<< HEAD
 ## 1.0.1
 * Add bookId to lw data provider query
 
@@ -332,6 +333,15 @@ spec:
 
 * Bump `conn-dirty-tcp-core` to `3.0.0` for books and pages support
 
+=======
+## 0.0.9
+* correct heartbeat and test request handling
+
+## 0.0.8
+
+* th2-common upgrade to `3.44.1`
+* th2-bom upgrade to `4.2.0`
+>>>>>>> dev-version-0
 
 ## 0.0.7
 
