@@ -17,6 +17,7 @@
 package com.exactpro.th2.constants;
 
 
+import java.time.format.DateTimeFormatter;
 import java.util.Collections;
 import java.util.Set;
 
@@ -100,5 +101,5 @@ public class Constants {
     public static final int SUCCESSFUL_LOGOUT_CODE = 4;
 
     // Sending Time Format
-    public static final String FIX_DATE_TIME_FORMAT_MS = "yyyyMMdd-HH:mm:ss.SSSSSSSSS";
+    public static final DateTimeFormatter DEFAULT_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMdd-HH:mm:ss.SSSSSSSSS");
 }

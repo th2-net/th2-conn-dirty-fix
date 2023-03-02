@@ -43,7 +43,7 @@ This microservice allows sending and receiving messages via FIX protocol
 + *loadSequencesFromCradle* - defines if sequences will be loaded from cradle to use them in logon message.
 + *sessionStartTime* - UTC time when session starts. (`nullable`)
 + *sessionEndTime* - UTC time when session ends. required if startSessionTime is filled.
-+ *sendingDateTimeFormat* - DateTime format for outgoing messages. (`nullable`)
++ *sendingDateTimeFormat* - `SendingTime` field format for outgoing messages. (`nullable`, `default format` in this case is `"yyyyMMdd-HH:mm:ss.SSSSSSSSS"`) 
 + *useNextExpectedSeqNum* - session management based on next expected sequence number. (`false` by default)
 + *saveAdminMessages* - defines if admin messages will be saved to internal outgoing buffer. (`false` by default)
 
@@ -275,39 +275,39 @@ spec:
                   update-checksum: false
   pins:
   - name: to_data_provider
-    connection-type: grpc-client
-    service-class: com.exactpro.th2.dataprovider.grpc.DataProviderService
-  - name: to_send
-    connection-type: mq
-    attributes:
-      - subscribe
-      - send
-      - raw
-    settings:
-      storageOnDemand: false
-      queueLength: 1000
-  - name: incoming_messages
-    connection-type: mq
-    attributes:
-      - publish
-      - store
-      - raw
-    filters:
-      - metadata:
-          - field-name: direction
-            expected-value: FIRST
-            operation: EQUAL
-  - name: outgoing_messages
-    connection-type: mq
-    attributes:
-      - publish
-      - store
-      - raw
-    filters:
-      - metadata:
-          - field-name: direction
-            expected-value: SECOND
-            operation: EQUAL
+      connection-type: grpc-client
+      service-class: com.exactpro.th2.dataprovider.grpc.DataProviderService
+    - name: to_send
+      connection-type: mq
+      attributes:
+        - subscribe
+        - send
+        - raw
+      settings:
+        storageOnDemand: false
+        queueLength: 1000
+    - name: incoming_messages
+      connection-type: mq
+      attributes:
+        - publish
+        - store
+        - raw
+      filters:
+        - metadata:
+            - field-name: direction
+              expected-value: FIRST
+              operation: EQUAL
+    - name: outgoing_messages
+      connection-type: mq
+      attributes:
+        - publish
+        - store
+        - raw
+      filters:
+        - metadata:
+            - field-name: direction
+              expected-value: SECOND
+              operation: EQUAL
   extended-settings:
     externalBox:
       enabled: false
