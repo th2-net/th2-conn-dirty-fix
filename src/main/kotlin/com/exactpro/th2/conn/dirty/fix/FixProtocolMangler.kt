@@ -27,7 +27,6 @@ import com.exactpro.th2.conn.dirty.tcp.core.api.IMangler
 import com.exactpro.th2.conn.dirty.tcp.core.api.IManglerContext
 import com.exactpro.th2.conn.dirty.tcp.core.api.IManglerFactory
 import com.exactpro.th2.conn.dirty.tcp.core.api.IManglerSettings
-import com.exactpro.th2.netty.bytebuf.util.replaceAll
 import com.fasterxml.jackson.databind.json.JsonMapper
 import com.fasterxml.jackson.module.kotlin.KotlinModule
 import com.fasterxml.jackson.module.kotlin.readValue
@@ -46,7 +45,7 @@ private const val RULE_NAME_PROPERTY = "rule-name"
 private const val RULE_ACTIONS_PROPERTY = "rule-actions"
 private const val MANGLE_EVENT_TYPE = "Mangle"
 
-class FixProtocolMangler(val context: IManglerContext) : IMangler {
+class FixProtocolMangler(context: IManglerContext) : IMangler {
     private val rules = (context.settings as FixProtocolManglerSettings).rules
 
     override fun onOutgoing(channel: IChannel, message: ByteBuf, metadata: MutableMap<String, String>): Event? {

@@ -89,7 +89,7 @@ object MessageTransformer {
                 }
 
                 action.move?.find(message)?.let { field ->
-                    val tag = checkNotNull(field.tag) { "Field tag for move was empty. Action: $action." }
+                    val tag = checkNotNull(field.tag) { "Field tag for move was empty." }
                     val value = field.value
 
                     action.before?.find(message)?.let { next ->
@@ -106,7 +106,7 @@ object MessageTransformer {
                 }
 
                 action.remove?.find(message)?.let { field ->
-                    val tag = checkNotNull(field.tag) { "Field tag for remove was empty. Action: $action." }
+                    val tag = checkNotNull(field.tag) { "Field tag for remove was empty." }
                     field.clear()
                     yield(ActionResult(tag, null, action))
                 }
