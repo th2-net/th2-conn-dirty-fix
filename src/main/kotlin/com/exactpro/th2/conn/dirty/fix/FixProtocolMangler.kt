@@ -27,6 +27,7 @@ import com.exactpro.th2.conn.dirty.tcp.core.api.IMangler
 import com.exactpro.th2.conn.dirty.tcp.core.api.IManglerContext
 import com.exactpro.th2.conn.dirty.tcp.core.api.IManglerFactory
 import com.exactpro.th2.conn.dirty.tcp.core.api.IManglerSettings
+import com.exactpro.th2.netty.bytebuf.util.replaceAll
 import com.fasterxml.jackson.databind.json.JsonMapper
 import com.fasterxml.jackson.module.kotlin.KotlinModule
 import com.fasterxml.jackson.module.kotlin.readValue
@@ -45,7 +46,7 @@ private const val RULE_NAME_PROPERTY = "rule-name"
 private const val RULE_ACTIONS_PROPERTY = "rule-actions"
 private const val MANGLE_EVENT_TYPE = "Mangle"
 
-class FixProtocolMangler(context: IManglerContext) : IMangler {
+class FixProtocolMangler(val context: IManglerContext) : IMangler {
     private val rules = (context.settings as FixProtocolManglerSettings).rules
 
     override fun onOutgoing(channel: IChannel, message: ByteBuf, metadata: MutableMap<String, String>): Event? {
@@ -63,40 +64,34 @@ class FixProtocolMangler(context: IManglerContext) : IMangler {
             }
         }
 
-        val (name, results, message) = try {
-            MessageTransformer.transform(message, rule, unconditionally) ?: return null
-        } catch (e: Exception) {
-            return Event.start().apply {
-                name("Message was partially mangled. Error while applying actions.")
-                type(MANGLE_EVENT_TYPE)
+        val (name, results, message) = MessageTransformer.transform(message, rule, unconditionally) ?: return null
+
+        return Event.start().apply {
+            type(MANGLE_EVENT_TYPE)
+            if(results.any { it.statusDesc.status == ActionStatus.FAIL }) {
+                name("Message was partially mangled.")
                 status(FAILED)
 
                 if (metadata[RULE_ACTIONS_PROPERTY] != null) {
                     bodyData(createMessageBean("Action source is $RULE_ACTIONS_PROPERTY. " +
-                                    "Data: ${metadata[RULE_ACTIONS_PROPERTY]}"))
+                            "Data: ${metadata[RULE_ACTIONS_PROPERTY]}"))
                 } else {
                     bodyData(createMessageBean("Action source is service configuration. " +
-                                    "Data: ${MAPPER.writeValueAsString(rules)}"))
+                            "Data: ${MAPPER.writeValueAsString(rules)}"))
                 }
-
-                bodyData(createMessageBean("Original message:"))
-                bodyData(createMessageBean(ByteBufUtil.prettyHexDump(message)))
-
-                bodyData(createMessageBean("Error message: ${e.message}"))
+            } else {
+                name("Message mangled.")
+                status(PASSED)
             }
-        }
-
-        return Event.start().apply {
-            name("Message mangled")
-            type(MANGLE_EVENT_TYPE)
-            status(PASSED)
 
             bodyData(createMessageBean("Original message:"))
             bodyData(createMessageBean(ByteBufUtil.prettyHexDump(message)))
 
             TableBuilder<ActionRow>().run {
                 results.forEach { result ->
-                    row(ActionRow(name, result.tag, result.value, result.action.toString()))
+                    row(ActionRow(name, result.tag, result.value,
+                        result.action.toString(), result.statusDesc.status.name,
+                        result.statusDesc.description))
                 }
                 bodyData(build())
             }
@@ -149,5 +144,7 @@ private data class ActionRow(
     val corruptionType: String,
     val corruptedTag: Int,
     val corruptedValue: String?,
-    val corruptionDescription: String
+    val corruptionDescription: String,
+    val status: String,
+    val errorDescription: String?
 ) : IRow

@@ -63,62 +63,66 @@ object MessageTransformer {
 
     private fun transform(message: ByteBuf, actions: List<Action>) = sequence {
         actions.forEach { action ->
-            action.set?.apply {
-                val tag = singleTag
-                val value = singleValue
+            try {
+                action.set?.apply {
+                    val tag = singleTag
+                    val value = singleValue
 
-                if (message.setField(tag, value)) {
-                    yield(ActionResult(tag, value, action))
-                }
-            }
-
-            action.add?.also { field ->
-                val tag = field.singleTag
-                val value = field.singleValue
-
-                action.before?.find(message)?.let { next ->
-                    next.insertPrevious(tag, value)
-                    yield(ActionResult(tag, value, action))
+                    if (message.setField(tag, value)) {
+                        yield(ActionResult(tag, value, action))
+                    }
                 }
 
-                action.after?.find(message)?.let { previous ->
-                    previous.insertNext(tag, value)
-                    yield(ActionResult(tag, value, action))
+                action.add?.also { field ->
+                    val tag = field.singleTag
+                    val value = field.singleValue
+
+                    action.before?.find(message)?.let { next ->
+                        next.insertPrevious(tag, value)
+                        yield(ActionResult(tag, value, action))
+                    }
+
+                    action.after?.find(message)?.let { previous ->
+                        previous.insertNext(tag, value)
+                        yield(ActionResult(tag, value, action))
+                    }
                 }
-            }
 
-            action.move?.find(message)?.let { field ->
-                val tag = checkNotNull(field.tag) { "Field tag for move was empty. Action: $action." }
-                val value = field.value
+                action.move?.find(message)?.let { field ->
+                    val tag = checkNotNull(field.tag) { "Field tag for move was empty. Action: $action." }
+                    val value = field.value
 
-                action.before?.find(message)?.let { next ->
+                    action.before?.find(message)?.let { next ->
+                        field.clear()
+                        next.insertPrevious(tag, value)
+                        yield(ActionResult(tag, value, action))
+                    }
+
+                    action.after?.find(message)?.let { previous ->
+                        previous.insertNext(tag, value)
+                        field.clear()
+                        yield(ActionResult(tag, value, action))
+                    }
+                }
+
+                action.remove?.find(message)?.let { field ->
+                    val tag = checkNotNull(field.tag) { "Field tag for remove was empty. Action: $action." }
                     field.clear()
-                    next.insertPrevious(tag, value)
-                    yield(ActionResult(tag, value, action))
+                    yield(ActionResult(tag, null, action))
                 }
 
-                action.after?.find(message)?.let { previous ->
-                    previous.insertNext(tag, value)
-                    field.clear()
+                action.replace?.find(message)?.let { field ->
+                    val with = action.with!!
+                    val tag = with.singleTag
+                    val value = with.singleValue
+
+                    field.tag = tag
+                    field.value = value
+
                     yield(ActionResult(tag, value, action))
                 }
-            }
-
-            action.remove?.find(message)?.let { field ->
-                val tag = checkNotNull(field.tag) { "Field tag for remove was empty. Action: $action." }
-                field.clear()
-                yield(ActionResult(tag, null, action))
-            }
-
-            action.replace?.find(message)?.let { field ->
-                val with = action.with!!
-                val tag = with.singleTag
-                val value = with.singleValue
-
-                field.tag = tag
-                field.value = value
-
-                yield(ActionResult(tag, value, action))
+            } catch (e: Exception) {
+                yield(ActionResult(-1, null, action, ActionStatusDescription("Error while applying action: $action. Message: ${e.message}", ActionStatus.FAIL)))
             }
         }
     }
@@ -256,4 +260,7 @@ data class Rule(
 }
 
 data class TransformResult(val rule: RuleID, val results: List<ActionResult>, val message: ByteBuf)
-data class ActionResult(val tag: Tag, val value: String?, val action: Action)
+data class ActionResult(val tag: Tag, val value: String?, val action: Action, val statusDesc: ActionStatusDescription = SUCCESS_ACTION_DESCRIPTION)
+data class ActionStatusDescription(val description: String? = null, val status: ActionStatus)
+enum class ActionStatus { SUCCESS, FAIL; }
+private val SUCCESS_ACTION_DESCRIPTION = ActionStatusDescription(status = ActionStatus.SUCCESS)
