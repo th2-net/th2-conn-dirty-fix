@@ -17,6 +17,7 @@
 package com.exactpro.th2.conn.dirty.fix
 
 import com.exactpro.th2.common.event.Event
+import com.exactpro.th2.common.event.Event.Status.FAILED
 import com.exactpro.th2.common.event.Event.Status.PASSED
 import com.exactpro.th2.common.event.EventUtils.createMessageBean
 import com.exactpro.th2.common.event.bean.IRow
@@ -49,23 +50,31 @@ class FixProtocolMangler(context: IManglerContext) : IMangler {
     override fun onOutgoing(channel: IChannel, message: ByteBuf, metadata: MutableMap<String, String>): Event? {
         LOGGER.trace { "Processing message: ${message.toString(Charsets.UTF_8)}" }
 
-        val (rule, unconditionally) = getRule(message, metadata) ?: return null
-        val (name, results, message) = MessageTransformer.transform(message, rule, unconditionally) ?: return null
+        return try {
+            val (rule, unconditionally) = getRule(message, metadata) ?: return null
+            val (name, results, message) = MessageTransformer.transform(message, rule, unconditionally) ?: return null
 
-        return Event.start().apply {
-            name("Message mangled")
-            type("Mangle")
-            status(PASSED)
+            Event.start().apply {
+                name("Message mangled")
+                type("Mangle")
+                status(PASSED)
 
-            bodyData(createMessageBean("Original message:"))
-            bodyData(createMessageBean(ByteBufUtil.prettyHexDump(message)))
+                bodyData(createMessageBean("Original message:"))
+                bodyData(createMessageBean(ByteBufUtil.prettyHexDump(message)))
 
-            TableBuilder<ActionRow>().run {
-                results.forEach { result ->
-                    row(ActionRow(name, result.tag, result.value, result.action.toString()))
+                TableBuilder<ActionRow>().run {
+                    results.forEach { result ->
+                        row(ActionRow(name, result.tag, result.value, result.action.toString()))
+                    }
+
+                    bodyData(build())
                 }
-
-                bodyData(build())
+            }
+        } catch (e: Exception) {
+            Event.start().apply {
+                name("Message not mangled. ${e.message}")
+                type("Mangle")
+                status(FAILED)
             }
         }
     }

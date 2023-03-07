@@ -325,6 +325,7 @@ spec:
 
 ## 0.0.10
 * correct handling of sequence reset with `endSeqNo = 0`
+* Skip messages mangling on error in `demo-fix-mangler` with error event instead of throwing exception.
 
 ## 0.0.9
 * correct heartbeat and test request handling
