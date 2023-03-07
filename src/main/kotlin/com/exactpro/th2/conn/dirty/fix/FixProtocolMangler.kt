@@ -72,9 +72,11 @@ class FixProtocolMangler(context: IManglerContext) : IMangler {
             }
         } catch (e: Exception) {
             Event.start().apply {
-                name("Message not mangled. ${e.message}")
+                name("Message not mangled.")
                 type("Mangle")
                 status(FAILED)
+                bodyData(createMessageBean("Error: ${e.message}"))
+                bodyData(createMessageBean("Mangler config: ${MAPPER.writeValueAsString(rules)}"))
             }
         }
     }
