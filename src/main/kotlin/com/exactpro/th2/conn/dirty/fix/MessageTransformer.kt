@@ -88,7 +88,7 @@ object MessageTransformer {
             }
 
             action.move?.find(message)?.let { field ->
-                val tag = checkNotNull(field.tag) { "Field tag for move was empty" }
+                val tag = checkNotNull(field.tag) { "Field tag for move was empty. Action: $action." }
                 val value = field.value
 
                 action.before?.find(message)?.let { next ->
@@ -105,7 +105,7 @@ object MessageTransformer {
             }
 
             action.remove?.find(message)?.let { field ->
-                val tag = checkNotNull(field.tag) { "Field tag for remove was empty" }
+                val tag = checkNotNull(field.tag) { "Field tag for remove was empty. Action: $action." }
                 field.clear()
                 yield(ActionResult(tag, null, action))
             }
@@ -223,13 +223,12 @@ data class Action(
 
 
 data class Transform(
-    @JsonAlias("when") val conditions: List<FieldSelector>,
+    @JsonAlias("when") val conditions: List<FieldSelector> = listOf(),
     @JsonAlias("then") val actions: List<Action>,
     @JsonAlias("update-length") val updateLength: Boolean = true,
     @JsonAlias("update-checksum") val updateChecksum: Boolean = true,
 ) {
     init {
-        require(conditions.isNotEmpty()) { "Transformation must have at least one condition" }
         require(actions.isNotEmpty()) { "Transformation must have at least one action" }
     }
 
