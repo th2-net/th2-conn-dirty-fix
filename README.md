@@ -329,6 +329,12 @@ spec:
 
 * allow transformations without conditions in mangler
 
+## 0.0.10
+* disable reconnect when session is in not-active state.
+
+## 0.0.9
+* correct heartbeat and test request handling
+
 ## 0.0.8
 
 * th2-common upgrade to `3.44.1`
