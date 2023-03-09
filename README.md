@@ -1,4 +1,4 @@
-# th2-conn-dirty-fix (0.0.10)
+# th2-conn-dirty-fix (0.1.0)
 
 This microservice allows sending and receiving messages via FIX protocol
 
@@ -323,9 +323,13 @@ spec:
 
 # Changelog
 
-## 0.0.10
+## 0.1.0
 * correct handling of sequence reset with `endSeqNo = 0`
 * Skip messages mangling on error in `demo-fix-mangler` with error event instead of throwing exception.
+* allow unconditional rule application
+
+## 0.0.10
+* disable reconnect when session is in not-active state.
 
 ## 0.0.9
 * correct heartbeat and test request handling

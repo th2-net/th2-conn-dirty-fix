@@ -122,6 +122,7 @@ object MessageTransformer {
                     yield(ActionResult(tag, value, action))
                 }
             } catch (e: Exception) {
+                logger.error(e) { "Error while applying action $action" }
                 yield(ActionResult(-1, null, action, ActionStatusDescription("Error while applying action: $action. Message: ${e.message}", ActionStatus.FAIL)))
             }
         }

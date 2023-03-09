@@ -58,8 +58,8 @@ class FixProtocolMangler(context: IManglerContext) : IMangler {
                 name("Message wasn't mangled. Configuration error.")
                 type(MANGLE_EVENT_TYPE)
                 status(FAILED)
-                bodyData(createMessageBean("Error message: ${e.message}"))
                 bodyData(createMessageBean("Message metadata: $metadata"))
+                exception(e, true)
             }
         }
 
