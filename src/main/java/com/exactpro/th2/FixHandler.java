@@ -16,6 +16,8 @@
 
 package com.exactpro.th2;
 
+import com.exactpro.th2.common.grpc.MessageID;
+import com.exactpro.th2.common.grpc.RawMessage;
 import com.exactpro.th2.conn.dirty.fix.FixField;
 import com.exactpro.th2.conn.dirty.tcp.core.api.IChannel;
 import com.exactpro.th2.conn.dirty.tcp.core.api.IContext;
@@ -26,6 +28,7 @@ import com.google.auto.service.AutoService;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -53,6 +56,8 @@ import static com.exactpro.th2.conn.dirty.fix.FixByteBufUtilKt.updateChecksum;
 import static com.exactpro.th2.conn.dirty.fix.FixByteBufUtilKt.updateLength;
 import static com.exactpro.th2.conn.dirty.tcp.core.util.ByteBufUtil.indexOf;
 import static com.exactpro.th2.conn.dirty.tcp.core.util.ByteBufUtil.isEmpty;
+import static com.exactpro.th2.conn.dirty.tcp.core.util.CommonUtil.getEventId;
+import static com.exactpro.th2.conn.dirty.tcp.core.util.CommonUtil.toByteBuf;
 import static com.exactpro.th2.constants.Constants.BEGIN_SEQ_NO;
 import static com.exactpro.th2.constants.Constants.BEGIN_SEQ_NO_TAG;
 import static com.exactpro.th2.constants.Constants.BEGIN_STRING_TAG;
@@ -650,5 +655,28 @@ public class FixHandler implements AutoCloseable, IProtocolHandler {
 
     public Log getOutgoingMessages() {
         return outgoingMessages;
+    }
+
+    @NotNull
+    @Override
+    public CompletableFuture<MessageID> send(@NotNull RawMessage rawMessage) {
+        if (!client.isOpen()) {
+            try {
+                client.open();
+            } catch (Exception e) {
+                ExceptionUtils.rethrow(e);
+            }
+        }
+
+        while (client.isOpen() && !enabled.get()) {
+            if (LOGGER.isWarnEnabled()) LOGGER.warn("Session is not yet logged in: {}. User message send is blocked.", client.getAddress());
+            try {
+                Thread.sleep(1000);
+            } catch (InterruptedException e) {
+                LOGGER.error("Error while sleeping.");
+            }
+        }
+
+        return client.send(toByteBuf(rawMessage.getBody()), rawMessage.getMetadata().getPropertiesMap(), IChannel.SendMode.HANDLE_AND_MANGLE);
     }
 }

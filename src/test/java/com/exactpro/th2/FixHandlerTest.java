@@ -358,7 +358,7 @@ class Client implements IChannel {
 
     @NotNull
     @Override
-    public Future<MessageID> send(@NotNull ByteBuf byteBuf, @NotNull Map<String, String> map, @NotNull IChannel.SendMode sendMode) {
+    public CompletableFuture<MessageID> send(@NotNull ByteBuf byteBuf, @NotNull Map<String, String> map, @NotNull IChannel.SendMode sendMode) {
         queue.add(byteBuf);
         return CompletableFuture.completedFuture(MessageID.getDefaultInstance());
     }

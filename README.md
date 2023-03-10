@@ -308,7 +308,7 @@ spec:
 
 ## 0.0.3
 
-* bump `com.exactpro.th2:conn-dirty-tcp-core` version to `1.0.2`
+* bump `com.exactpro.th2:conn-dirty-tcp-core` version to `1.1.0`
 
 ## 0.0.2
 
