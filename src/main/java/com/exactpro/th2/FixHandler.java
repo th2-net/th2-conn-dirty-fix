@@ -397,7 +397,6 @@ public class FixHandler implements AutoCloseable, IHandler {
                                 isSequenceChanged = true;
                             }
                         }
-                        serverMsgSeqNum.set(Integer.parseInt(msgSeqNumValue.getValue()) - 1);
                     }
                 }
                 if(!enabled.get() && !isSequenceChanged) {
