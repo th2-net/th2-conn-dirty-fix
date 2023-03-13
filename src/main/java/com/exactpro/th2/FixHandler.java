@@ -685,7 +685,6 @@ public class FixHandler implements AutoCloseable, IHandler {
         if (enabled.get()) {
             LOGGER.info("Send Heartbeat to server - {}", heartbeat);
             resetHeartbeatTask();
-            resetTestRequestTask();
             channel.send(Unpooled.wrappedBuffer(heartbeat.toString().getBytes(StandardCharsets.UTF_8)), Collections.emptyMap(), null, IChannel.SendMode.MANGLE);
 
             lastSendTime = System.currentTimeMillis();
@@ -888,7 +887,7 @@ public class FixHandler implements AutoCloseable, IHandler {
         testRequestTimer.getAndSet(
             executorService.schedule(
                     this::sendTestRequest,
-                    settings.getTestRequestDelay(),
+                    settings.getHeartBtInt() * 3,
                     TimeUnit.SECONDS
             )
         ).cancel(false);

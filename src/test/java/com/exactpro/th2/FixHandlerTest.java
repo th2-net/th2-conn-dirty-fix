@@ -314,7 +314,7 @@ class FixHandlerTest {
 
     @Test
     void sendTestRequestTest() {
-        String expected = "8=FIXT.1.1\u00019=70\u000135=1\u000134=1\u000149=client\u000156=server\u000150=trader\u000152=2014-12-22T10:15:30Z\u0001112=1\u000110=101\u0001";
+        String expected = "8=FIXT.1.1\u00019=70\u000135=1\u000134=2\u000149=client\u000156=server\u000150=trader\u000152=2014-12-22T10:15:30Z\u0001112=1\u000110=102\u0001";
         channel.clearQueue();
         fixHandler.sendTestRequest();
         assertEquals(expected, new String(channel.getQueue().get(0).array()));
