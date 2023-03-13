@@ -35,7 +35,9 @@ import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.Instant;
+import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -58,6 +60,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 
 class FixHandlerTest {
 
+
     private Channel channel;
     private FixHandler fixHandler;
     private static ByteBuf buffer;
@@ -74,7 +77,7 @@ class FixHandlerTest {
 
     @BeforeEach
     void beforeEach() {
-        channel = new Channel();
+        channel = new Channel(createHandlerSettings());
         fixHandler = channel.getFixHandler();
         fixHandler.onOpen(channel);
         ByteBuf logonResponse = Unpooled.wrappedBuffer("8=FIXT.1.1\0019=105\00135=A\00134=1\00149=server\00156=client\00150=system\00152=2014-12-22T10:15:30Z\00198=0\001108=30\0011137=9\0011409=0\00110=203\001".getBytes(StandardCharsets.US_ASCII));
@@ -153,6 +156,61 @@ class FixHandlerTest {
         //assertEquals(expectedHeartbeat, new String(client.getQueue().get(1).array()));
         assertEquals(expectedResendRequest, new String(channel.getQueue().get(1).array()));
     }
+
+    @NotNull
+    public static FixHandlerSettings createHandlerSettings() {
+        final FixHandlerSettings fixHandlerSettings = new FixHandlerSettings();
+        fixHandlerSettings.setHost("127.0.0.1");
+        fixHandlerSettings.setPort(8080);
+        fixHandlerSettings.setBeginString("FIXT.1.1");
+        fixHandlerSettings.setHeartBtInt(30);
+        fixHandlerSettings.setSenderCompID("client");
+        fixHandlerSettings.setTargetCompID("server");
+        fixHandlerSettings.setEncryptMethod("0");
+        fixHandlerSettings.setUsername("username");
+        fixHandlerSettings.setPassword("pass");
+        fixHandlerSettings.setTestRequestDelay(10);
+        fixHandlerSettings.setReconnectDelay(5);
+        fixHandlerSettings.setDisconnectRequestDelay(5);
+        fixHandlerSettings.setResetSeqNumFlag(false);
+        fixHandlerSettings.setResetOnLogon(false);
+        fixHandlerSettings.setDefaultApplVerID("9");
+        fixHandlerSettings.setSenderSubID("trader");
+        return fixHandlerSettings;
+    }
+
+    @NotNull
+    private static FixHandler createFixHandler() {
+        FixHandlerSettings fixHandlerSettings = createHandlerSettings();
+        IHandlerContext context = Mockito.mock(IHandlerContext.class);
+        Mockito.when(context.getSettings()).thenReturn(fixHandlerSettings);
+        return new FixHandler(context);
+    }
+
+    @Test
+    void getTimeTestWithSendingDateTimeFormatBeingNull() {
+        FixHandler originalFixHandler = createFixHandler();
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyyMMdd-HH:mm:ss.SSSSSSSSS");
+        String actual = originalFixHandler.getTime();
+        LocalDateTime time = LocalDateTime.parse(actual, formatter);
+        String expected = formatter.format(time);
+
+        assertEquals(expected, actual);
+    }
+
+    @Test
+    void getTimeTestWithNewSendingDateTimeFormat() {
+        FixHandler originalFixHandler = createFixHandler();
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyyMMdd-HH:mm:ss.SSS");
+        originalFixHandler.settings.setSendingDateTimeFormat(formatter);
+        String actual = originalFixHandler.getTime();
+
+        LocalDateTime time = LocalDateTime.parse(actual, formatter);
+        String expected = formatter.format(time);
+
+        assertEquals(expected, actual);
+    }
+
 
     @Test
     void onConnectionTest() {
@@ -360,26 +418,10 @@ class Channel implements IChannel {
     private final MyFixHandler fixHandler;
     private final List<ByteBuf> queue = new ArrayList<>();
 
-    Channel() {
-        this.fixHandlerSettings = new FixHandlerSettings();
-        fixHandlerSettings.setHost("127.0.0.1");
-        fixHandlerSettings.setPort(8080);
-        fixHandlerSettings.setBeginString("FIXT.1.1");
-        fixHandlerSettings.setHeartBtInt(30);
-        fixHandlerSettings.setSenderCompID("client");
-        fixHandlerSettings.setTargetCompID("server");
-        fixHandlerSettings.setEncryptMethod("0");
-        fixHandlerSettings.setUsername("username");
-        fixHandlerSettings.setPassword("pass");
-        fixHandlerSettings.setTestRequestDelay(10);
-        fixHandlerSettings.setReconnectDelay(5);
-        fixHandlerSettings.setDisconnectRequestDelay(5);
-        fixHandlerSettings.setResetSeqNumFlag(false);
-        fixHandlerSettings.setResetOnLogon(false);
-        fixHandlerSettings.setDefaultApplVerID("9");
-        fixHandlerSettings.setSenderSubID("trader");
+    Channel(FixHandlerSettings fixHandlerSettings) {
+        this.fixHandlerSettings = fixHandlerSettings;
         IHandlerContext context = Mockito.mock(IHandlerContext.class);
-        Mockito.when(context.getSettings()).thenReturn(fixHandlerSettings);
+        Mockito.when(context.getSettings()).thenReturn(this.fixHandlerSettings);
 
         this.fixHandler = new MyFixHandler(context);
     }

@@ -43,6 +43,7 @@ This microservice allows sending and receiving messages via FIX protocol
 + *loadSequencesFromCradle* - defines if sequences will be loaded from cradle to use them in logon message.
 + *sessionStartTime* - UTC time when session starts. (`nullable`)
 + *sessionEndTime* - UTC time when session ends. required if startSessionTime is filled.
++ *sendingDateTimeFormat* - `SendingTime` field format for outgoing messages. (`nullable`, `default format` in this case is `"yyyyMMdd-HH:mm:ss.SSSSSSSSS"`) 
 + *useNextExpectedSeqNum* - session management based on next expected sequence number. (`false` by default)
 + *saveAdminMessages* - defines if admin messages will be saved to internal outgoing buffer. (`false` by default)
 

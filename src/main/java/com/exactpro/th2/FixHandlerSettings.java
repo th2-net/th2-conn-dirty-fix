@@ -19,10 +19,12 @@ package com.exactpro.th2;
 import com.exactpro.th2.conn.dirty.fix.KeyFileType;
 import com.exactpro.th2.conn.dirty.tcp.core.api.IChannel.Security;
 import com.exactpro.th2.conn.dirty.tcp.core.api.IHandlerSettings;
+import com.exactpro.th2.util.DateTimeFormatterDeserializer;
 import com.exactpro.th2.util.LocalTimeDeserializer;
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 
 import java.time.LocalTime;
+import java.time.format.DateTimeFormatter;
 
 public class FixHandlerSettings implements IHandlerSettings {
     private String host = null;
@@ -63,6 +65,17 @@ public class FixHandlerSettings implements IHandlerSettings {
     private int testRequestDelay = 60;
     private int reconnectDelay = 5;
     private int disconnectRequestDelay = 5;
+
+    @JsonDeserialize(using = DateTimeFormatterDeserializer.class)
+    private DateTimeFormatter sendingDateTimeFormat = DateTimeFormatter.ofPattern("yyyyMMdd-HH:mm:ss.SSSSSSSSS");
+
+    public DateTimeFormatter getSendingDateTimeFormat() {
+        return this.sendingDateTimeFormat;
+    }
+
+    public void setSendingDateTimeFormat(DateTimeFormatter sendingDateTimeFormat) {
+        this.sendingDateTimeFormat = sendingDateTimeFormat;
+    }
 
     public String getHost() {
         return host;
@@ -271,4 +284,5 @@ public class FixHandlerSettings implements IHandlerSettings {
     public void setDisconnectRequestDelay(int disconnectRequestDelay) {
         this.disconnectRequestDelay = disconnectRequestDelay;
     }
+
 }
