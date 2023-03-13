@@ -697,7 +697,7 @@ public class FixHandler implements AutoCloseable, IHandler {
     public void sendTestRequest() { //do private
         lastSendTime = System.currentTimeMillis();
         StringBuilder testRequest = new StringBuilder();
-        setHeader(testRequest, MSG_TYPE_TEST_REQUEST, msgSeqNum.get());
+        setHeader(testRequest, MSG_TYPE_TEST_REQUEST, msgSeqNum.incrementAndGet());
         testRequest.append(TEST_REQ_ID).append(testReqID.incrementAndGet());
         setChecksumAndBodyLength(testRequest);
         if (enabled.get()) {
