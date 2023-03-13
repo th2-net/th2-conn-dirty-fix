@@ -114,7 +114,6 @@ import static com.exactpro.th2.constants.Constants.TEST_REQ_ID;
 import static com.exactpro.th2.constants.Constants.TEST_REQ_ID_TAG;
 import static com.exactpro.th2.constants.Constants.TEXT_TAG;
 import static com.exactpro.th2.constants.Constants.USERNAME;
-import static com.exactpro.th2.constants.Constants.DEFAULT_FORMATTER;
 import static com.exactpro.th2.netty.bytebuf.util.ByteBufUtil.indexOf;
 import static com.exactpro.th2.netty.bytebuf.util.ByteBufUtil.isEmpty;
 import static com.exactpro.th2.util.MessageUtil.findByte;
@@ -860,10 +859,6 @@ public class FixHandler implements AutoCloseable, IHandler {
 
     public String getTime() {
         DateTimeFormatter formatter = settings.getSendingDateTimeFormat();
-        if (formatter == null) {
-            formatter = DEFAULT_FORMATTER;
-        }
-
         LocalDateTime datetime = LocalDateTime.now();
         return formatter.format(datetime);
     }

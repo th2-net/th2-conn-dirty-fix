@@ -153,8 +153,9 @@ class FixHandlerTest {
 
     @NotNull
     private static FixHandler createFixHandler() {
+        FixHandlerSettings fixHandlerSettings = channel.createHandlerSettings();
         IHandlerContext context = Mockito.mock(IHandlerContext.class);
-        Mockito.when(context.getSettings()).thenReturn(fixHandler.settings);
+        Mockito.when(context.getSettings()).thenReturn(fixHandlerSettings);
         FixHandler originalFixHandler = new FixHandler(context);
 
         return originalFixHandler;
@@ -163,9 +164,7 @@ class FixHandlerTest {
     @Test
     void getTimeTestWithSendingDateTimeFormatBeingNull() {
         FixHandler originalFixHandler = createFixHandler();
-
         DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyyMMdd-HH:mm:ss.SSSSSSSSS");
-        originalFixHandler.settings.setSendingDateTimeFormat(null);
         String actual = originalFixHandler.getTime();
         LocalDateTime time = LocalDateTime.parse(actual, formatter);
         String expected = formatter.format(time);
@@ -382,7 +381,16 @@ class Channel implements IChannel {
     private final List<ByteBuf> queue = new ArrayList<>();
 
     Channel() {
-        this.fixHandlerSettings = new FixHandlerSettings();
+        this.fixHandlerSettings = createHandlerSettings();
+        IHandlerContext context = Mockito.mock(IHandlerContext.class);
+        Mockito.when(context.getSettings()).thenReturn(fixHandlerSettings);
+
+        this.fixHandler = new MyFixHandler(context);
+    }
+
+    @NotNull
+    public FixHandlerSettings createHandlerSettings() {
+        final FixHandlerSettings fixHandlerSettings = new FixHandlerSettings();
         fixHandlerSettings.setHost("127.0.0.1");
         fixHandlerSettings.setPort(8080);
         fixHandlerSettings.setBeginString("FIXT.1.1");
@@ -399,10 +407,7 @@ class Channel implements IChannel {
         fixHandlerSettings.setResetOnLogon(false);
         fixHandlerSettings.setDefaultApplVerID("9");
         fixHandlerSettings.setSenderSubID("trader");
-        IHandlerContext context = Mockito.mock(IHandlerContext.class);
-        Mockito.when(context.getSettings()).thenReturn(fixHandlerSettings);
-
-        this.fixHandler = new MyFixHandler(context);
+        return fixHandlerSettings;
     }
 
     @Override

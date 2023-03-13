@@ -67,7 +67,7 @@ public class FixHandlerSettings implements IHandlerSettings {
     private int disconnectRequestDelay = 5;
 
     @JsonDeserialize(using = DateTimeFormatterDeserializer.class)
-    private DateTimeFormatter sendingDateTimeFormat;
+    private DateTimeFormatter sendingDateTimeFormat = DateTimeFormatter.ofPattern("yyyyMMdd-HH:mm:ss.SSSSSSSSS");
 
     public DateTimeFormatter getSendingDateTimeFormat() {
         return this.sendingDateTimeFormat;
