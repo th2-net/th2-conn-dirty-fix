@@ -188,7 +188,9 @@ public class FixHandler implements AutoCloseable, IHandler {
 
             long time = now.until(scheduleTime, ChronoUnit.SECONDS);
             executorService.scheduleAtFixedRate(() -> {
-                this.close();
+                sendLogout();
+                waitLogoutResponse();
+                channel.close();
                 sessionActive.set(false);
             }, time, DAY_SECONDS, TimeUnit.SECONDS);
         }
@@ -231,6 +233,7 @@ public class FixHandler implements AutoCloseable, IHandler {
         if (!sessionActive.get()) {
             throw new IllegalStateException("Session is not active. It is not possible to send messages.");
         }
+
         if (!channel.isOpen()) {
             try {
                 channel.open().get();
@@ -356,8 +359,8 @@ public class FixHandler implements AutoCloseable, IHandler {
                         int nextExpectedSeqNumber = Integer.parseInt(requireNonNull(nextExpectedSeqField.getValue()));
                         int seqNum = msgSeqNum.incrementAndGet() + 1;
                         if(nextExpectedSeqNumber < seqNum) {
-                            recovery(nextExpectedSeqNumber, seqNum);}
-                        else if (nextExpectedSeqNumber > seqNum) {
+                            recovery(nextExpectedSeqNumber, seqNum);
+                        } else if (nextExpectedSeqNumber > seqNum) {
                             context.send(
                                     Event.start()
                                             .name(String.format("Corrected next client seq num from %s to %s", seqNum, nextExpectedSeqNumber))
@@ -447,7 +450,7 @@ public class FixHandler implements AutoCloseable, IHandler {
         msgSeqNum.set(0);
         serverMsgSeqNum.set(0);
         sessionActive.set(true);
-        sendLogon();
+        channel.open();
     }
 
     public void sendResendRequest(int beginSeqNo, int endSeqNo) { //do private
@@ -497,7 +500,7 @@ public class FixHandler implements AutoCloseable, IHandler {
 
     private void recovery(int beginSeqNo, int endSeqNo) {
         if (endSeqNo == 0) {
-            endSeqNo = msgSeqNum.get();
+            endSeqNo = msgSeqNum.get() + 1;
         }
         LOGGER.info("Returning messages from {} to {}", beginSeqNo, endSeqNo);
 
@@ -794,6 +797,10 @@ public class FixHandler implements AutoCloseable, IHandler {
     @Override
     public void close() {
         sendLogout();
+        waitLogoutResponse();
+    }
+
+    private void waitLogoutResponse() {
         long start = System.currentTimeMillis();
         while(System.currentTimeMillis() - start < settings.getDisconnectRequestDelay() && enabled.get()) {
             if (LOGGER.isWarnEnabled()) LOGGER.warn("Waiting session logout: {}", channel.getSessionAlias());
@@ -863,9 +870,9 @@ public class FixHandler implements AutoCloseable, IHandler {
     }
 
     public String getTime() {
-        String FIX_DATE_TIME_FORMAT_MS = "yyyyMMdd-HH:mm:ss.SSSSSSSSS";
+        DateTimeFormatter formatter = settings.getSendingDateTimeFormat();
         LocalDateTime datetime = LocalDateTime.now();
-        return DateTimeFormatter.ofPattern(FIX_DATE_TIME_FORMAT_MS).format(datetime);
+        return formatter.format(datetime);
     }
 
     public AtomicBoolean getEnabled() {
