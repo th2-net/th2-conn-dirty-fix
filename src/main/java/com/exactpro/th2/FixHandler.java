@@ -454,8 +454,8 @@ public class FixHandler implements AutoCloseable, IHandler {
         resendRequest.append(BEGIN_SEQ_NO).append(beginSeqNo).append(SOH);
         resendRequest.append(END_SEQ_NO).append(endSeqNo).append(SOH);
         setChecksumAndBodyLength(resendRequest);
-        resetHeartbeatTask();
         channel.send(Unpooled.wrappedBuffer(resendRequest.toString().getBytes(StandardCharsets.UTF_8)), Collections.emptyMap(), null, IChannel.SendMode.MANGLE);
+        resetHeartbeatTask();
     }
 
     void sendResendRequest(int beginSeqNo) { //do private
@@ -467,8 +467,8 @@ public class FixHandler implements AutoCloseable, IHandler {
         setChecksumAndBodyLength(resendRequest);
 
         if (enabled.get()) {
-            resetHeartbeatTask();
             channel.send(Unpooled.wrappedBuffer(resendRequest.toString().getBytes(StandardCharsets.UTF_8)), Collections.emptyMap(), null, IChannel.SendMode.MANGLE);
+            resetHeartbeatTask();
         } else {
             sendLogon();
         }
@@ -504,8 +504,8 @@ public class FixHandler implements AutoCloseable, IHandler {
         sequenceReset.append(NEW_SEQ_NO).append(endSeqNo);
         setChecksumAndBodyLength(sequenceReset);
 
-        resetHeartbeatTask();
         channel.send(Unpooled.wrappedBuffer(sequenceReset.toString().getBytes(StandardCharsets.UTF_8)), Collections.emptyMap(), null, SendMode.MANGLE);
+        resetHeartbeatTask();
     }
 
     private void sendSequenceReset() {
@@ -516,8 +516,8 @@ public class FixHandler implements AutoCloseable, IHandler {
         setChecksumAndBodyLength(sequenceReset);
 
         if (enabled.get()) {
-            resetHeartbeatTask();
             channel.send(Unpooled.wrappedBuffer(sequenceReset.toString().getBytes(StandardCharsets.UTF_8)), Collections.emptyMap(), null, IChannel.SendMode.MANGLE);
+            resetHeartbeatTask();
         } else {
             sendLogon();
         }
@@ -670,12 +670,6 @@ public class FixHandler implements AutoCloseable, IHandler {
     }
 
     public void sendHeartbeat() {
-        long secondsSinceLastSend = (System.currentTimeMillis() - lastSendTime) / 1000;
-
-        if (secondsSinceLastSend < settings.getHeartBtInt()) {
-            return;
-        }
-
         StringBuilder heartbeat = new StringBuilder();
         int seqNum = msgSeqNum.incrementAndGet();
 
@@ -684,8 +678,8 @@ public class FixHandler implements AutoCloseable, IHandler {
 
         if (enabled.get()) {
             LOGGER.info("Send Heartbeat to server - {}", heartbeat);
-            resetHeartbeatTask();
             channel.send(Unpooled.wrappedBuffer(heartbeat.toString().getBytes(StandardCharsets.UTF_8)), Collections.emptyMap(), null, IChannel.SendMode.MANGLE);
+            resetHeartbeatTask();
 
             lastSendTime = System.currentTimeMillis();
         } else {
@@ -700,10 +694,10 @@ public class FixHandler implements AutoCloseable, IHandler {
         testRequest.append(TEST_REQ_ID).append(testReqID.incrementAndGet());
         setChecksumAndBodyLength(testRequest);
         if (enabled.get()) {
-            resetTestRequestTask();
-            resetHeartbeatTask();
             channel.send(Unpooled.wrappedBuffer(testRequest.toString().getBytes(StandardCharsets.UTF_8)), Collections.emptyMap(), null, IChannel.SendMode.MANGLE);
             LOGGER.info("Send TestRequest to server - {}", testRequest);
+            resetTestRequestTask();
+            resetHeartbeatTask();
         } else {
             sendLogon();
         }
@@ -850,7 +844,6 @@ public class FixHandler implements AutoCloseable, IHandler {
     }
 
     public int getBodyLength(StringBuilder message) { //do private
-
         int start = message.indexOf(SOH, message.indexOf(BODY_LENGTH) + 1);
         int end = message.indexOf(CHECKSUM);
         return end - start;
@@ -875,20 +868,20 @@ public class FixHandler implements AutoCloseable, IHandler {
 
     private void resetHeartbeatTask() {
         heartbeatTimer.getAndSet(
-                executorService.schedule(
-                        this::sendHeartbeat,
-                        settings.getHeartBtInt(),
-                        TimeUnit.SECONDS
-                )
+            executorService.schedule(
+                this::sendHeartbeat,
+                settings.getHeartBtInt(),
+                TimeUnit.SECONDS
+            )
         ).cancel(false);
     }
 
     private void resetTestRequestTask() {
         testRequestTimer.getAndSet(
             executorService.schedule(
-                    this::sendTestRequest,
-                    settings.getHeartBtInt() * 3,
-                    TimeUnit.SECONDS
+                this::sendTestRequest,
+                settings.getHeartBtInt() * 3,
+                TimeUnit.SECONDS
             )
         ).cancel(false);
     }
