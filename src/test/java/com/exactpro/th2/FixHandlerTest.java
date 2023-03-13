@@ -56,7 +56,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 
 class FixHandlerTest {
 
-    private static final Channel channel = new Channel();
+    private static final Channel channel = new Channel(createHandlerSettings());
     private static ByteBuf buffer;
     private static ByteBuf oneMessageBuffer;
     private static ByteBuf brokenBuffer;
@@ -152,13 +152,33 @@ class FixHandlerTest {
     }
 
     @NotNull
+    public static FixHandlerSettings createHandlerSettings() {
+        final FixHandlerSettings fixHandlerSettings = new FixHandlerSettings();
+        fixHandlerSettings.setHost("127.0.0.1");
+        fixHandlerSettings.setPort(8080);
+        fixHandlerSettings.setBeginString("FIXT.1.1");
+        fixHandlerSettings.setHeartBtInt(30);
+        fixHandlerSettings.setSenderCompID("client");
+        fixHandlerSettings.setTargetCompID("server");
+        fixHandlerSettings.setEncryptMethod("0");
+        fixHandlerSettings.setUsername("username");
+        fixHandlerSettings.setPassword("pass");
+        fixHandlerSettings.setTestRequestDelay(10);
+        fixHandlerSettings.setReconnectDelay(5);
+        fixHandlerSettings.setDisconnectRequestDelay(5);
+        fixHandlerSettings.setResetSeqNumFlag(false);
+        fixHandlerSettings.setResetOnLogon(false);
+        fixHandlerSettings.setDefaultApplVerID("9");
+        fixHandlerSettings.setSenderSubID("trader");
+        return fixHandlerSettings;
+    }
+
+    @NotNull
     private static FixHandler createFixHandler() {
-        FixHandlerSettings fixHandlerSettings = channel.createHandlerSettings();
+        FixHandlerSettings fixHandlerSettings = createHandlerSettings();
         IHandlerContext context = Mockito.mock(IHandlerContext.class);
         Mockito.when(context.getSettings()).thenReturn(fixHandlerSettings);
-        FixHandler originalFixHandler = new FixHandler(context);
-
-        return originalFixHandler;
+        return new FixHandler(context);
     }
 
     @Test
@@ -380,34 +400,12 @@ class Channel implements IChannel {
     private final MyFixHandler fixHandler;
     private final List<ByteBuf> queue = new ArrayList<>();
 
-    Channel() {
-        this.fixHandlerSettings = createHandlerSettings();
+    Channel(FixHandlerSettings fixHandlerSettings) {
+        this.fixHandlerSettings = fixHandlerSettings;
         IHandlerContext context = Mockito.mock(IHandlerContext.class);
-        Mockito.when(context.getSettings()).thenReturn(fixHandlerSettings);
+        Mockito.when(context.getSettings()).thenReturn(this.fixHandlerSettings);
 
         this.fixHandler = new MyFixHandler(context);
-    }
-
-    @NotNull
-    public FixHandlerSettings createHandlerSettings() {
-        final FixHandlerSettings fixHandlerSettings = new FixHandlerSettings();
-        fixHandlerSettings.setHost("127.0.0.1");
-        fixHandlerSettings.setPort(8080);
-        fixHandlerSettings.setBeginString("FIXT.1.1");
-        fixHandlerSettings.setHeartBtInt(30);
-        fixHandlerSettings.setSenderCompID("client");
-        fixHandlerSettings.setTargetCompID("server");
-        fixHandlerSettings.setEncryptMethod("0");
-        fixHandlerSettings.setUsername("username");
-        fixHandlerSettings.setPassword("pass");
-        fixHandlerSettings.setTestRequestDelay(10);
-        fixHandlerSettings.setReconnectDelay(5);
-        fixHandlerSettings.setDisconnectRequestDelay(5);
-        fixHandlerSettings.setResetSeqNumFlag(false);
-        fixHandlerSettings.setResetOnLogon(false);
-        fixHandlerSettings.setDefaultApplVerID("9");
-        fixHandlerSettings.setSenderSubID("trader");
-        return fixHandlerSettings;
     }
 
     @Override
