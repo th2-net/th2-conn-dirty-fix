@@ -55,6 +55,7 @@ public class FixHandlerSettings implements IHandlerSettings {
     private Boolean useNextExpectedSeqNum = false;
     private Boolean saveAdminMessages = false;
     private Boolean loadSequencesFromCradle = false;
+    private Boolean loadMissedMessagesFromCradle = false;
 
     @JsonDeserialize(using = LocalTimeDeserializer.class)
     private LocalTime sessionStartTime;
@@ -231,6 +232,14 @@ public class FixHandlerSettings implements IHandlerSettings {
 
     public void setLoadSequencesFromCradle(Boolean loadSequencesFromCradle) {
         this.loadSequencesFromCradle = loadSequencesFromCradle;
+    }
+
+    public Boolean isLoadMissedMessagesFromCradle() {
+        return loadMissedMessagesFromCradle;
+    }
+
+    public void setLoadMissedMessagesFromCradle(Boolean loadMissedMessagesFromCradle) {
+        this.loadMissedMessagesFromCradle = loadMissedMessagesFromCradle;
     }
 
     public Boolean useNextExpectedSeqNum() {

@@ -22,13 +22,12 @@ import com.exactpro.th2.constants.Constants.MSG_SEQ_NUM_TAG
 import com.exactpro.th2.dataprovider.grpc.DataProviderService
 import com.exactpro.th2.dataprovider.grpc.MessageGroupResponse
 import com.exactpro.th2.dataprovider.grpc.MessageSearchRequest
-import com.exactpro.th2.dataprovider.grpc.MessageSearchResponse
 import com.exactpro.th2.dataprovider.grpc.MessageStream
 import com.exactpro.th2.dataprovider.grpc.TimeRelation
 import com.google.protobuf.Int32Value
 import com.google.protobuf.Timestamp
-import com.google.protobuf.util.Timestamps
 import com.google.protobuf.util.Timestamps.compare
+import io.netty.buffer.ByteBuf
 import io.netty.buffer.Unpooled
 import java.time.Instant
 import java.time.LocalTime
@@ -37,10 +36,9 @@ import java.time.ZoneId
 import java.time.ZoneOffset
 
 
-class SequenceLoader(
+class MessageLoader(
     private val dataProvider: DataProviderService,
-    private val sessionStartTime: LocalTime?,
-    private val sessionAlias: String,
+    private val sessionStartTime: LocalTime?
 ) {
     private val sessionStart = OffsetDateTime
         .now(ZoneOffset.UTC)
@@ -56,10 +54,39 @@ class SequenceLoader(
         .toInstant()
         .toTimestamp()
 
-    fun load(): SequenceHolder {
-        val serverSeq = searchSeq(createSearchRequest(Instant.now().toTimestamp(), Direction.FIRST))
-        val clientSeq = searchSeq(createSearchRequest(Instant.now().toTimestamp(), Direction.SECOND))
+    fun loadInitialSequences(sessionAlias: String): SequenceHolder {
+        val serverSeq = searchSeq(createSearchRequest(Instant.now().toTimestamp(), Direction.FIRST, sessionAlias))
+        val clientSeq = searchSeq(createSearchRequest(Instant.now().toTimestamp(), Direction.SECOND, sessionAlias))
         return SequenceHolder(clientSeq, serverSeq)
+    }
+
+    fun processClientMessages(processMessage: (ByteBuf) -> Boolean, sessionAlias: String) {
+        searchMessages(createSearchRequest(Instant.now().toTimestamp(), Direction.FIRST, sessionAlias), processMessage)
+    }
+
+    private fun searchMessages(
+        request: MessageSearchRequest,
+        processMessage: (ByteBuf) -> Boolean
+    ) {
+        var message: MessageGroupResponse? = null
+        for(response in dataProvider.searchMessages(request)) {
+            message = response.message
+            if (sessionStartTime != null && compare(sessionStartDateTime, message.timestamp) > 0) {
+                return
+            }
+            val buffer = Unpooled.wrappedBuffer(message.bodyRaw.toByteArray())
+            if(!processMessage(buffer)) return
+        }
+        if(message != null) {
+            searchMessages(
+                createSearchRequest(
+                    message.timestamp,
+                    message.messageId.direction,
+                    message.messageId.connectionId.sessionAlias
+                ),
+                processMessage
+            )
+        }
     }
 
     private fun searchSeq(request: MessageSearchRequest): Int {
@@ -74,11 +101,17 @@ class SequenceLoader(
         }
         return when (message) {
             null -> 0
-            else -> searchSeq(createSearchRequest(message.timestamp, message.messageId.direction))
+            else -> searchSeq(
+                createSearchRequest(
+                    message.timestamp,
+                    message.messageId.direction,
+                    message.messageId.connectionId.sessionAlias
+                )
+            )
         }
     }
 
-    private fun createSearchRequest(timestamp: Timestamp, direction: Direction) =
+    private fun createSearchRequest(timestamp: Timestamp, direction: Direction, sessionAlias: String) =
         MessageSearchRequest.newBuilder().apply {
             startTimestamp = timestamp
             endTimestamp = sessionStartYesterday

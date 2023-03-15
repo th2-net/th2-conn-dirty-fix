@@ -1,4 +1,4 @@
-# th2-conn-dirty-fix (0.1.1)
+# th2-conn-dirty-fix (0.2.0)
 
 This microservice allows sending and receiving messages via FIX protocol
 
@@ -41,6 +41,7 @@ This microservice allows sending and receiving messages via FIX protocol
 + *resetSeqNumFlag* - resetting sequence number in initial Logon message (when conn started)
 + *resetOnLogon* - resetting the sequence number in Logon in other cases (e.g. disconnect)
 + *loadSequencesFromCradle* - defines if sequences will be loaded from cradle to use them in logon message.
++ *loadMissedMessagesFromCradle* - defines how retransmission will be handled. If true, then requested through `ResendRequest` messages (or messages requested on Logon with `NextExpectedSeqNum`) will be loaded from cradle.
 + *sessionStartTime* - UTC time when session starts. (`nullable`)
 + *sessionEndTime* - UTC time when session ends. required if startSessionTime is filled.
 + *sendingDateTimeFormat* - `SendingTime` field format for outgoing messages. (`nullable`, `default format` in this case is `"yyyyMMdd-HH:mm:ss.SSSSSSSSS"`) 
@@ -324,8 +325,9 @@ spec:
 
 # Changelog
 
-## 0.1.1
-* When `MsgNum is to low` message is received, only client sequence
+## 0.2.0
+* When `MsgNum is to low` message is received, only client sequence is updated
+* Ability to recover messages from cradle.
 
 ## 0.1.0
 * correct handling of sequence reset with `endSeqNo = 0`

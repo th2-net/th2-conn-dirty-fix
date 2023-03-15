@@ -79,7 +79,7 @@ public class Constants {
     public static final String SENDER_SUB_ID = SOH + SENDER_SUB_ID_TAG + "=";
     public static final String RESET_SEQ_NUM = SOH + RESET_SEQ_NUM_TAG + "=";
     public static final String NEXT_EXPECTED_SEQ_NUM = SOH + NEXT_EXPECTED_SEQ_NUMBER_TAG + "=";
-    public static final String POSS_DUP = SOH + NEXT_EXPECTED_SEQ_NUMBER_TAG + "=";
+    public static final String POSS_DUP = SOH + POSS_DUP_TAG + "=";
 
     //message types
     public static final String MSG_TYPE_LOGON = "A";
