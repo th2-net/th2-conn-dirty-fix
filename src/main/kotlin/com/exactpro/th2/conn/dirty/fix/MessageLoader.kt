@@ -61,7 +61,7 @@ class MessageLoader(
     }
 
     fun processClientMessages(processMessage: (ByteBuf) -> Boolean, sessionAlias: String) {
-        searchMessages(createSearchRequest(Instant.now().toTimestamp(), Direction.FIRST, sessionAlias), processMessage)
+        searchMessages(createSearchRequest(Instant.now().toTimestamp(), Direction.SECOND, sessionAlias), processMessage)
     }
 
     private fun searchMessages(
