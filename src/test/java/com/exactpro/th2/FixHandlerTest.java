@@ -329,7 +329,7 @@ class FixHandlerTest {
         channel.clearQueue();
         fixHandler.onIncoming(channel, resendRequest);
         ByteBuf sequenceReset = channel.getQueue().get(0);
-        assertEquals("8=FIXT.1.1\u00019=75\u000135=4\u000134=1\u000149=client\u000156=server\u000150=trader\u000152=2014-12-22T10:15:30Z\u0001123=Y\u000136=5\u000110=115\u0001", new String(sequenceReset.array()));
+        assertEquals("8=FIXT.1.1\u00019=80\u000135=4\u000134=1\u000149=client\u000156=server\u000150=trader\u000152=2014-12-22T10:15:30Z\u000143=Y\u0001123=Y\u000136=5\u000110=109\u0001", new String(sequenceReset.array()));
         channel.clearQueue();
         fixHandler.sendResendRequest(2);
         ByteBuf resendRequestOutgoing = channel.getQueue().get(0);

@@ -563,6 +563,7 @@ public class FixHandler implements AutoCloseable, IHandler {
                     );
                 }
             } else {
+                LOGGER.info("Sending sequence reset from {} to {}", beginSeqNo, endSeqNo);
                 channel.send(
                         Unpooled.wrappedBuffer(
                                 createSequenceReset(beginSeqNo, endSeqNo)
