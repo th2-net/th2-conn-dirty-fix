@@ -2,6 +2,7 @@ plugins {
     id 'java'
     id 'org.jetbrains.kotlin.jvm' version '1.6.21'
     id 'com.palantir.docker' version '0.25.0'
+    id "org.owasp.dependencycheck" version "8.1.2"
 }
 
 apply plugin: 'application'
@@ -44,11 +45,11 @@ repositories {
 }
 
 dependencies {
-    api platform('com.exactpro.th2:bom:4.1.0')
+    api platform('com.exactpro.th2:bom:4.2.0')
 
-    implementation 'com.exactpro.th2:common:5.1.0-dev-version-5-4085018593-8adee33-SNAPSHOT'
+    implementation 'com.exactpro.th2:common:5.2.0-dev'
     implementation 'com.exactpro.th2:netty-bytebuf-utils:0.0.1'
-    implementation('com.exactpro.th2:conn-dirty-tcp-core:3.0.0-dev-version-3-4230391407-SNAPSHOT') {
+    implementation('com.exactpro.th2:conn-dirty-tcp-core:3.0.0-dev') {
         exclude group: 'org.slf4j', module: 'slf4j-log4j12'
         because 'Projects should use only slf4j-api, without coupling to a certain implementation'
     }
@@ -57,14 +58,13 @@ dependencies {
     implementation 'org.slf4j:slf4j-api'
     implementation 'io.github.microutils:kotlin-logging:2.1.23'
 
-    implementation 'io.netty:netty-all:4.1.86.Final'
+    implementation 'io.netty:netty-all'
     implementation 'org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.6.21'
     implementation 'com.google.auto.service:auto-service:1.0.1'
 
     implementation group: 'com.fasterxml.jackson.core', name: 'jackson-core', version: jackson_version
     implementation group: 'com.fasterxml.jackson.core', name: 'jackson-databind', version: jackson_version
     implementation group: 'com.fasterxml.jackson.module', name: 'jackson-module-kotlin', version: jackson_version
-    implementation group: 'com.fasterxml.jackson.dataformat', name: 'jackson-dataformat-yaml', version: jackson_version
 
     testImplementation 'org.mockito:mockito-all:1.10.19'
     testImplementation 'org.jetbrains.kotlin:kotlin-test-junit5:1.7.10'
@@ -105,4 +105,20 @@ compileTestKotlin {
     kotlinOptions {
         jvmTarget = '11'
     }
+}
+
+dependencyCheck {
+    formats=['SARIF', 'JSON', 'HTML']
+    failBuildOnCVSS=5
+    suppressionFile="suppressions.xml"
+
+    analyzers {
+        assemblyEnabled = false
+        nugetconfEnabled = false
+        nodeEnabled = false
+    }
+}
+
+dependencyLocking {
+    lockAllConfigurations()
 }

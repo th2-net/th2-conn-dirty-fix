@@ -1,4 +1,4 @@
-# th2-conn-dirty-fix (1.0.0)
+# th2-conn-dirty-fix (1.0.2)
 
 This microservice allows sending and receiving messages via FIX protocol
 
@@ -44,6 +44,7 @@ This microservice allows sending and receiving messages via FIX protocol
 + *loadSequencesFromCradle* - defines if sequences will be loaded from cradle to use them in logon message.
 + *sessionStartTime* - UTC time when session starts. (`nullable`)
 + *sessionEndTime* - UTC time when session ends. required if startSessionTime is filled.
++ *sendingDateTimeFormat* - `SendingTime` field format for outgoing messages. (`nullable`, `default format` in this case is `"yyyyMMdd-HH:mm:ss.SSSSSSSSS"`) 
 + *useNextExpectedSeqNum* - session management based on next expected sequence number. (`false` by default)
 + *saveAdminMessages* - defines if admin messages will be saved to internal outgoing buffer. (`false` by default)
 
@@ -325,13 +326,35 @@ spec:
 
 # Changelog
 
+## 1.0.2
+* dev releases
+* apply changes from version-0
+
 ## 1.0.1
 * Add bookId to lw data provider query
 
 ## 1.0.0
 
 * Bump `conn-dirty-tcp-core` to `3.0.0` for books and pages support
+## 0.1.1
+* correct sequence numbers increments.
+* update conn-dirty-tcp-core to `2.3.0`
 
+## 0.1.0
+* correct handling of sequence reset with `endSeqNo = 0`
+* Skip messages mangling on error in `demo-fix-mangler` with error event instead of throwing exception.
+* allow unconditional rule application
+
+## 0.0.10
+* disable reconnect when session is in not-active state.
+
+## 0.0.9
+* correct heartbeat and test request handling
+
+## 0.0.8
+
+* th2-common upgrade to `3.44.1`
+* th2-bom upgrade to `4.2.0`
 
 ## 0.0.7
 
