@@ -325,7 +325,8 @@ spec:
 # Changelog
 
 ## 0.1.1
-* When `MsgNum is to low` message is received, only client sequence
+* correct sequence numbers increments.
+* update conn-dirty-tcp-core to `2.3.0`
 
 ## 0.1.0
 * correct handling of sequence reset with `endSeqNo = 0`
