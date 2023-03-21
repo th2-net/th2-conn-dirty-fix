@@ -336,6 +336,9 @@ spec:
 ## 1.0.0
 
 * Bump `conn-dirty-tcp-core` to `3.0.0` for books and pages support
+## 0.1.1
+* correct sequence numbers increments.
+* update conn-dirty-tcp-core to `2.3.0`
 
 ## 0.1.0
 * correct handling of sequence reset with `endSeqNo = 0`
