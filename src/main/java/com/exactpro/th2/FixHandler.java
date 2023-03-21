@@ -151,7 +151,6 @@ public class FixHandler implements AutoCloseable, IHandler {
     private Future<?> reconnectRequestTimer = CompletableFuture.completedFuture(null);
     private volatile IChannel channel;
     protected FixHandlerSettings settings;
-    private long lastSendTime = System.currentTimeMillis();
 
     public FixHandler(IHandlerContext context) {
         this.context = context;
@@ -397,7 +396,6 @@ public class FixHandler implements AutoCloseable, IHandler {
                                 isSequenceChanged = true;
                             }
                         }
-                        serverMsgSeqNum.set(Integer.parseInt(msgSeqNumValue.getValue()) - 1);
                     }
                 }
                 if(!enabled.get() && !isSequenceChanged) {
@@ -449,18 +447,16 @@ public class FixHandler implements AutoCloseable, IHandler {
     }
 
     public void sendResendRequest(int beginSeqNo, int endSeqNo) { //do private
-        lastSendTime = System.currentTimeMillis();
         StringBuilder resendRequest = new StringBuilder();
         setHeader(resendRequest, MSG_TYPE_RESEND_REQUEST, msgSeqNum.incrementAndGet());
         resendRequest.append(BEGIN_SEQ_NO).append(beginSeqNo).append(SOH);
         resendRequest.append(END_SEQ_NO).append(endSeqNo).append(SOH);
         setChecksumAndBodyLength(resendRequest);
-        resetHeartbeatTask();
         channel.send(Unpooled.wrappedBuffer(resendRequest.toString().getBytes(StandardCharsets.UTF_8)), Collections.emptyMap(), null, IChannel.SendMode.MANGLE);
+        resetHeartbeatTask();
     }
 
     void sendResendRequest(int beginSeqNo) { //do private
-        lastSendTime = System.currentTimeMillis();
         StringBuilder resendRequest = new StringBuilder();
         setHeader(resendRequest, MSG_TYPE_RESEND_REQUEST, msgSeqNum.incrementAndGet());
         resendRequest.append(BEGIN_SEQ_NO).append(beginSeqNo);
@@ -468,8 +464,8 @@ public class FixHandler implements AutoCloseable, IHandler {
         setChecksumAndBodyLength(resendRequest);
 
         if (enabled.get()) {
-            resetHeartbeatTask();
             channel.send(Unpooled.wrappedBuffer(resendRequest.toString().getBytes(StandardCharsets.UTF_8)), Collections.emptyMap(), null, IChannel.SendMode.MANGLE);
+            resetHeartbeatTask();
         } else {
             sendLogon();
         }
@@ -505,20 +501,19 @@ public class FixHandler implements AutoCloseable, IHandler {
         sequenceReset.append(NEW_SEQ_NO).append(endSeqNo);
         setChecksumAndBodyLength(sequenceReset);
 
-        resetHeartbeatTask();
         channel.send(Unpooled.wrappedBuffer(sequenceReset.toString().getBytes(StandardCharsets.UTF_8)), Collections.emptyMap(), null, SendMode.MANGLE);
+        resetHeartbeatTask();
     }
 
     private void sendSequenceReset() {
-        lastSendTime = System.currentTimeMillis();
         StringBuilder sequenceReset = new StringBuilder();
         setHeader(sequenceReset, MSG_TYPE_SEQUENCE_RESET, msgSeqNum.incrementAndGet());
         sequenceReset.append(NEW_SEQ_NO).append(msgSeqNum.get() + 1);
         setChecksumAndBodyLength(sequenceReset);
 
         if (enabled.get()) {
-            resetHeartbeatTask();
             channel.send(Unpooled.wrappedBuffer(sequenceReset.toString().getBytes(StandardCharsets.UTF_8)), Collections.emptyMap(), null, IChannel.SendMode.MANGLE);
+            resetHeartbeatTask();
         } else {
             sendLogon();
         }
@@ -551,14 +546,11 @@ public class FixHandler implements AutoCloseable, IHandler {
 
     @Override
     public void onOutgoing(@NotNull IChannel channel, @NotNull ByteBuf message, @NotNull Map<String, String> metadata) {
-        lastSendTime = System.currentTimeMillis();
         onOutgoingUpdateTag(message, metadata);
 
         if (LOGGER.isDebugEnabled()) {
             LOGGER.debug("Outgoing message: {}", message.toString(US_ASCII));
         }
-
-        resetHeartbeatTask();
     }
 
     public void onOutgoingUpdateTag(@NotNull ByteBuf message, @NotNull Map<String, String> metadata) {
@@ -671,12 +663,6 @@ public class FixHandler implements AutoCloseable, IHandler {
     }
 
     public void sendHeartbeat() {
-        long secondsSinceLastSend = (System.currentTimeMillis() - lastSendTime) / 1000;
-
-        if (secondsSinceLastSend < settings.getHeartBtInt()) {
-            return;
-        }
-
         StringBuilder heartbeat = new StringBuilder();
         int seqNum = msgSeqNum.incrementAndGet();
 
@@ -685,26 +671,24 @@ public class FixHandler implements AutoCloseable, IHandler {
 
         if (enabled.get()) {
             LOGGER.info("Send Heartbeat to server - {}", heartbeat);
-            resetHeartbeatTask();
             channel.send(Unpooled.wrappedBuffer(heartbeat.toString().getBytes(StandardCharsets.UTF_8)), Collections.emptyMap(), null, IChannel.SendMode.MANGLE);
+            resetHeartbeatTask();
 
-            lastSendTime = System.currentTimeMillis();
         } else {
             sendLogon();
         }
     }
 
     public void sendTestRequest() { //do private
-        lastSendTime = System.currentTimeMillis();
         StringBuilder testRequest = new StringBuilder();
-        setHeader(testRequest, MSG_TYPE_TEST_REQUEST, msgSeqNum.get());
+        setHeader(testRequest, MSG_TYPE_TEST_REQUEST, msgSeqNum.incrementAndGet());
         testRequest.append(TEST_REQ_ID).append(testReqID.incrementAndGet());
         setChecksumAndBodyLength(testRequest);
         if (enabled.get()) {
-            resetTestRequestTask();
-            resetHeartbeatTask();
             channel.send(Unpooled.wrappedBuffer(testRequest.toString().getBytes(StandardCharsets.UTF_8)), Collections.emptyMap(), null, IChannel.SendMode.MANGLE);
             LOGGER.info("Send TestRequest to server - {}", testRequest);
+            resetTestRequestTask();
+            resetHeartbeatTask();
         } else {
             sendLogon();
         }
@@ -716,7 +700,6 @@ public class FixHandler implements AutoCloseable, IHandler {
             LOGGER.info("Logon is not sent to server because session is not active.");
             return;
         }
-        lastSendTime = System.currentTimeMillis();
         StringBuilder logon = new StringBuilder();
         Boolean reset;
         if (!connStarted.get()) reset = settings.getResetSeqNumFlag();
@@ -851,7 +834,6 @@ public class FixHandler implements AutoCloseable, IHandler {
     }
 
     public int getBodyLength(StringBuilder message) { //do private
-
         int start = message.indexOf(SOH, message.indexOf(BODY_LENGTH) + 1);
         int end = message.indexOf(CHECKSUM);
         return end - start;
@@ -876,20 +858,20 @@ public class FixHandler implements AutoCloseable, IHandler {
 
     private void resetHeartbeatTask() {
         heartbeatTimer.getAndSet(
-                executorService.schedule(
-                        this::sendHeartbeat,
-                        settings.getHeartBtInt(),
-                        TimeUnit.SECONDS
-                )
+            executorService.schedule(
+                this::sendHeartbeat,
+                settings.getHeartBtInt(),
+                TimeUnit.SECONDS
+            )
         ).cancel(false);
     }
 
     private void resetTestRequestTask() {
         testRequestTimer.getAndSet(
             executorService.schedule(
-                    this::sendTestRequest,
-                    settings.getHeartBtInt(),
-                    TimeUnit.SECONDS
+                this::sendTestRequest,
+                settings.getHeartBtInt() * 3,
+                TimeUnit.SECONDS
             )
         ).cancel(false);
     }
