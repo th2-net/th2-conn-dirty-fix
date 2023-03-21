@@ -151,7 +151,6 @@ public class FixHandler implements AutoCloseable, IHandler {
     private Future<?> reconnectRequestTimer = CompletableFuture.completedFuture(null);
     private volatile IChannel channel;
     protected FixHandlerSettings settings;
-    private long lastSendTime = System.currentTimeMillis();
 
     public FixHandler(IHandlerContext context) {
         this.context = context;
@@ -448,7 +447,6 @@ public class FixHandler implements AutoCloseable, IHandler {
     }
 
     public void sendResendRequest(int beginSeqNo, int endSeqNo) { //do private
-        lastSendTime = System.currentTimeMillis();
         StringBuilder resendRequest = new StringBuilder();
         setHeader(resendRequest, MSG_TYPE_RESEND_REQUEST, msgSeqNum.incrementAndGet());
         resendRequest.append(BEGIN_SEQ_NO).append(beginSeqNo).append(SOH);
@@ -459,7 +457,6 @@ public class FixHandler implements AutoCloseable, IHandler {
     }
 
     void sendResendRequest(int beginSeqNo) { //do private
-        lastSendTime = System.currentTimeMillis();
         StringBuilder resendRequest = new StringBuilder();
         setHeader(resendRequest, MSG_TYPE_RESEND_REQUEST, msgSeqNum.incrementAndGet());
         resendRequest.append(BEGIN_SEQ_NO).append(beginSeqNo);
@@ -509,7 +506,6 @@ public class FixHandler implements AutoCloseable, IHandler {
     }
 
     private void sendSequenceReset() {
-        lastSendTime = System.currentTimeMillis();
         StringBuilder sequenceReset = new StringBuilder();
         setHeader(sequenceReset, MSG_TYPE_SEQUENCE_RESET, msgSeqNum.incrementAndGet());
         sequenceReset.append(NEW_SEQ_NO).append(msgSeqNum.get() + 1);
@@ -550,14 +546,11 @@ public class FixHandler implements AutoCloseable, IHandler {
 
     @Override
     public void onOutgoing(@NotNull IChannel channel, @NotNull ByteBuf message, @NotNull Map<String, String> metadata) {
-        lastSendTime = System.currentTimeMillis();
         onOutgoingUpdateTag(message, metadata);
 
         if (LOGGER.isDebugEnabled()) {
             LOGGER.debug("Outgoing message: {}", message.toString(US_ASCII));
         }
-
-        resetHeartbeatTask();
     }
 
     public void onOutgoingUpdateTag(@NotNull ByteBuf message, @NotNull Map<String, String> metadata) {
@@ -681,14 +674,12 @@ public class FixHandler implements AutoCloseable, IHandler {
             channel.send(Unpooled.wrappedBuffer(heartbeat.toString().getBytes(StandardCharsets.UTF_8)), Collections.emptyMap(), null, IChannel.SendMode.MANGLE);
             resetHeartbeatTask();
 
-            lastSendTime = System.currentTimeMillis();
         } else {
             sendLogon();
         }
     }
 
     public void sendTestRequest() { //do private
-        lastSendTime = System.currentTimeMillis();
         StringBuilder testRequest = new StringBuilder();
         setHeader(testRequest, MSG_TYPE_TEST_REQUEST, msgSeqNum.incrementAndGet());
         testRequest.append(TEST_REQ_ID).append(testReqID.incrementAndGet());
@@ -709,7 +700,6 @@ public class FixHandler implements AutoCloseable, IHandler {
             LOGGER.info("Logon is not sent to server because session is not active.");
             return;
         }
-        lastSendTime = System.currentTimeMillis();
         StringBuilder logon = new StringBuilder();
         Boolean reset;
         if (!connStarted.get()) reset = settings.getResetSeqNumFlag();
