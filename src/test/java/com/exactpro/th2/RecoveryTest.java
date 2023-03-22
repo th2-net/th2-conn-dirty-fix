@@ -23,6 +23,7 @@ import com.google.protobuf.ByteString;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -203,6 +204,37 @@ public class RecoveryTest {
         assertEquals(Integer.parseInt(findField(seqReset2, MSG_SEQ_NUM_TAG).getValue()), 5);
         assertEquals(Integer.parseInt(findField(seqReset2, NEW_SEQ_NO_TAG).getValue()), 23);
 
+    }
+
+    @Test
+    void allMessagesMissed() {
+        FixHandlerSettings settings = createHandlerSettings();
+        settings.setLoadMissedMessagesFromCradle(true);
+        DataProviderService dataProviderService = Mockito.mock(DataProviderService.class);
+        Mockito.when(dataProviderService.searchMessages(Mockito.any())).thenReturn(
+            new ArrayList().iterator()
+        );
+        channel = new Channel(settings, dataProviderService);
+        fixHandler = channel.getFixHandler();
+        fixHandler.onOpen(channel);
+        fixHandler.onIncoming(channel, logonResponse);
+        // handler sequence after loop is 22
+        for(int i = 0; i <= 20; i++) {
+            fixHandler.onOutgoing(
+                channel,
+                Unpooled.buffer().writeBytes(messageWithoutSeqNum().getBytes(StandardCharsets.UTF_8)),
+                new HashMap<>()
+            );
+        }
+        // requesting resend from 1 to 5
+        ByteBuf resendRequest = Unpooled.wrappedBuffer("8=FIXT.1.1\u00019=73\u000135=2\u000134=2\u000149=client\u000156=server\u000150=trader\u000152=2014-12-22T10:15:30Z\u00017=1\u000116=5\u000110=226\u0001".getBytes(StandardCharsets.UTF_8));
+        fixHandler.onIncoming(channel, resendRequest);
+
+        // sequence reset for meesages from 1 to 3 ( 1, 2 - missing, 3 - admin )
+        ByteBuf seqReset = channel.getQueue().get(1);
+        assertEquals(findField(seqReset, MSG_TYPE_TAG).getValue(), MSG_TYPE_SEQUENCE_RESET);
+        assertEquals(Integer.parseInt(findField(seqReset, MSG_SEQ_NUM_TAG).getValue()), 1);
+        assertEquals(Integer.parseInt(findField(seqReset, NEW_SEQ_NO_TAG).getValue()), 23);
     }
 
     private MessageSearchResponse messageSearchResponse(Integer sequence) {

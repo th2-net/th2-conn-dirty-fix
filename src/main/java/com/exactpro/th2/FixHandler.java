@@ -553,7 +553,7 @@ public class FixHandler implements AutoCloseable, IHandler {
                 messageLoader.processClientMessages(processMessage, channel.getSessionAlias());
 
                 if(lastProcessedSequence.get() < endSeq) {
-                    String seqReset = createSequenceReset(lastProcessedSequence.get() + 1, msgSeqNum.get() + 1).toString();
+                    String seqReset = createSequenceReset(Math.max(lastProcessedSequence.get() + 1, beginSeqNo), msgSeqNum.get() + 1).toString();
                     channel.send(
                         Unpooled.wrappedBuffer(seqReset.getBytes(StandardCharsets.UTF_8)),
                         Collections.emptyMap(), null, SendMode.MANGLE
