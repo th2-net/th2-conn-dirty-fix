@@ -532,10 +532,6 @@ public class FixHandler implements AutoCloseable, IHandler {
 
                     if(sequence - 1 != lastProcessedSequence.get() ) {
                         int newSeqNo = sequence;
-                        if(sequence == endSeq && ADMIN_MESSAGES.contains(msgType)) {
-                            newSeqNo = msgSeqNum.get() + 1;
-                            lastProcessedSequence.set(endSeq);
-                        }
                         StringBuilder sequenceReset =
                                 createSequenceReset(Math.max(beginSeqNo, lastProcessedSequence.get()), newSeqNo);
                         channel.send(Unpooled.wrappedBuffer(sequenceReset.toString().getBytes(StandardCharsets.UTF_8)), Collections.emptyMap(), null, SendMode.MANGLE);
