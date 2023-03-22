@@ -74,8 +74,11 @@ class MessageLoader(
             if (sessionStartTime != null && compare(sessionStartDateTime, message.timestamp) > 0) {
                 return
             }
-            val buffer = Unpooled.wrappedBuffer(message.bodyRaw.toByteArray())
-            if(!processMessage(buffer)) return
+            val buffer = Unpooled.buffer()
+            buffer.writeBytes(message.bodyRaw.toByteArray())
+            if(!processMessage(buffer)) {
+                return
+            }
         }
         if(message != null) {
             searchMessages(

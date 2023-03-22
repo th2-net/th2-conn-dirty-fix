@@ -528,24 +528,25 @@ public class FixHandler implements AutoCloseable, IHandler {
                     if(sequence < beginSeqNo) return true;
                     if(sequence > endSeq) return false;
 
+                    if(ADMIN_MESSAGES.contains(msgType)) return true;
+
                     if(sequence - 1 != lastProcessedSequence.get() ) {
+                        int newSeqNo = sequence;
+                        if(sequence == endSeq && ADMIN_MESSAGES.contains(msgType)) {
+                            newSeqNo = msgSeqNum.get() + 1;
+                            lastProcessedSequence.set(endSeq);
+                        }
                         StringBuilder sequenceReset =
-                                createSequenceReset(Math.max(beginSeqNo, lastProcessedSequence.get()), sequence - 1);
+                                createSequenceReset(Math.max(beginSeqNo, lastProcessedSequence.get()), newSeqNo);
                         channel.send(Unpooled.wrappedBuffer(sequenceReset.toString().getBytes(StandardCharsets.UTF_8)), Collections.emptyMap(), null, SendMode.MANGLE);
                         resetHeartbeatTask();
                     }
 
-                    if(ADMIN_MESSAGES.contains(msgType)) {
-                        StringBuilder sequenceReset =
-                                createSequenceReset(sequence, sequence + 1);
-                        channel.send(Unpooled.wrappedBuffer(sequenceReset.toString().getBytes(StandardCharsets.UTF_8)), Collections.emptyMap(), null, SendMode.DIRECT);
-                    } else {
-                        setTime(buf);
-                        setPossDup(buf);
-                        updateChecksum(buf);
-                        updateLength(buf);
-                        channel.send(buf, Collections.emptyMap(), null, SendMode.DIRECT);
-                    }
+                    setTime(buf);
+                    setPossDup(buf);
+                    updateChecksum(buf);
+                    updateLength(buf);
+                    channel.send(buf, Collections.emptyMap(), null, SendMode.MANGLE);
 
                     resetHeartbeatTask();
 
@@ -556,23 +557,21 @@ public class FixHandler implements AutoCloseable, IHandler {
                 messageLoader.processClientMessages(processMessage, channel.getSessionAlias());
 
                 if(lastProcessedSequence.get() < endSeq) {
-                    String seqReset = createSequenceReset(lastProcessedSequence.get(), endSeqNo + 1).toString();
+                    String seqReset = createSequenceReset(lastProcessedSequence.get() + 1, msgSeqNum.get() + 1).toString();
                     channel.send(
-                            Unpooled.wrappedBuffer(seqReset.getBytes(StandardCharsets.UTF_8)),
-                            Collections.emptyMap(), null, SendMode.DIRECT
+                        Unpooled.wrappedBuffer(seqReset.getBytes(StandardCharsets.UTF_8)),
+                        Collections.emptyMap(), null, SendMode.MANGLE
                     );
                 }
             } else {
-                LOGGER.info("Sending sequence reset from {} to {}", beginSeqNo, endSeqNo);
-                channel.send(
-                        Unpooled.wrappedBuffer(
-                                createSequenceReset(beginSeqNo, endSeqNo)
-                                        .toString()
-                                        .getBytes(StandardCharsets.UTF_8)
-                        ),
-                        Collections.emptyMap(), null, SendMode.DIRECT
-                );
+                LOGGER.info("Sending sequence reset from {} to {}", beginSeqNo, msgSeqNum.get() + 1);
+                sendSequenceReset();
             }
+            resetHeartbeatTask();
+
+        } catch (Exception e) {
+            LOGGER.error("Error while loading messages for recovery", e);
+            sendSequenceReset();
             resetHeartbeatTask();
         } finally {
             recoveryLock.unlock();
@@ -583,6 +582,8 @@ public class FixHandler implements AutoCloseable, IHandler {
         StringBuilder sequenceReset = new StringBuilder();
         setHeader(sequenceReset, MSG_TYPE_SEQUENCE_RESET, msgSeqNum.incrementAndGet());
         sequenceReset.append(NEW_SEQ_NO).append(msgSeqNum.get() + 1);
+        sequenceReset.append(GAP_FILL_FLAG).append("Y");
+        sequenceReset.append(POSS_DUP).append(IS_POSS_DUP);
         setChecksumAndBodyLength(sequenceReset);
 
         if (enabled.get()) {
