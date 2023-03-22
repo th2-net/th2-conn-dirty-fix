@@ -504,6 +504,7 @@ public class FixHandler implements AutoCloseable, IHandler {
     }
 
     private void recovery(int beginSeqNo, int endSeqNo) {
+        AtomicInteger lastProcessedSequence = new AtomicInteger(beginSeqNo - 1);
         try {
             recoveryLock.lock();
 
@@ -514,7 +515,6 @@ public class FixHandler implements AutoCloseable, IHandler {
             int endSeq = endSeqNo;
             LOGGER.info("Loading messages from {} to {}", beginSeqNo, endSeqNo);
             if(settings.isLoadMissedMessagesFromCradle()) {
-                AtomicInteger lastProcessedSequence = new AtomicInteger(beginSeqNo - 1);
                 Function1<ByteBuf, Boolean> processMessage = (buf) -> {
                     FixField seqNum = findField(buf, MSG_SEQ_NUM_TAG);
                     FixField msgTypeField = findField(buf, MSG_TYPE_TAG);
@@ -565,14 +565,23 @@ public class FixHandler implements AutoCloseable, IHandler {
                 }
             } else {
                 LOGGER.info("Sending sequence reset from {} to {}", beginSeqNo, msgSeqNum.get() + 1);
-                sendSequenceReset();
+                String seqReset =
+                    createSequenceReset(beginSeqNo, msgSeqNum.get() + 1).toString();
+                channel.send(
+                    Unpooled.wrappedBuffer(seqReset.getBytes(StandardCharsets.UTF_8)),
+                    Collections.emptyMap(), null, SendMode.MANGLE
+                );
             }
             resetHeartbeatTask();
 
         } catch (Exception e) {
             LOGGER.error("Error while loading messages for recovery", e);
-            sendSequenceReset();
-            resetHeartbeatTask();
+            String seqReset =
+                createSequenceReset(Math.max(beginSeqNo, lastProcessedSequence.get()), msgSeqNum.get() + 1).toString();
+            channel.send(
+                Unpooled.buffer().writeBytes(seqReset.getBytes(StandardCharsets.UTF_8)),
+                Collections.emptyMap(), null, SendMode.MANGLE
+            );
         } finally {
             recoveryLock.unlock();
         }
@@ -582,8 +591,6 @@ public class FixHandler implements AutoCloseable, IHandler {
         StringBuilder sequenceReset = new StringBuilder();
         setHeader(sequenceReset, MSG_TYPE_SEQUENCE_RESET, msgSeqNum.incrementAndGet());
         sequenceReset.append(NEW_SEQ_NO).append(msgSeqNum.get() + 1);
-        sequenceReset.append(GAP_FILL_FLAG).append("Y");
-        sequenceReset.append(POSS_DUP).append(IS_POSS_DUP);
         setChecksumAndBodyLength(sequenceReset);
 
         if (enabled.get()) {
@@ -626,8 +633,6 @@ public class FixHandler implements AutoCloseable, IHandler {
         if (LOGGER.isDebugEnabled()) {
             LOGGER.debug("Outgoing message: {}", message.toString(US_ASCII));
         }
-
-        resetHeartbeatTask();
     }
 
     public void onOutgoingUpdateTag(@NotNull ByteBuf message, @NotNull Map<String, String> metadata) {

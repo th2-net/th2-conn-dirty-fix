@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 # th2-conn-dirty-fix (0.2.0)
+=======
+# th2-conn-dirty-fix (0.1.1)
+>>>>>>> dev-version-0
 
 This microservice allows sending and receiving messages via FIX protocol
 
@@ -326,8 +330,11 @@ spec:
 # Changelog
 
 ## 0.2.0
-* When `MsgNum is to low` message is received, only client sequence is updated
 * Ability to recover messages from cradle.
+
+## 0.1.1
+* correct sequence numbers increments.
+* update conn-dirty-tcp-core to `2.3.0`
 
 ## 0.1.0
 * correct handling of sequence reset with `endSeqNo = 0`
