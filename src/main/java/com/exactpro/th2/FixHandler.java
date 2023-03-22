@@ -573,7 +573,7 @@ public class FixHandler implements AutoCloseable, IHandler {
         } catch (Exception e) {
             LOGGER.error("Error while loading messages for recovery", e);
             String seqReset =
-                createSequenceReset(Math.max(beginSeqNo, lastProcessedSequence.get()), msgSeqNum.get() + 1).toString();
+                createSequenceReset(Math.max(beginSeqNo, lastProcessedSequence.get() + 1), msgSeqNum.get() + 1).toString();
             channel.send(
                 Unpooled.buffer().writeBytes(seqReset.getBytes(StandardCharsets.UTF_8)),
                 Collections.emptyMap(), null, SendMode.MANGLE
