@@ -550,7 +550,11 @@ public class FixHandler implements AutoCloseable, IHandler {
                     return true;
                 };
 
-                messageLoader.processClientMessages(processMessage, channel.getSessionAlias());
+                messageLoader.processClientMessages(
+                    channel.getSessionAlias(),
+                    new MessageLoader.SearchRange(beginSeqNo, endSeqNo),
+                    processMessage
+                );
 
                 if(lastProcessedSequence.get() < endSeq) {
                     String seqReset = createSequenceReset(Math.max(lastProcessedSequence.get() + 1, beginSeqNo), msgSeqNum.get() + 1).toString();

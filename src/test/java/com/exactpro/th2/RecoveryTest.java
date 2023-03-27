@@ -16,8 +16,10 @@
 
 package com.exactpro.th2;
 
+import com.exactpro.th2.conn.dirty.fix.MessageSearcher;
 import com.exactpro.th2.dataprovider.grpc.DataProviderService;
 import com.exactpro.th2.dataprovider.grpc.MessageGroupResponse;
+import com.exactpro.th2.dataprovider.grpc.MessageSearchRequest;
 import com.exactpro.th2.dataprovider.grpc.MessageSearchResponse;
 import com.google.protobuf.ByteString;
 import io.netty.buffer.ByteBuf;
@@ -49,13 +51,16 @@ public class RecoveryTest {
         FixHandlerSettings settings = createHandlerSettings();
         settings.setLoadMissedMessagesFromCradle(true);
         DataProviderService dataProviderService = Mockito.mock(DataProviderService.class);
-        Mockito.when(dataProviderService.searchMessages(Mockito.any())).thenReturn(
+        MessageSearcher ms = new MessageSearcher(
             List.of(
                 messageSearchResponse(2),
                 messageSearchResponse(3),
                 messageSearchResponse(4),
                 messageSearchResponse(5)
-            ).iterator()
+            )
+        );
+        Mockito.when(dataProviderService.searchMessages(Mockito.any())).thenAnswer(
+            x -> ms.searchMessages(x.getArgumentAt(0, MessageSearchRequest.class))
         );
         channel = new Channel(settings, dataProviderService);
         fixHandler = channel.getFixHandler();
@@ -79,11 +84,14 @@ public class RecoveryTest {
         FixHandlerSettings settings = createHandlerSettings();
         settings.setLoadMissedMessagesFromCradle(true);
         DataProviderService dataProviderService = Mockito.mock(DataProviderService.class);
-        Mockito.when(dataProviderService.searchMessages(Mockito.any())).thenReturn(
+        MessageSearcher ms = new MessageSearcher(
             List.of(
                 messageSearchResponse(4),
                 messageSearchResponse(5)
-            ).iterator()
+            )
+        );
+        Mockito.when(dataProviderService.searchMessages(Mockito.any())).thenAnswer(
+            x -> ms.searchMessages(x.getArgumentAt(0, MessageSearchRequest.class))
         );
         channel = new Channel(settings, dataProviderService);
         fixHandler = channel.getFixHandler();
@@ -132,7 +140,7 @@ public class RecoveryTest {
         FixHandlerSettings settings = createHandlerSettings();
         settings.setLoadMissedMessagesFromCradle(true);
         DataProviderService dataProviderService = Mockito.mock(DataProviderService.class);
-        Mockito.when(dataProviderService.searchMessages(Mockito.any())).thenReturn(
+        MessageSearcher ms = new MessageSearcher(
             List.of(
                 messageSearchResponse(1),
                 messageSearchResponse(2),
@@ -140,7 +148,10 @@ public class RecoveryTest {
                 messageSearchResponse(4),
                 messageSearchResponse(5),
                 messageSearchResponse(6)
-            ).iterator()
+            )
+        );
+        Mockito.when(dataProviderService.searchMessages(Mockito.any())).thenAnswer(
+            x -> ms.searchMessages(x.getArgumentAt(0, MessageSearchRequest.class))
         );
         channel = new Channel(settings, dataProviderService);
         fixHandler = channel.getFixHandler();
@@ -163,13 +174,16 @@ public class RecoveryTest {
         FixHandlerSettings settings = createHandlerSettings();
         settings.setLoadMissedMessagesFromCradle(true);
         DataProviderService dataProviderService = Mockito.mock(DataProviderService.class);
-        Mockito.when(dataProviderService.searchMessages(Mockito.any())).thenReturn(
+        MessageSearcher ms = new MessageSearcher(
             List.of(
                 messageSearchResponseAdmin(2),
                 messageSearchResponse(4),
                 messageSearchResponseAdmin(5),
                 messageSearchResponseAdmin(6)
-            ).iterator()
+            )
+        );
+        Mockito.when(dataProviderService.searchMessages(Mockito.any())).thenAnswer(
+            x -> ms.searchMessages(x.getArgumentAt(0, MessageSearchRequest.class))
         );
         channel = new Channel(settings, dataProviderService);
         fixHandler = channel.getFixHandler();
