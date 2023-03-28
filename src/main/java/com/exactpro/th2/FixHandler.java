@@ -423,9 +423,8 @@ public class FixHandler implements AutoCloseable, IHandler {
                         isSequenceChanged = true;
                     }
                     String wrongClientNextExpectedSequence = StringUtils.substringBetween(text.getValue(), "MSN to be sent is ", " but received");
-                    if(wrongClientNextExpectedSequence != null) {
-                        msgSeqNum.set(Integer.parseInt(wrongClientNextExpectedSequence) - 1);
-                        isSequenceChanged = true;
+                    if(wrongClientNextExpectedSequence != null && settings.getResetStateOnServerReset()) {
+                        serverMsgSeqNum.set(Integer.parseInt(wrongClientNextExpectedSequence));
                     }
                 }
             }
