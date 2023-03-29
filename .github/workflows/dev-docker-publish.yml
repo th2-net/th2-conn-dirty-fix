@@ -9,6 +9,7 @@ on:
       - dependabot**
     paths-ignore:
       - README.md
+      
 
 jobs:
   build-job:
