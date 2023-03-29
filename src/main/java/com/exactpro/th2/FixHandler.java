@@ -584,7 +584,6 @@ public class FixHandler implements AutoCloseable, IHandler {
                     );
                 }
             } else {
-                LOGGER.info("Sending sequence reset from {} to {}", beginSeqNo, msgSeqNum.get() + 1);
                 String seqReset =
                     createSequenceReset(beginSeqNo, msgSeqNum.get() + 1).toString();
                 channel.send(
