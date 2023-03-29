@@ -36,6 +36,6 @@ class MessageSearcher(private val messages: List<MessageSearchResponse>) {
             }.reversed()
         }
 
-        return filteredMessages.take(limit).iterator()
+        return filteredMessages.iterator()
     }
 }

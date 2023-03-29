@@ -18,14 +18,18 @@ package com.exactpro.th2.conn.dirty.fix
 import com.exactpro.th2.SequenceHolder
 import com.exactpro.th2.common.grpc.Direction
 import com.exactpro.th2.common.message.toTimestamp
+import com.exactpro.th2.common.util.toInstant
 import com.exactpro.th2.constants.Constants.IS_POSS_DUP
 import com.exactpro.th2.constants.Constants.MSG_SEQ_NUM_TAG
+import com.exactpro.th2.constants.Constants.POSS_DUP
 import com.exactpro.th2.constants.Constants.POSS_DUP_TAG
 import com.exactpro.th2.dataprovider.grpc.DataProviderService
 import com.exactpro.th2.dataprovider.grpc.MessageGroupResponse
 import com.exactpro.th2.dataprovider.grpc.MessageSearchRequest
+import com.exactpro.th2.dataprovider.grpc.MessageSearchResponse
 import com.exactpro.th2.dataprovider.grpc.MessageStream
 import com.exactpro.th2.dataprovider.grpc.TimeRelation
+import com.exactpro.th2.lme.oe.util.ProviderCall
 import com.google.protobuf.Int32Value
 import com.google.protobuf.Timestamp
 import com.google.protobuf.util.Timestamps.compare
@@ -34,231 +38,192 @@ import io.netty.buffer.Unpooled
 import java.time.Instant
 import java.time.LocalTime
 import java.time.OffsetDateTime
+import java.time.OffsetTime
 import java.time.ZoneId
 import java.time.ZoneOffset
 import kotlin.math.ceil
-
+import mu.KotlinLogging
 
 class MessageLoader(
     private val dataProvider: DataProviderService,
     private val sessionStartTime: LocalTime?
 ) {
-    private val sessionStart = OffsetDateTime
+    private var sessionStart = OffsetDateTime
         .now(ZoneOffset.UTC)
-        .with(sessionStartTime ?: LocalTime.now())
-        .atZoneSameInstant(ZoneId.systemDefault());
-
-    private val sessionStartDateTime = sessionStart
+        .with(sessionStartTime ?: OffsetTime.now(ZoneOffset.UTC))
+    private var sessionStartTimestamp = sessionStart
         .toInstant()
         .toTimestamp()
-
-    private val sessionStartYesterday = sessionStart
+    private var previousDaySessionStart = sessionStart
         .minusDays(1)
         .toInstant()
         .toTimestamp()
 
+    fun updateTime() {
+        sessionStart = OffsetDateTime
+            .now(ZoneOffset.UTC)
+            .with(OffsetTime.now(ZoneOffset.UTC))
+        sessionStartTimestamp = Instant.now().toTimestamp()
+        previousDaySessionStart = Instant.now().toTimestamp()
+    }
+
     fun loadInitialSequences(sessionAlias: String): SequenceHolder {
-        val serverSeq = searchSeq(createSearchRequest(Instant.now().toTimestamp(), Direction.FIRST, sessionAlias))
-        val clientSeq = searchSeq(createSearchRequest(Instant.now().toTimestamp(), Direction.SECOND, sessionAlias))
+        val serverSeq = ProviderCall.withCancellation {
+            searchMessage(
+                dataProvider.searchMessages(
+                    createSearchRequest(
+                        Instant.now().toTimestamp(),
+                        Direction.FIRST,
+                        sessionAlias
+                    )
+                )
+            ) {  _, seqNum -> seqNum?.toInt() ?: 0 }
+        }
+        val clientSeq = ProviderCall.withCancellation {
+            searchMessage(
+                dataProvider.searchMessages(
+                    createSearchRequest(
+                        Instant.now().toTimestamp(),
+                        Direction.SECOND,
+                        sessionAlias
+                    )
+                ),
+                true
+            ) { _, seqNum -> seqNum?.toInt() ?: 0 }
+        }
+        K_LOGGER.info { "Loaded sequences: client sequence - $clientSeq; server sequence - $serverSeq" }
         return SequenceHolder(clientSeq, serverSeq)
     }
 
-    fun processClientMessages(sessionAlias: String,
-                              searchRange: SearchRange,
-                              processMessage: (ByteBuf) -> Boolean,
-    ) {
-        val startTimestamp = findStartTimestamp(
-            sessionAlias,
-            Direction.SECOND,
-            searchRange
-        ) ?: return
-        searchMessages(createSearchRequest(startTimestamp, Direction.SECOND, sessionAlias, searchDirection = TimeRelation.NEXT), processMessage)
-    }
-
-    private fun findStartTimestamp(
-        sessionAlias: String,
+    fun processMessagesInRange(
         direction: Direction,
-        searchRange: SearchRange,
-    ): Timestamp? {
-        val firstValidMessage = searchMessageWithValidSequence(
-            createSearchRequest(Instant.now().toTimestamp(), Direction.SECOND, sessionAlias)
-        ) ?: return null
+        sessionAlias: String,
+        fromSequence: Long,
+        processMessage: (ByteBuf) -> Boolean
+    ) {
+        var timestamp: Timestamp? = null
+        ProviderCall.withCancellation {
+            val backwardIterator = dataProvider.searchMessages(
+                createSearchRequest(Instant.now().toTimestamp(), direction, sessionAlias)
+            )
 
-        return searchUntilFoundRangeStart(
-            sessionAlias,
-            searchRange,
-            direction,
-            firstValidMessage
-        )
-    }
+            var firstValidMessage = firstValidMessageDetails(backwardIterator) ?: return@withCancellation
 
-    private fun searchUntilFoundRangeStart(sessionAlias: String,
-                                           searchRange: SearchRange,
-                                           direction: Direction,
-                                           lastMessageDetails: MessageDetails,
+            var messagesToSkip = firstValidMessage.payloadSequence - fromSequence
 
-                                           ): Timestamp? {
-        val numberOfMessagesToSkipThrough = lastMessageDetails.payloadSequence - searchRange.start
-        val expectedSequenceAfterSkiping = lastMessageDetails.messageSequence - numberOfMessagesToSkipThrough
-        val numberOfLoops = ceil(numberOfMessagesToSkipThrough.toDouble() / 20).toInt()
-        var searchRequest = createSearchRequest(lastMessageDetails.timestamp, direction, sessionAlias, 20)
-        var lastNonNullMessage: MessageGroupResponse? = null
+            timestamp = firstValidMessage.timestamp
 
-        repeat(numberOfLoops) {
-            var message: MessageGroupResponse? = null
-
-            for(response in dataProvider.searchMessages(searchRequest)) {
-                lastNonNullMessage = response.message
-                message = response.message
-                if(message.messageId.sequence <= expectedSequenceAfterSkiping) {
-                    break
+            while (backwardIterator.hasNext() && messagesToSkip > 0) {
+                val message = backwardIterator.next().message
+                if(compare(message.timestamp, previousDaySessionStart) <= 0) {
+                    continue
                 }
-            }
+                timestamp = message.timestamp
+                messagesToSkip -= 1
+                if(messagesToSkip == 0L) {
 
-            when(message) {
-                null -> { return lastNonNullMessage?.timestamp ?: lastMessageDetails.timestamp }
-                else -> {
-                    if(message.messageId.sequence <= expectedSequenceAfterSkiping) {
-                        val firstValidMessage = searchMessageWithValidSequence(
-                            createSearchRequest(message.timestamp, Direction.SECOND, sessionAlias)
-                        ) ?: return message.timestamp
-                        return if(firstValidMessage.messageSequence <= searchRange.start) {
-                            firstValidMessage.timestamp
+                    val buf = Unpooled.copiedBuffer(message.bodyRaw.toByteArray())
+                    val sequence = buf.findField(MSG_SEQ_NUM_TAG)?.value?.toInt() ?: continue
+
+                    if(checkPossDup(buf)) {
+                        val validMessage = firstValidMessageDetails(backwardIterator) ?: break
+
+                        timestamp = validMessage.timestamp
+                        if(validMessage.payloadSequence <= fromSequence) {
+                            break
                         } else {
-                            searchUntilFoundRangeStart(
-                                sessionAlias,
-                                searchRange,
-                                direction,
-                                firstValidMessage
-                            )
+                            messagesToSkip = validMessage.payloadSequence - fromSequence
+                        }
+
+                    } else {
+
+                        if(sequence <= fromSequence) {
+                            break
+                        } else {
+                            messagesToSkip = sequence - fromSequence
                         }
                     }
                 }
             }
         }
 
-        val message = lastNonNullMessage ?: return lastMessageDetails.timestamp
+        val startSearchTimestamp = timestamp ?: return
 
-        val firstValidMessage = searchMessageWithValidSequence(
-            createSearchRequest(message.timestamp, Direction.SECOND, sessionAlias)
-        ) ?: return message.timestamp
+        K_LOGGER.info { "Loading retransmission messages from ${startSearchTimestamp.toInstant()}" }
 
-        return if(firstValidMessage.messageSequence <= searchRange.start) {
-            firstValidMessage.timestamp
-        } else {
-            searchUntilFoundRangeStart(
-                sessionAlias,
-                searchRange,
-                direction,
-                firstValidMessage
-            )
-        }
-    }
+        ProviderCall.withCancellation {
 
-    private fun searchMessageWithValidSequence(
-        request: MessageSearchRequest
-    ): MessageDetails? {
-        var message: MessageGroupResponse? = null
-        for(response in dataProvider.searchMessages(request)) {
-            message = response.message
-            if (sessionStartTime != null && compare(sessionStartDateTime, message.timestamp) > 0) {
-                return null
-            }
-            val buffer = Unpooled.buffer().writeBytes(message.bodyRaw.toByteArray())
-            val seqNum = buffer.findField(MSG_SEQ_NUM_TAG)?.value ?: continue
-            if(buffer.findField(MSG_SEQ_NUM_TAG)?.value == IS_POSS_DUP) continue
-            return MessageDetails(seqNum.toInt(), message.timestamp, message.messageId.sequence)
-        }
-        return when(message) {
-            null -> null
-            else -> searchMessageWithValidSequence(
+            val iterator = dataProvider.searchMessages(
                 createSearchRequest(
-                    message.timestamp,
-                    message.messageId.direction,
-                    message.messageId.connectionId.sessionAlias
+                    startSearchTimestamp,
+                    direction,
+                    sessionAlias,
+                    TimeRelation.NEXT,
+                    Instant.now().toTimestamp()
                 )
             )
+
+            while (iterator.hasNext()) {
+                val message = Unpooled.buffer().writeBytes(iterator.next().message.bodyRaw.toByteArray())
+                if (!processMessage(message)) break
+            }
         }
     }
 
-    private fun searchMessages(
-        request: MessageSearchRequest,
-        processMessage: (ByteBuf) -> Boolean
-    ) {
-        var message: MessageGroupResponse? = null
-        for(response in dataProvider.searchMessages(request)) {
-            message = response.message
-            if (sessionStartTime != null && compare(sessionStartDateTime, message.timestamp) > 0) {
-                return
+    private fun <T> searchMessage(
+        iterator: Iterator<MessageSearchResponse>,
+        checkPossFlag: Boolean = false,
+        extractValue: (MessageGroupResponse?, String?) -> T
+    ): T {
+        var message: MessageGroupResponse?
+        while (iterator.hasNext()) {
+            message = iterator.next().message
+            if(sessionStartTime != null && compare(sessionStartTimestamp, message.timestamp) > 0) {
+                return extractValue(message, null)
             }
-            val buffer = Unpooled.buffer()
-            buffer.writeBytes(message.bodyRaw.toByteArray())
-            if(!processMessage(buffer)) {
-                return
-            }
+
+            val bodyRaw = Unpooled.copiedBuffer(message.bodyRaw.toByteArray())
+            val seqNum = bodyRaw.findField(MSG_SEQ_NUM_TAG)?.value ?: continue
+
+            if(checkPossFlag && checkPossDup(bodyRaw)) continue
+
+            return extractValue(message, seqNum)
         }
-        if(message != null) {
-            searchMessages(
-                createSearchRequest(
-                    message.timestamp.plusNano(),
-                    message.messageId.direction,
-                    message.messageId.connectionId.sessionAlias,
-                    searchDirection = TimeRelation.NEXT
-                ),
-                processMessage
-            )
-        }
+        return extractValue(null, null)
     }
 
-    private fun searchSeq(request: MessageSearchRequest): Int {
-        var message: MessageGroupResponse? = null
-        for (response in dataProvider.searchMessages(request)) {
-            message = response.message
-            if (sessionStartTime != null && compare(sessionStartDateTime, message.timestamp) > 0) {
-                return 0
-            }
-            val buffer = Unpooled.wrappedBuffer(message.bodyRaw.asReadOnlyByteBuffer())
-            return buffer.findField(MSG_SEQ_NUM_TAG)?.value?.toInt() ?: continue
-        }
-        return when (message) {
-            null -> 0
-            else -> searchSeq(
-                createSearchRequest(
-                    message.timestamp,
-                    message.messageId.direction,
-                    message.messageId.connectionId.sessionAlias
-                )
-            )
-        }
+    private fun firstValidMessageDetails(iterator: Iterator<MessageSearchResponse>): MessageDetails? = searchMessage(
+        iterator,
+        true
+    ) { message, seqNum ->
+        if(message == null || seqNum == null) return@searchMessage null
+        MessageDetails(seqNum.toInt(), message.messageId.sequence, message.timestamp)
     }
 
     private fun createSearchRequest(
         timestamp: Timestamp,
         direction: Direction,
         sessionAlias: String,
-        resultCountLimit: Int = 5,
-        searchDirection: TimeRelation = TimeRelation.PREVIOUS
-    ): MessageSearchRequest {
-        return MessageSearchRequest.newBuilder().apply {
-            startTimestamp = timestamp
-            endTimestamp = sessionStartYesterday
-            addResponseFormats(BASE_64_FORMAT)
-            addStream(
-                MessageStream.newBuilder()
-                    .setName(sessionAlias)
-                    .setDirection(direction)
-            )
-            this.resultCountLimit = Int32Value.of(resultCountLimit)
-            this.searchDirection = searchDirection
-        }.build()
-    }
+        searchDirection: TimeRelation = TimeRelation.PREVIOUS,
+        endTimestamp: Timestamp = previousDaySessionStart
+    ) = MessageSearchRequest.newBuilder().apply {
+        startTimestamp = timestamp
+        this.endTimestamp = endTimestamp
+        addResponseFormats(BASE64_FORMAT)
+        addStream(
+            MessageStream.newBuilder()
+                .setName(sessionAlias)
+                .setDirection(direction)
+        )
+        this.searchDirection = searchDirection
+    }.build()
 
-    data class SearchRange(val start: Int, val end: Int)
-    data class MessageDetails(val payloadSequence: Int, val timestamp: Timestamp, val messageSequence: Long)
+    private fun checkPossDup(buf: ByteBuf): Boolean = buf.findField(POSS_DUP_TAG)?.value == IS_POSS_DUP
 
-    private fun Timestamp.plusNano() = Timestamp.newBuilder().setSeconds(seconds).setNanos(nanos + 1).build()
+    data class MessageDetails(val payloadSequence: Int, val messageSequence: Long, val timestamp: Timestamp)
 
     companion object {
-        const val BASE_64_FORMAT = "BASE_64"
+        val K_LOGGER = KotlinLogging.logger {  }
+        private const val BASE64_FORMAT = "BASE_64"
     }
 }

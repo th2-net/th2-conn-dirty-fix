@@ -17,6 +17,7 @@
 package com.exactpro.th2;
 
 import com.exactpro.th2.common.event.Event;
+import com.exactpro.th2.common.grpc.Direction;
 import com.exactpro.th2.common.grpc.MessageID;
 import com.exactpro.th2.common.grpc.RawMessage;
 import com.exactpro.th2.conn.dirty.fix.FixField;
@@ -529,6 +530,8 @@ public class FixHandler implements AutoCloseable, IHandler {
                     if(sequence > endSeq) return false;
 
                     if(ADMIN_MESSAGES.contains(msgType)) return true;
+                    FixField possDup = findField(buf, POSS_DUP_TAG);
+                    if(possDup != null && possDup.getValue() == IS_POSS_DUP) return true;
 
                     if(sequence - 1 != lastProcessedSequence.get() ) {
                         int newSeqNo = sequence;
@@ -550,9 +553,10 @@ public class FixHandler implements AutoCloseable, IHandler {
                     return true;
                 };
 
-                messageLoader.processClientMessages(
+                messageLoader.processMessagesInRange(
+                    Direction.SECOND,
                     channel.getSessionAlias(),
-                    new MessageLoader.SearchRange(beginSeqNo, endSeqNo),
+                    beginSeqNo,
                     processMessage
                 );
 
