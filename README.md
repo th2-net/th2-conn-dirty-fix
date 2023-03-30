@@ -1,4 +1,4 @@
-# th2-conn-dirty-fix (1.0.2)
+# th2-conn-dirty-fix (1.1.0)
 
 This microservice allows sending and receiving messages via FIX protocol
 
@@ -47,6 +47,7 @@ This microservice allows sending and receiving messages via FIX protocol
 + *sendingDateTimeFormat* - `SendingTime` field format for outgoing messages. (`nullable`, `default format` in this case is `"yyyyMMdd-HH:mm:ss.SSSSSSSSS"`) 
 + *useNextExpectedSeqNum* - session management based on next expected sequence number. (`false` by default)
 + *saveAdminMessages* - defines if admin messages will be saved to internal outgoing buffer. (`false` by default)
++ *resetStateOnServerReset* - whether to reset the server sequence after receiving logout with text `Next Expected MSN too high, MSN to be sent is x but received y`.
 
 ### Security settings
 
@@ -326,6 +327,9 @@ spec:
 
 # Changelog
 
+## 1.1.0
+* optional state reset on silent server reset.
+
 ## 1.0.2
 * dev releases
 * apply changes from version-0
@@ -336,6 +340,10 @@ spec:
 ## 1.0.0
 
 * Bump `conn-dirty-tcp-core` to `3.0.0` for books and pages support
+
+## 0.2.0
+* optional state reset on silent server reset.
+
 ## 0.1.1
 * correct sequence numbers increments.
 * update conn-dirty-tcp-core to `2.3.0`
