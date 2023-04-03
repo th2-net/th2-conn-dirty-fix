@@ -559,8 +559,8 @@ public class FixHandler implements AutoCloseable, IHandler {
 
                     setTime(buf);
                     setPossDup(buf);
-                    updateChecksum(buf);
                     updateLength(buf);
+                    updateChecksum(buf);
                     channel.send(buf, Collections.emptyMap(), null, SendMode.MANGLE);
 
                     resetHeartbeatTask();
