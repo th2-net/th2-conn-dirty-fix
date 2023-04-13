@@ -10,6 +10,7 @@ on:
     paths-ignore:
       - README.md
 
+
 jobs:
   build-job:
     uses: th2-net/.github/.github/workflows/compound-java-dev.yml@main
