@@ -56,7 +56,7 @@ class SequenceLoader(
                 .with(LocalTime.now())
                 .atZoneSameInstant(ZoneId.systemDefault())
         } else {
-            sessionStart = if(start.isBefore(now)) {
+            sessionStart = if(start.isAfter(now)) {
                 OffsetDateTime
                     .now(ZoneOffset.UTC)
                     .minusDays(1)
