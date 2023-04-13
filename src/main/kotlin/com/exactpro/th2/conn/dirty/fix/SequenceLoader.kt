@@ -31,10 +31,13 @@ import com.google.protobuf.util.Timestamps
 import com.google.protobuf.util.Timestamps.compare
 import io.netty.buffer.Unpooled
 import java.time.Instant
+import java.time.LocalDate
+import java.time.LocalDateTime
 import java.time.LocalTime
 import java.time.OffsetDateTime
 import java.time.ZoneId
 import java.time.ZoneOffset
+import java.time.ZonedDateTime
 
 
 class SequenceLoader(
@@ -42,10 +45,32 @@ class SequenceLoader(
     private val sessionStartTime: LocalTime?,
     private val sessionAlias: String,
 ) {
-    private val sessionStart = OffsetDateTime
-        .now(ZoneOffset.UTC)
-        .with(sessionStartTime ?: LocalTime.now())
-        .atZoneSameInstant(ZoneId.systemDefault());
+    private val sessionStart: ZonedDateTime
+
+    init {
+        val today = LocalDate.now(ZoneOffset.UTC)
+        val start = sessionStartTime?.atDate(today)
+        val now = LocalDateTime.now()
+        if(start == null) {
+            sessionStart = OffsetDateTime
+                .now(ZoneOffset.UTC)
+                .with(LocalTime.now())
+                .atZoneSameInstant(ZoneId.systemDefault())
+        } else {
+            sessionStart = if(start.isBefore(now)) {
+                OffsetDateTime
+                    .now(ZoneOffset.UTC)
+                    .minusDays(1)
+                    .with(sessionStartTime)
+                    .atZoneSameInstant(ZoneId.systemDefault())
+            } else {
+                OffsetDateTime
+                    .now(ZoneOffset.UTC)
+                    .with(sessionStartTime)
+                    .atZoneSameInstant(ZoneId.systemDefault())
+            }
+        }
+    }
 
     private val sessionStartDateTime = sessionStart
         .toInstant()
