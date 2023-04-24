@@ -42,6 +42,7 @@ This microservice allows sending and receiving messages via FIX protocol
 + *resetSeqNumFlag* - resetting sequence number in initial Logon message (when conn started)
 + *resetOnLogon* - resetting the sequence number in Logon in other cases (e.g. disconnect)
 + *loadSequencesFromCradle* - defines if sequences will be loaded from cradle to use them in logon message.
++ *loadMissedMessagesFromCradle* - defines how retransmission will be handled. If true, then requested through `ResendRequest` messages (or messages requested on Logon with `NextExpectedSeqNum`) will be loaded from cradle.
 + *sessionStartTime* - UTC time when session starts. (`nullable`)
 + *sessionEndTime* - UTC time when session ends. required if startSessionTime is filled.
 + *sendingDateTimeFormat* - `SendingTime` field format for outgoing messages. (`nullable`, `default format` in this case is `"yyyyMMdd-HH:mm:ss.SSSSSSSSS"`) 
@@ -327,6 +328,7 @@ spec:
 
 # Changelog
 
+<<<<<<< HEAD
 ## 1.0.2
 * dev releases
 * apply changes from version-0
@@ -338,6 +340,12 @@ spec:
 
 * Bump `conn-dirty-tcp-core` to `3.0.0` for books and pages support
 ## 0.2.0
+=======
+## 0.3.0
+* Ability to recover messages from cradle.
+
+## 0.2.1
+>>>>>>> ts-1290
 * optional state reset on silent server reset.
 
 ## 0.1.1

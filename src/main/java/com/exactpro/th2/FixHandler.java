@@ -17,10 +17,11 @@
 package com.exactpro.th2;
 
 import com.exactpro.th2.common.event.Event;
+import com.exactpro.th2.common.grpc.Direction;
 import com.exactpro.th2.common.grpc.MessageID;
 import com.exactpro.th2.common.grpc.RawMessage;
 import com.exactpro.th2.conn.dirty.fix.FixField;
-import com.exactpro.th2.conn.dirty.fix.SequenceLoader;
+import com.exactpro.th2.conn.dirty.fix.MessageLoader;
 import com.exactpro.th2.conn.dirty.tcp.core.api.IChannel;
 import com.exactpro.th2.conn.dirty.tcp.core.api.IChannel.SendMode;
 import com.exactpro.th2.conn.dirty.tcp.core.api.IHandler;
@@ -51,6 +52,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.locks.ReentrantLock;
+import kotlin.jvm.functions.Function1;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.jetbrains.annotations.NotNull;
@@ -66,6 +69,7 @@ import static com.exactpro.th2.conn.dirty.fix.FixByteBufUtilKt.updateLength;
 import static com.exactpro.th2.conn.dirty.fix.KeyFileType.Companion.OperationMode.ENCRYPT_MODE;
 import static com.exactpro.th2.conn.dirty.tcp.core.util.CommonUtil.getEventId;
 import static com.exactpro.th2.conn.dirty.tcp.core.util.CommonUtil.toByteBuf;
+import static com.exactpro.th2.constants.Constants.ADMIN_MESSAGES;
 import static com.exactpro.th2.constants.Constants.BEGIN_SEQ_NO;
 import static com.exactpro.th2.constants.Constants.BEGIN_SEQ_NO_TAG;
 import static com.exactpro.th2.constants.Constants.BEGIN_STRING_TAG;
@@ -99,6 +103,7 @@ import static com.exactpro.th2.constants.Constants.NEW_SEQ_NO_TAG;
 import static com.exactpro.th2.constants.Constants.NEXT_EXPECTED_SEQ_NUM;
 import static com.exactpro.th2.constants.Constants.NEXT_EXPECTED_SEQ_NUMBER_TAG;
 import static com.exactpro.th2.constants.Constants.PASSWORD;
+import static com.exactpro.th2.constants.Constants.POSS_DUP;
 import static com.exactpro.th2.constants.Constants.POSS_DUP_TAG;
 import static com.exactpro.th2.constants.Constants.RESET_SEQ_NUM;
 import static com.exactpro.th2.constants.Constants.SENDER_COMP_ID;
@@ -145,7 +150,8 @@ public class FixHandler implements AutoCloseable, IHandler {
     private final ScheduledExecutorService executorService = Executors.newScheduledThreadPool(1);
     private final IHandlerContext context;
     private final InetSocketAddress address;
-    private final DataProviderService dataProvider;
+    private final MessageLoader messageLoader;
+    private final ReentrantLock recoveryLock = new ReentrantLock();
 
     private AtomicReference<Future<?>> heartbeatTimer = new AtomicReference<>(CompletableFuture.completedFuture(null));
     private AtomicReference<Future<?>> testRequestTimer = new AtomicReference<>(CompletableFuture.completedFuture(null));
@@ -156,10 +162,14 @@ public class FixHandler implements AutoCloseable, IHandler {
     public FixHandler(IHandlerContext context) {
         this.context = context;
         this.settings = (FixHandlerSettings) context.getSettings();
-        if(settings.isLoadSequencesFromCradle()) {
-            this.dataProvider = context.getGrpcService(DataProviderService.class);
+        if(settings.isLoadSequencesFromCradle() || settings.isLoadMissedMessagesFromCradle()) {
+            this.messageLoader = new MessageLoader(
+                context.getGrpcService(DataProviderService.class),
+                settings.getSessionStartTime(),
+                context.getBookName()
+            );
         } else {
-            this.dataProvider = null;
+            this.messageLoader = null;
         }
 
         if(settings.getSessionStartTime() != null) {
@@ -221,13 +231,7 @@ public class FixHandler implements AutoCloseable, IHandler {
     public void onStart() {
         channel = context.createChannel(address, settings.getSecurity(), Map.of(), true, settings.getReconnectDelay() * 1000L, Integer.MAX_VALUE);
         if(settings.isLoadSequencesFromCradle()) {
-            SequenceLoader seqLoader = new SequenceLoader(
-                    dataProvider,
-                    settings.getSessionStartTime(),
-                    channel.getSessionAlias(),
-                    context.getBookName()
-            );
-            SequenceHolder sequences = seqLoader.load();
+            SequenceHolder sequences = messageLoader.loadInitialSequences(channel.getSessionAlias());
             LOGGER.info("Loaded sequences are: client - {}, server - {}", sequences.getClientSeq(), sequences.getServerSeq());
             msgSeqNum.set(sequences.getClientSeq());
             serverMsgSeqNum.set(sequences.getServerSeq());
@@ -259,7 +263,14 @@ public class FixHandler implements AutoCloseable, IHandler {
             }
         }
 
-        return channel.send(toByteBuf(rawMessage.getBody()), rawMessage.getMetadata().getPropertiesMap(), getEventId(rawMessage), SendMode.HANDLE_AND_MANGLE);
+        CompletableFuture<MessageID> result = CompletableFuture.completedFuture(null);
+        try {
+            recoveryLock.lock();
+            result = channel.send(toByteBuf(rawMessage.getBody()), rawMessage.getMetadata().getPropertiesMap(), getEventId(rawMessage), SendMode.HANDLE_AND_MANGLE);
+        } finally {
+            recoveryLock.unlock();
+        }
+        return result;
     }
 
     @Override
@@ -520,19 +531,89 @@ public class FixHandler implements AutoCloseable, IHandler {
     }
 
     private void recovery(int beginSeqNo, int endSeqNo) {
-        if (endSeqNo == 0) {
-            endSeqNo = msgSeqNum.get() + 1;
+        AtomicInteger lastProcessedSequence = new AtomicInteger(beginSeqNo - 1);
+        try {
+            recoveryLock.lock();
+
+            if (endSeqNo == 0) {
+                endSeqNo = msgSeqNum.get() + 1;
+            }
+
+            int endSeq = endSeqNo;
+            LOGGER.info("Loading messages from {} to {}", beginSeqNo, endSeqNo);
+            if(settings.isLoadMissedMessagesFromCradle()) {
+                Function1<ByteBuf, Boolean> processMessage = (buf) -> {
+                    FixField seqNum = findField(buf, MSG_SEQ_NUM_TAG);
+                    FixField msgTypeField = findField(buf, MSG_TYPE_TAG);
+                    if(seqNum == null || seqNum.getValue() == null
+                            || msgTypeField == null || msgTypeField.getValue() == null) {
+                        return true;
+                    }
+                    Integer sequence = Integer.parseInt(seqNum.getValue());
+                    String msgType = msgTypeField.getValue();
+
+                    if(sequence < beginSeqNo) return true;
+                    if(sequence > endSeq) return false;
+
+                    if(ADMIN_MESSAGES.contains(msgType)) return true;
+                    FixField possDup = findField(buf, POSS_DUP_TAG);
+                    if(possDup != null && possDup.getValue() == IS_POSS_DUP) return true;
+
+                    if(sequence - 1 != lastProcessedSequence.get() ) {
+                        int newSeqNo = sequence;
+                        StringBuilder sequenceReset =
+                                createSequenceReset(Math.max(beginSeqNo, lastProcessedSequence.get()), newSeqNo);
+                        channel.send(Unpooled.wrappedBuffer(sequenceReset.toString().getBytes(StandardCharsets.UTF_8)), Collections.emptyMap(), null, SendMode.MANGLE);
+                        resetHeartbeatTask();
+                    }
+
+                    setTime(buf);
+                    setPossDup(buf);
+                    updateLength(buf);
+                    updateChecksum(buf);
+                    channel.send(buf, Collections.emptyMap(), null, SendMode.MANGLE);
+
+                    resetHeartbeatTask();
+
+                    lastProcessedSequence.set(sequence);
+                    return true;
+                };
+
+                messageLoader.processMessagesInRange(
+                    Direction.SECOND,
+                    channel.getSessionAlias(),
+                    beginSeqNo,
+                    processMessage
+                );
+
+                if(lastProcessedSequence.get() < endSeq) {
+                    String seqReset = createSequenceReset(Math.max(lastProcessedSequence.get() + 1, beginSeqNo), msgSeqNum.get() + 1).toString();
+                    channel.send(
+                        Unpooled.wrappedBuffer(seqReset.getBytes(StandardCharsets.UTF_8)),
+                        Collections.emptyMap(), null, SendMode.MANGLE
+                    );
+                }
+            } else {
+                String seqReset =
+                    createSequenceReset(beginSeqNo, msgSeqNum.get() + 1).toString();
+                channel.send(
+                    Unpooled.wrappedBuffer(seqReset.getBytes(StandardCharsets.UTF_8)),
+                    Collections.emptyMap(), null, SendMode.MANGLE
+                );
+            }
+            resetHeartbeatTask();
+
+        } catch (Exception e) {
+            LOGGER.error("Error while loading messages for recovery", e);
+            String seqReset =
+                createSequenceReset(Math.max(beginSeqNo, lastProcessedSequence.get() + 1), msgSeqNum.get() + 1).toString();
+            channel.send(
+                Unpooled.buffer().writeBytes(seqReset.getBytes(StandardCharsets.UTF_8)),
+                Collections.emptyMap(), null, SendMode.MANGLE
+            );
+        } finally {
+            recoveryLock.unlock();
         }
-        LOGGER.info("Returning messages from {} to {}", beginSeqNo, endSeqNo);
-
-        StringBuilder sequenceReset = new StringBuilder();
-        setHeader(sequenceReset, MSG_TYPE_SEQUENCE_RESET, beginSeqNo);
-        sequenceReset.append(GAP_FILL_FLAG).append("Y");
-        sequenceReset.append(NEW_SEQ_NO).append(endSeqNo);
-        setChecksumAndBodyLength(sequenceReset);
-
-        channel.send(Unpooled.wrappedBuffer(sequenceReset.toString().getBytes(StandardCharsets.UTF_8)), Collections.emptyMap(), null, SendMode.MANGLE);
-        resetHeartbeatTask();
     }
 
     private void sendSequenceReset() {
@@ -880,6 +961,36 @@ public class FixHandler implements AutoCloseable, IHandler {
         DateTimeFormatter formatter = settings.getSendingDateTimeFormat();
         LocalDateTime datetime = LocalDateTime.now();
         return formatter.format(datetime);
+    }
+
+    private void setTime(ByteBuf buf) {
+        FixField sendingTime = findField(buf, SENDING_TIME_TAG);
+        FixField seqNum = requireNonNull(findField(buf, MSG_SEQ_NUM_TAG), "SeqNum field was null.");
+
+        if (sendingTime == null) {
+            seqNum.insertNext(SENDING_TIME_TAG, getTime());
+        } else {
+            String value = sendingTime.getValue();
+
+            if (value == null || value.isEmpty() || value.equals("null")) {
+                sendingTime.setValue(getTime());
+            }
+        }
+    }
+
+    private void setPossDup(ByteBuf buf) {
+        FixField sendingTime = requireNonNull(findField(buf, SENDING_TIME_TAG));
+        sendingTime.insertNext(POSS_DUP_TAG, IS_POSS_DUP);
+    }
+
+    private StringBuilder createSequenceReset(int seqNo, int newSeqNo) {
+        StringBuilder sequenceReset = new StringBuilder();
+        setHeader(sequenceReset, MSG_TYPE_SEQUENCE_RESET, seqNo);
+        sequenceReset.append(POSS_DUP).append(IS_POSS_DUP);
+        sequenceReset.append(GAP_FILL_FLAG).append("Y");
+        sequenceReset.append(NEW_SEQ_NO).append(newSeqNo);
+        setChecksumAndBodyLength(sequenceReset);
+        return sequenceReset;
     }
 
     public AtomicBoolean getEnabled() {
