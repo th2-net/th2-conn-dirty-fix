@@ -484,6 +484,7 @@ public class FixHandler implements AutoCloseable, IHandler {
         msgSeqNum.set(0);
         serverMsgSeqNum.set(0);
         sessionActive.set(true);
+        messageLoader.updateTime();
         channel.open();
     }
 

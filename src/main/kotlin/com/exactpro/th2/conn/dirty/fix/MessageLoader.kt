@@ -34,10 +34,16 @@ import com.google.protobuf.util.Timestamps.compare
 import io.netty.buffer.ByteBuf
 import io.netty.buffer.Unpooled
 import java.time.Instant
+import java.time.LocalDate
+import java.time.LocalDateTime
 import java.time.LocalTime
 import java.time.OffsetDateTime
 import java.time.OffsetTime
+import java.time.ZoneId
 import java.time.ZoneOffset
+import java.time.ZonedDateTime
+import java.util.concurrent.locks.ReentrantLock
+import kotlin.concurrent.withLock
 import mu.KotlinLogging
 
 class MessageLoader(
@@ -45,26 +51,59 @@ class MessageLoader(
     private val sessionStartTime: LocalTime?,
     private val bookName: String
 ) {
-    private var sessionStart = OffsetDateTime
-        .now(ZoneOffset.UTC)
-        .with(sessionStartTime ?: OffsetTime.now(ZoneOffset.UTC))
+    private var sessionStart: ZonedDateTime
+    private val searchLock = ReentrantLock()
+
+    init {
+        val today = LocalDate.now(ZoneOffset.UTC)
+        val start = sessionStartTime?.atDate(today)
+        val now = LocalDateTime.now()
+        if(start == null) {
+            sessionStart = OffsetDateTime
+                .now(ZoneOffset.UTC)
+                .with(LocalTime.now())
+                .atZoneSameInstant(ZoneId.systemDefault())
+        } else {
+            sessionStart = if(start.isAfter(now)) {
+                OffsetDateTime
+                    .now(ZoneOffset.UTC)
+                    .minusDays(1)
+                    .with(sessionStartTime)
+                    .atZoneSameInstant(ZoneId.systemDefault())
+            } else {
+                OffsetDateTime
+                    .now(ZoneOffset.UTC)
+                    .with(sessionStartTime)
+                    .atZoneSameInstant(ZoneId.systemDefault())
+            }
+        }
+    }
+
     private var sessionStartTimestamp = sessionStart
         .toInstant()
         .toTimestamp()
+
     private var previousDaySessionStart = sessionStart
         .minusDays(1)
         .toInstant()
         .toTimestamp()
 
     fun updateTime() {
-        sessionStart = OffsetDateTime
-            .now(ZoneOffset.UTC)
-            .with(OffsetTime.now(ZoneOffset.UTC))
-        sessionStartTimestamp = Instant.now().toTimestamp()
-        previousDaySessionStart = Instant.now().toTimestamp()
+        searchLock.withLock {
+            sessionStart = ZonedDateTime
+                .now(ZoneOffset.UTC)
+                .with(OffsetTime.now(ZoneOffset.UTC))
+            sessionStartTimestamp = sessionStart
+                .toInstant()
+                .toTimestamp()
+            previousDaySessionStart = sessionStart
+                .minusDays(1)
+                .toInstant()
+                .toTimestamp()
+        }
     }
 
-    fun loadInitialSequences(sessionAlias: String): SequenceHolder {
+    fun loadInitialSequences(sessionAlias: String): SequenceHolder = searchLock.withLock {
         val serverSeq = ProviderCall.withCancellation {
             searchMessage(
                 dataProvider.searchMessages(
@@ -93,6 +132,15 @@ class MessageLoader(
     }
 
     fun processMessagesInRange(
+        direction: Direction,
+        sessionAlias: String,
+        fromSequence: Long,
+        processMessage: (ByteBuf) -> Boolean
+    ) = searchLock.withLock {
+        processMessagesInRangeInternal(direction, sessionAlias, fromSequence, processMessage)
+    }
+
+    fun processMessagesInRangeInternal(
         direction: Direction,
         sessionAlias: String,
         fromSequence: Long,
