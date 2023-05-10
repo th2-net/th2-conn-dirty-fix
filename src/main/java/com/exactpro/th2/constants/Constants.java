@@ -33,6 +33,7 @@ public class Constants {
     public static final Integer TARGET_COMP_ID_TAG = 56;
     public static final Integer MSG_SEQ_NUM_TAG = 34;
     public static final Integer SENDING_TIME_TAG = 52;
+    public static final Integer ORIG_SENDING_TIME_TAG = 122;
     public static final Integer CHECKSUM_TAG = 10;
     public static final Integer DEFAULT_APPL_VER_ID_TAG = 1137;
     public static final Integer SENDER_SUB_ID_TAG = 50;
@@ -80,6 +81,7 @@ public class Constants {
     public static final String RESET_SEQ_NUM = SOH + RESET_SEQ_NUM_TAG + "=";
     public static final String NEXT_EXPECTED_SEQ_NUM = SOH + NEXT_EXPECTED_SEQ_NUMBER_TAG + "=";
     public static final String POSS_DUP = SOH + POSS_DUP_TAG + "=";
+    public static final String ORIG_SENDING_TIME = SOH + ORIG_SENDING_TIME_TAG + "=";
 
     //message types
     public static final String MSG_TYPE_LOGON = "A";
