@@ -102,6 +102,8 @@ import static com.exactpro.th2.constants.Constants.NEW_SEQ_NO;
 import static com.exactpro.th2.constants.Constants.NEW_SEQ_NO_TAG;
 import static com.exactpro.th2.constants.Constants.NEXT_EXPECTED_SEQ_NUM;
 import static com.exactpro.th2.constants.Constants.NEXT_EXPECTED_SEQ_NUMBER_TAG;
+import static com.exactpro.th2.constants.Constants.ORIG_SENDING_TIME;
+import static com.exactpro.th2.constants.Constants.ORIG_SENDING_TIME_TAG;
 import static com.exactpro.th2.constants.Constants.PASSWORD;
 import static com.exactpro.th2.constants.Constants.POSS_DUP;
 import static com.exactpro.th2.constants.Constants.POSS_DUP_TAG;
@@ -490,7 +492,7 @@ public class FixHandler implements AutoCloseable, IHandler {
 
     public void sendResendRequest(int beginSeqNo, int endSeqNo) { //do private
         StringBuilder resendRequest = new StringBuilder();
-        setHeader(resendRequest, MSG_TYPE_RESEND_REQUEST, msgSeqNum.incrementAndGet());
+        setHeader(resendRequest, MSG_TYPE_RESEND_REQUEST, msgSeqNum.incrementAndGet(), null);
         resendRequest.append(BEGIN_SEQ_NO).append(beginSeqNo).append(SOH);
         resendRequest.append(END_SEQ_NO).append(endSeqNo).append(SOH);
         setChecksumAndBodyLength(resendRequest);
@@ -500,7 +502,7 @@ public class FixHandler implements AutoCloseable, IHandler {
 
     void sendResendRequest(int beginSeqNo) { //do private
         StringBuilder resendRequest = new StringBuilder();
-        setHeader(resendRequest, MSG_TYPE_RESEND_REQUEST, msgSeqNum.incrementAndGet());
+        setHeader(resendRequest, MSG_TYPE_RESEND_REQUEST, msgSeqNum.incrementAndGet(), null);
         resendRequest.append(BEGIN_SEQ_NO).append(beginSeqNo);
         resendRequest.append(END_SEQ_NO).append(0);
         setChecksumAndBodyLength(resendRequest);
@@ -563,7 +565,7 @@ public class FixHandler implements AutoCloseable, IHandler {
                     if(sequence - 1 != lastProcessedSequence.get() ) {
                         int newSeqNo = sequence;
                         StringBuilder sequenceReset =
-                                createSequenceReset(Math.max(beginSeqNo, lastProcessedSequence.get()), newSeqNo);
+                                createSequenceReset(Math.max(beginSeqNo, lastProcessedSequence.get() + 1), newSeqNo);
                         channel.send(Unpooled.wrappedBuffer(sequenceReset.toString().getBytes(StandardCharsets.UTF_8)), Collections.emptyMap(), null, SendMode.MANGLE);
                         resetHeartbeatTask();
                     }
@@ -619,7 +621,9 @@ public class FixHandler implements AutoCloseable, IHandler {
 
     private void sendSequenceReset() {
         StringBuilder sequenceReset = new StringBuilder();
-        setHeader(sequenceReset, MSG_TYPE_SEQUENCE_RESET, msgSeqNum.incrementAndGet());
+        String time = getTime();
+        setHeader(sequenceReset, MSG_TYPE_SEQUENCE_RESET, msgSeqNum.incrementAndGet(), time);
+        sequenceReset.append(ORIG_SENDING_TIME).append(time);
         sequenceReset.append(NEW_SEQ_NO).append(msgSeqNum.get() + 1);
         setChecksumAndBodyLength(sequenceReset);
 
@@ -778,7 +782,7 @@ public class FixHandler implements AutoCloseable, IHandler {
         StringBuilder heartbeat = new StringBuilder();
         int seqNum = msgSeqNum.incrementAndGet();
 
-        setHeader(heartbeat, MSG_TYPE_HEARTBEAT, seqNum);
+        setHeader(heartbeat, MSG_TYPE_HEARTBEAT, seqNum, null);
         setChecksumAndBodyLength(heartbeat);
 
         if (enabled.get()) {
@@ -793,7 +797,7 @@ public class FixHandler implements AutoCloseable, IHandler {
 
     public void sendTestRequest() { //do private
         StringBuilder testRequest = new StringBuilder();
-        setHeader(testRequest, MSG_TYPE_TEST_REQUEST, msgSeqNum.incrementAndGet());
+        setHeader(testRequest, MSG_TYPE_TEST_REQUEST, msgSeqNum.incrementAndGet(), null);
         testRequest.append(TEST_REQ_ID).append(testReqID.incrementAndGet());
         setChecksumAndBodyLength(testRequest);
         if (enabled.get()) {
@@ -818,7 +822,7 @@ public class FixHandler implements AutoCloseable, IHandler {
         else reset = settings.getResetOnLogon();
         if (reset) msgSeqNum.getAndSet(0);
 
-        setHeader(logon, MSG_TYPE_LOGON, msgSeqNum.get() + 1);
+        setHeader(logon, MSG_TYPE_LOGON, msgSeqNum.get() + 1, null);
         if (settings.useNextExpectedSeqNum()) logon.append(NEXT_EXPECTED_SEQ_NUM).append(serverMsgSeqNum.get() + 1);
         if (settings.getEncryptMethod() != null) logon.append(ENCRYPT_METHOD).append(settings.getEncryptMethod());
         logon.append(HEART_BT_INT).append(settings.getHeartBtInt());
@@ -848,7 +852,7 @@ public class FixHandler implements AutoCloseable, IHandler {
     private void sendLogout() {
         if (enabled.get()) {
             StringBuilder logout = new StringBuilder();
-            setHeader(logout, MSG_TYPE_LOGOUT, msgSeqNum.incrementAndGet());
+            setHeader(logout, MSG_TYPE_LOGOUT, msgSeqNum.incrementAndGet(), null);
             setChecksumAndBodyLength(logout);
 
             LOGGER.debug("Sending logout - {}", logout);
@@ -902,14 +906,19 @@ public class FixHandler implements AutoCloseable, IHandler {
         }
     }
 
-    private void setHeader(StringBuilder stringBuilder, String msgType, Integer seqNum) {
+    private void setHeader(StringBuilder stringBuilder, String msgType, Integer seqNum, String time) {
         stringBuilder.append(BEGIN_STRING_TAG).append("=").append(settings.getBeginString());
         stringBuilder.append(MSG_TYPE).append(msgType);
         stringBuilder.append(MSG_SEQ_NUM).append(seqNum);
         if (settings.getSenderCompID() != null) stringBuilder.append(SENDER_COMP_ID).append(settings.getSenderCompID());
         if (settings.getTargetCompID() != null) stringBuilder.append(TARGET_COMP_ID).append(settings.getTargetCompID());
         if (settings.getSenderSubID() != null) stringBuilder.append(SENDER_SUB_ID).append(settings.getSenderSubID());
-        stringBuilder.append(SENDING_TIME).append(getTime());
+        stringBuilder.append(SENDING_TIME);
+        if(time != null) {
+            stringBuilder.append(time);
+        } else {
+            stringBuilder.append(getTime());
+        }
     }
 
     private void setChecksumAndBodyLength(StringBuilder stringBuilder) {
@@ -968,13 +977,18 @@ public class FixHandler implements AutoCloseable, IHandler {
         FixField sendingTime = findField(buf, SENDING_TIME_TAG);
         FixField seqNum = requireNonNull(findField(buf, MSG_SEQ_NUM_TAG), "SeqNum field was null.");
 
+        String time = getTime();
         if (sendingTime == null) {
-            seqNum.insertNext(SENDING_TIME_TAG, getTime());
+            seqNum.insertNext(SENDING_TIME, time).insertNext(ORIG_SENDING_TIME, time);
         } else {
             String value = sendingTime.getValue();
 
             if (value == null || value.isEmpty() || value.equals("null")) {
-                sendingTime.setValue(getTime());
+                sendingTime.setValue(time);
+                sendingTime.insertNext(ORIG_SENDING_TIME, time);
+            } else {
+                sendingTime.setValue(time);
+                sendingTime.insertNext(ORIG_SENDING_TIME, value);
             }
         }
     }
@@ -986,7 +1000,9 @@ public class FixHandler implements AutoCloseable, IHandler {
 
     private StringBuilder createSequenceReset(int seqNo, int newSeqNo) {
         StringBuilder sequenceReset = new StringBuilder();
-        setHeader(sequenceReset, MSG_TYPE_SEQUENCE_RESET, seqNo);
+        String time = getTime();
+        setHeader(sequenceReset, MSG_TYPE_SEQUENCE_RESET, seqNo, time);
+        sequenceReset.append(ORIG_SENDING_TIME).append(time);
         sequenceReset.append(POSS_DUP).append(IS_POSS_DUP);
         sequenceReset.append(GAP_FILL_FLAG).append("Y");
         sequenceReset.append(NEW_SEQ_NO).append(newSeqNo);
