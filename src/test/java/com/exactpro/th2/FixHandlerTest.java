@@ -35,18 +35,24 @@ import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.Instant;
+import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
+import static com.exactpro.th2.conn.dirty.fix.FixByteBufUtilKt.findField;
 import static com.exactpro.th2.constants.Constants.BEGIN_STRING_TAG;
 import static com.exactpro.th2.constants.Constants.BODY_LENGTH_TAG;
 import static com.exactpro.th2.constants.Constants.CHECKSUM_TAG;
 import static com.exactpro.th2.constants.Constants.DEFAULT_APPL_VER_ID_TAG;
+import static com.exactpro.th2.constants.Constants.END_SEQ_NO_TAG;
+import static com.exactpro.th2.constants.Constants.MSG_SEQ_NUM_TAG;
 import static com.exactpro.th2.constants.Constants.MSG_TYPE_TAG;
+import static com.exactpro.th2.constants.Constants.NEW_SEQ_NO_TAG;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -54,26 +60,28 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 
 class FixHandlerTest {
 
-    private static final Channel channel = new Channel();
+
+    private Channel channel;
+    private FixHandler fixHandler;
     private static ByteBuf buffer;
     private static ByteBuf oneMessageBuffer;
     private static ByteBuf brokenBuffer;
-    private static FixHandler fixHandler = channel.getFixHandler();
 
     @BeforeAll
     static void init() {
-        fixHandler.onOpen(channel);
-        ByteBuf logonResponse = Unpooled.wrappedBuffer("8=FIXT.1.1\0019=105\00135=A\00134=1\00149=server\00156=client\00150=system\00152=2014-12-22T10:15:30Z\00198=0\001108=30\0011137=9\0011409=0\00110=203\001".getBytes(StandardCharsets.US_ASCII));
-        fixHandler.onIncoming(channel, logonResponse);
-        oneMessageBuffer = Unpooled.wrappedBuffer("8=FIXT.1.1\0019=13\00135=AE\001552=1\00110=169\001".getBytes(StandardCharsets.US_ASCII));
         buffer = Unpooled.wrappedBuffer(("8=FIXT.1.1\0019=13\00135=AE\001552=1\00110=169\0018=FIXT.1.1\0019=13\00135=NN" +
                 "\001552=2\00110=100\0018=FIXT.1.1\0019=13\00135=NN\001552=2\00110=100\001").getBytes(StandardCharsets.US_ASCII));
         brokenBuffer = Unpooled.wrappedBuffer("A8=FIXT.1.1\0019=13\00135=AE\001552=1\00110=16913138=FIXT.1.1\0019=13\00135=AE\001552=1\00110=169\001".getBytes(StandardCharsets.US_ASCII));
+        oneMessageBuffer = Unpooled.wrappedBuffer("8=FIXT.1.1\0019=13\00135=AE\001552=1\00110=169\001".getBytes(StandardCharsets.US_ASCII));
     }
 
     @BeforeEach
     void beforeEach() {
-        fixHandler.getEnabled().set(true);
+        channel = new Channel(createHandlerSettings());
+        fixHandler = channel.getFixHandler();
+        fixHandler.onOpen(channel);
+        ByteBuf logonResponse = Unpooled.wrappedBuffer("8=FIXT.1.1\0019=105\00135=A\00134=1\00149=server\00156=client\00150=system\00152=2014-12-22T10:15:30Z\00198=0\001108=30\0011137=9\0011409=0\00110=203\001".getBytes(StandardCharsets.US_ASCII));
+        fixHandler.onIncoming(channel, logonResponse);
     }
 
     @AfterAll
@@ -149,6 +157,61 @@ class FixHandlerTest {
         assertEquals(expectedResendRequest, new String(channel.getQueue().get(1).array()));
     }
 
+    @NotNull
+    public static FixHandlerSettings createHandlerSettings() {
+        final FixHandlerSettings fixHandlerSettings = new FixHandlerSettings();
+        fixHandlerSettings.setHost("127.0.0.1");
+        fixHandlerSettings.setPort(8080);
+        fixHandlerSettings.setBeginString("FIXT.1.1");
+        fixHandlerSettings.setHeartBtInt(30);
+        fixHandlerSettings.setSenderCompID("client");
+        fixHandlerSettings.setTargetCompID("server");
+        fixHandlerSettings.setEncryptMethod("0");
+        fixHandlerSettings.setUsername("username");
+        fixHandlerSettings.setPassword("pass");
+        fixHandlerSettings.setTestRequestDelay(10);
+        fixHandlerSettings.setReconnectDelay(5);
+        fixHandlerSettings.setDisconnectRequestDelay(5);
+        fixHandlerSettings.setResetSeqNumFlag(false);
+        fixHandlerSettings.setResetOnLogon(false);
+        fixHandlerSettings.setDefaultApplVerID("9");
+        fixHandlerSettings.setSenderSubID("trader");
+        return fixHandlerSettings;
+    }
+
+    @NotNull
+    private static FixHandler createFixHandler() {
+        FixHandlerSettings fixHandlerSettings = createHandlerSettings();
+        IHandlerContext context = Mockito.mock(IHandlerContext.class);
+        Mockito.when(context.getSettings()).thenReturn(fixHandlerSettings);
+        return new FixHandler(context);
+    }
+
+    @Test
+    void getTimeTestWithSendingDateTimeFormatBeingNull() {
+        FixHandler originalFixHandler = createFixHandler();
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyyMMdd-HH:mm:ss.SSSSSSSSS");
+        String actual = originalFixHandler.getTime();
+        LocalDateTime time = LocalDateTime.parse(actual, formatter);
+        String expected = formatter.format(time);
+
+        assertEquals(expected, actual);
+    }
+
+    @Test
+    void getTimeTestWithNewSendingDateTimeFormat() {
+        FixHandler originalFixHandler = createFixHandler();
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyyMMdd-HH:mm:ss.SSS");
+        originalFixHandler.settings.setSendingDateTimeFormat(formatter);
+        String actual = originalFixHandler.getTime();
+
+        LocalDateTime time = LocalDateTime.parse(actual, formatter);
+        String expected = formatter.format(time);
+
+        assertEquals(expected, actual);
+    }
+
+
     @Test
     void onConnectionTest() {
         channel.clearQueue();
@@ -160,7 +223,7 @@ class FixHandlerTest {
         } catch (InterruptedException e) {
             e.printStackTrace();
         }
-        assertEquals("8=FIXT.1.1\u00019=105\u000135=A\u000134=7\u000149=client\u000156=server\u000150=trader\u000152=2014-12-22T10:15:30Z\u000198=0\u0001108=30\u00011137=9\u0001553=username\u0001554=pass\u000110=209\u0001",
+        assertEquals("8=FIXT.1.1\u00019=105\u000135=A\u000134=2\u000149=client\u000156=server\u000150=trader\u000152=2014-12-22T10:15:30Z\u000198=0\u0001108=30\u00011137=9\u0001553=username\u0001554=pass\u000110=204\u0001",
                 new String(channel.getQueue().get(0).array()));
     }
 
@@ -170,7 +233,7 @@ class FixHandlerTest {
         channel.close();
         fixHandler.onOpen(channel);
         channel.close();
-        var logon = "8=FIXT.1.1\u00019=105\u000135=A\u000134=7\u000149=client\u000156=server\u000150=trader\u000152=2014-12-22T10:15:30Z\u000198=0\u0001108=30\u00011137=9\u0001553=username\u0001554=pass\u000110=209\u0001";
+        var logon = "8=FIXT.1.1\u00019=105\u000135=A\u000134=2\u000149=client\u000156=server\u000150=trader\u000152=2014-12-22T10:15:30Z\u000198=0\u0001108=30\u00011137=9\u0001553=username\u0001554=pass\u000110=204\u0001";
         assertEquals(channel.getQueue().size(), 1);
         assertEquals(logon, new String(channel.getQueue().get(0).array()));
         channel.clearQueue();
@@ -187,9 +250,9 @@ class FixHandlerTest {
         ByteBuf bufferForPrepareMessage4 = Unpooled.buffer().writeBytes("8=FIXT.1.1\0019=192\00135=A\00111=3428785\00122=8\00138=30\00140=2\00144=55\00148=INSTR1\00154=1\00159=0\00160=20220127-18:38:35\001526=11111\001528=A\001581=1\001453=4\001448=DEMO-CONN1\001447=D\001452=76\001448=0\001447=P\001452=3\001448=0\00147=P\001452=122\001448=3\001447=P\001452=12\00110=228\001".getBytes(StandardCharsets.US_ASCII));
 
         String expectedMessage1 = "8=FIXT.1.1\u00019=70\u000135=A\u0001552=1\u000149=client\u000134=8\u000156=server\u000152=2014-12-22T10:15:30Z\u000150=trader\u000110=132\u0001";
-        String expectedMessage2 = "8=FIXT.1.1\u00019=65\u000134=4\u000149=client\u000156=server\u000152=2014-12-22T10:15:30Z\u000150=trader\u0001552=1\u000110=157\u0001";
-        String expectedMessage3 = "8=FIXT.1.1\u00019=243\u000135=A\u000134=5\u000149=client\u000156=server\u000150=trader\u000111=9977764\u000122=8\u000138=100\u000140=2\u000144=55\u000152=20220127-12:00:40.775\u000148=INSTR2\u000154=2\u000159=3\u000160=20220127-15:00:36\u0001528=A\u0001581=1\u0001453=4\u0001448=DEMO-CONN2\u0001447=D\u0001452=76\u0001448=0\u0001447=P\u0001452=3\u0001448=0\u0001447=P\u0001452=122\u0001448=3\u0001447=P\u0001452=12\u000110=120\u0001";
-        String expectedMessage4 = "8=FIXT.1.1\u00019=250\u000135=A\u000134=6\u000149=client\u000156=server\u000152=2014-12-22T10:15:30Z\u000150=trader\u000111=3428785\u000122=8\u000138=30\u000140=2\u000144=55\u000148=INSTR1\u000154=1\u000159=0\u000160=20220127-18:38:35\u0001526=11111\u0001528=A\u0001581=1\u0001453=4\u0001448=DEMO-CONN1\u0001447=D\u0001452=76\u0001448=0\u0001447=P\u0001452=3\u0001448=0\u000147=P\u0001452=122\u0001448=3\u0001447=P\u0001452=12\u000110=235\u0001";
+        String expectedMessage2 = "8=FIXT.1.1\u00019=65\u000134=2\u000149=client\u000156=server\u000152=2014-12-22T10:15:30Z\u000150=trader\u0001552=1\u000110=155\u0001";
+        String expectedMessage3 = "8=FIXT.1.1\u00019=243\u000135=A\u000134=3\u000149=client\u000156=server\u000150=trader\u000111=9977764\u000122=8\u000138=100\u000140=2\u000144=55\u000152=20220127-12:00:40.775\u000148=INSTR2\u000154=2\u000159=3\u000160=20220127-15:00:36\u0001528=A\u0001581=1\u0001453=4\u0001448=DEMO-CONN2\u0001447=D\u0001452=76\u0001448=0\u0001447=P\u0001452=3\u0001448=0\u0001447=P\u0001452=122\u0001448=3\u0001447=P\u0001452=12\u000110=118\u0001";
+        String expectedMessage4 = "8=FIXT.1.1\u00019=250\u000135=A\u000134=4\u000149=client\u000156=server\u000152=2014-12-22T10:15:30Z\u000150=trader\u000111=3428785\u000122=8\u000138=30\u000140=2\u000144=55\u000148=INSTR1\u000154=1\u000159=0\u000160=20220127-18:38:35\u0001526=11111\u0001528=A\u0001581=1\u0001453=4\u0001448=DEMO-CONN1\u0001447=D\u0001452=76\u0001448=0\u0001447=P\u0001452=3\u0001448=0\u000147=P\u0001452=122\u0001448=3\u0001447=P\u0001452=12\u000110=233\u0001";
         Map<String, String> expected = new HashMap<>();
         expected.put("MsgType", "A");
         Map<String, String> expected2 = new HashMap<>();
@@ -251,7 +314,7 @@ class FixHandlerTest {
 
     @Test
     void sendTestRequestTest() {
-        String expected = "8=FIXT.1.1\u00019=70\u000135=1\u000134=1\u000149=client\u000156=server\u000150=trader\u000152=2014-12-22T10:15:30Z\u0001112=1\u000110=101\u0001";
+        String expected = "8=FIXT.1.1\u00019=70\u000135=1\u000134=2\u000149=client\u000156=server\u000150=trader\u000152=2014-12-22T10:15:30Z\u0001112=1\u000110=102\u0001";
         channel.clearQueue();
         fixHandler.sendTestRequest();
         assertEquals(expected, new String(channel.getQueue().get(0).array()));
@@ -259,7 +322,19 @@ class FixHandlerTest {
 
     @Test
     void handleResendRequestTest() {
-        //later
+        for (int i = 0; i < 3; i++) {
+            fixHandler.sendResendRequest(1);
+        }
+        ByteBuf resendRequest = Unpooled.wrappedBuffer("8=FIXT.1.1\u00019=70\u000135=2\u000134=2\u00017=1\u000116=0\u000149=client\u000156=server\u000150=trader\u000152=2014-12-22T10:15:30Z\u000110=101\u0001".getBytes(StandardCharsets.US_ASCII));
+        channel.clearQueue();
+        fixHandler.onIncoming(channel, resendRequest);
+        ByteBuf sequenceReset = channel.getQueue().get(0);
+        assertEquals("8=FIXT.1.1\u00019=75\u000135=4\u000134=1\u000149=client\u000156=server\u000150=trader\u000152=2014-12-22T10:15:30Z\u0001123=Y\u000136=5\u000110=115\u0001", new String(sequenceReset.array()));
+        channel.clearQueue();
+        fixHandler.sendResendRequest(2);
+        ByteBuf resendRequestOutgoing = channel.getQueue().get(0);
+        assertEquals("8=FIXT.1.1\u00019=73\u000135=2\u000134=5\u000149=client\u000156=server\u000150=trader\u000152=2014-12-22T10:15:30Z\u00017=2\u000116=0\u000110=230\u0001", new String(resendRequestOutgoing.array()));
+        assertEquals(findField(resendRequestOutgoing, MSG_SEQ_NUM_TAG).getValue(), findField(sequenceReset, NEW_SEQ_NO_TAG).getValue());
     }
 
     @Test
@@ -343,26 +418,10 @@ class Channel implements IChannel {
     private final MyFixHandler fixHandler;
     private final List<ByteBuf> queue = new ArrayList<>();
 
-    Channel() {
-        this.fixHandlerSettings = new FixHandlerSettings();
-        fixHandlerSettings.setHost("127.0.0.1");
-        fixHandlerSettings.setPort(8080);
-        fixHandlerSettings.setBeginString("FIXT.1.1");
-        fixHandlerSettings.setHeartBtInt(30);
-        fixHandlerSettings.setSenderCompID("client");
-        fixHandlerSettings.setTargetCompID("server");
-        fixHandlerSettings.setEncryptMethod("0");
-        fixHandlerSettings.setUsername("username");
-        fixHandlerSettings.setPassword("pass");
-        fixHandlerSettings.setTestRequestDelay(10);
-        fixHandlerSettings.setReconnectDelay(5);
-        fixHandlerSettings.setDisconnectRequestDelay(5);
-        fixHandlerSettings.setResetSeqNumFlag(false);
-        fixHandlerSettings.setResetOnLogon(false);
-        fixHandlerSettings.setDefaultApplVerID("9");
-        fixHandlerSettings.setSenderSubID("trader");
+    Channel(FixHandlerSettings fixHandlerSettings) {
+        this.fixHandlerSettings = fixHandlerSettings;
         IHandlerContext context = Mockito.mock(IHandlerContext.class);
-        Mockito.when(context.getSettings()).thenReturn(fixHandlerSettings);
+        Mockito.when(context.getSettings()).thenReturn(this.fixHandlerSettings);
 
         this.fixHandler = new MyFixHandler(context);
     }

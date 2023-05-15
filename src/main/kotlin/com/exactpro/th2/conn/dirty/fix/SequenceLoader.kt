@@ -19,33 +19,57 @@ import com.exactpro.th2.SequenceHolder
 import com.exactpro.th2.common.grpc.Direction
 import com.exactpro.th2.common.message.toTimestamp
 import com.exactpro.th2.constants.Constants.MSG_SEQ_NUM_TAG
-import com.exactpro.th2.dataprovider.grpc.DataProviderService
-import com.exactpro.th2.dataprovider.grpc.MessageGroupResponse
-import com.exactpro.th2.dataprovider.grpc.MessageSearchRequest
-import com.exactpro.th2.dataprovider.grpc.MessageSearchResponse
-import com.exactpro.th2.dataprovider.grpc.MessageStream
-import com.exactpro.th2.dataprovider.grpc.TimeRelation
+import com.exactpro.th2.dataprovider.lw.grpc.DataProviderService
+import com.exactpro.th2.dataprovider.lw.grpc.MessageGroupResponse
+import com.exactpro.th2.dataprovider.lw.grpc.MessageSearchRequest
+import com.exactpro.th2.dataprovider.lw.grpc.MessageStream
+import com.exactpro.th2.dataprovider.lw.grpc.TimeRelation
 import com.google.protobuf.Int32Value
 import com.google.protobuf.Timestamp
-import com.google.protobuf.util.Timestamps
 import com.google.protobuf.util.Timestamps.compare
 import io.netty.buffer.Unpooled
 import java.time.Instant
+import java.time.LocalDate
+import java.time.LocalDateTime
 import java.time.LocalTime
 import java.time.OffsetDateTime
 import java.time.ZoneId
 import java.time.ZoneOffset
+import java.time.ZonedDateTime
 
 
 class SequenceLoader(
     private val dataProvider: DataProviderService,
     private val sessionStartTime: LocalTime?,
     private val sessionAlias: String,
+    private val bookName: String
 ) {
-    private val sessionStart = OffsetDateTime
-        .now(ZoneOffset.UTC)
-        .with(sessionStartTime ?: LocalTime.now())
-        .atZoneSameInstant(ZoneId.systemDefault());
+    private val sessionStart: ZonedDateTime
+
+    init {
+        val today = LocalDate.now(ZoneOffset.UTC)
+        val start = sessionStartTime?.atDate(today)
+        val now = LocalDateTime.now()
+        if(start == null) {
+            sessionStart = OffsetDateTime
+                .now(ZoneOffset.UTC)
+                .with(LocalTime.now())
+                .atZoneSameInstant(ZoneId.systemDefault())
+        } else {
+            sessionStart = if(start.isAfter(now)) {
+                OffsetDateTime
+                    .now(ZoneOffset.UTC)
+                    .minusDays(1)
+                    .with(sessionStartTime)
+                    .atZoneSameInstant(ZoneId.systemDefault())
+            } else {
+                OffsetDateTime
+                    .now(ZoneOffset.UTC)
+                    .with(sessionStartTime)
+                    .atZoneSameInstant(ZoneId.systemDefault())
+            }
+        }
+    }
 
     private val sessionStartDateTime = sessionStart
         .toInstant()
@@ -66,7 +90,7 @@ class SequenceLoader(
         var message: MessageGroupResponse? = null
         for (response in dataProvider.searchMessages(request)) {
             message = response.message
-            if (sessionStartTime != null && compare(sessionStartDateTime, message.timestamp) > 0) {
+            if (sessionStartTime != null && compare(sessionStartDateTime, message.messageId.timestamp) > 0) {
                 return 0
             }
             val buffer = Unpooled.wrappedBuffer(message.bodyRaw.asReadOnlyByteBuffer())
@@ -74,7 +98,7 @@ class SequenceLoader(
         }
         return when (message) {
             null -> 0
-            else -> searchSeq(createSearchRequest(message.timestamp, message.messageId.direction))
+            else -> searchSeq(createSearchRequest(message.messageId.timestamp, message.messageId.direction))
         }
     }
 
@@ -86,9 +110,10 @@ class SequenceLoader(
             addResponseFormats(BASE_64_FORMAT)
             addStream(
                 MessageStream.newBuilder()
-                .setName(sessionAlias)
-                .setDirection(direction)
+                    .setName(sessionAlias)
+                    .setDirection(direction)
             )
+            bookIdBuilder.name = bookName
             resultCountLimit = Int32Value.of(5)
         }.build()
 

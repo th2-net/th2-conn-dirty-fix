@@ -26,21 +26,13 @@ import com.exactpro.th2.conn.dirty.tcp.core.api.IChannel.SendMode;
 import com.exactpro.th2.conn.dirty.tcp.core.api.IHandler;
 import com.exactpro.th2.conn.dirty.tcp.core.api.IHandlerContext;
 import com.exactpro.th2.conn.dirty.tcp.core.util.CommonUtil;
-import com.exactpro.th2.dataprovider.grpc.DataProviderService;
+import com.exactpro.th2.dataprovider.lw.grpc.DataProviderService;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
-import java.util.concurrent.Callable;
-import java.util.concurrent.locks.ReentrantLock;
-import kotlin.Function;
-import org.apache.commons.lang3.StringUtils;
-import org.apache.commons.lang3.exception.ExceptionUtils;
-import org.jetbrains.annotations.NotNull;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Paths;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.ZoneOffset;
@@ -58,6 +50,12 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
+import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.lang3.exception.ExceptionUtils;
+import org.jetbrains.annotations.NotNull;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import static com.exactpro.th2.conn.dirty.fix.FixByteBufUtilKt.findField;
 import static com.exactpro.th2.conn.dirty.fix.FixByteBufUtilKt.findLastField;
@@ -68,7 +66,6 @@ import static com.exactpro.th2.conn.dirty.fix.FixByteBufUtilKt.updateLength;
 import static com.exactpro.th2.conn.dirty.fix.KeyFileType.Companion.OperationMode.ENCRYPT_MODE;
 import static com.exactpro.th2.conn.dirty.tcp.core.util.CommonUtil.getEventId;
 import static com.exactpro.th2.conn.dirty.tcp.core.util.CommonUtil.toByteBuf;
-import static com.exactpro.th2.constants.Constants.ADMIN_MESSAGES;
 import static com.exactpro.th2.constants.Constants.BEGIN_SEQ_NO;
 import static com.exactpro.th2.constants.Constants.BEGIN_SEQ_NO_TAG;
 import static com.exactpro.th2.constants.Constants.BEGIN_STRING_TAG;
@@ -150,12 +147,11 @@ public class FixHandler implements AutoCloseable, IHandler {
     private final InetSocketAddress address;
     private final DataProviderService dataProvider;
 
-    private Future<?> heartbeatTimer = CompletableFuture.completedFuture(null);
-    private Future<?> testRequestTimer = CompletableFuture.completedFuture(null);
+    private AtomicReference<Future<?>> heartbeatTimer = new AtomicReference<>(CompletableFuture.completedFuture(null));
+    private AtomicReference<Future<?>> testRequestTimer = new AtomicReference<>(CompletableFuture.completedFuture(null));
     private Future<?> reconnectRequestTimer = CompletableFuture.completedFuture(null);
     private volatile IChannel channel;
     protected FixHandlerSettings settings;
-    private long lastSendTime = System.currentTimeMillis();
 
     public FixHandler(IHandlerContext context) {
         this.context = context;
@@ -186,15 +182,25 @@ public class FixHandler implements AutoCloseable, IHandler {
 
             if(scheduleTime.isBefore(now)) {
                 scheduleTime = now.plusDays(1).with(resetTime);
-            } else if(now.isBefore(now.with(settings.getSessionStartTime()))) {
-                sessionActive.set(false);
             }
 
             long time = now.until(scheduleTime, ChronoUnit.SECONDS);
             executorService.scheduleAtFixedRate(() -> {
-                this.close();
+                sendLogout();
+                waitLogoutResponse();
+                channel.close();
                 sessionActive.set(false);
             }, time, DAY_SECONDS, TimeUnit.SECONDS);
+
+            LocalDate today = LocalDate.now(ZoneOffset.UTC);
+
+            LocalDateTime start = settings.getSessionStartTime().atDate(today);
+            LocalDateTime end = settings.getSessionEndTime().atDate(today);
+
+            LocalDateTime nowDateTime = LocalDateTime.now(ZoneOffset.UTC);
+            if(nowDateTime.isAfter(end) && nowDateTime.isBefore(start)) {
+                sessionActive.set(false);
+            }
         }
 
         String host = settings.getHost();
@@ -215,11 +221,15 @@ public class FixHandler implements AutoCloseable, IHandler {
     public void onStart() {
         channel = context.createChannel(address, settings.getSecurity(), Map.of(), true, settings.getReconnectDelay() * 1000L, Integer.MAX_VALUE);
         if(settings.isLoadSequencesFromCradle()) {
-            SequenceLoader seqLoader = new SequenceLoader(dataProvider, settings.getSessionStartTime(), channel.getSessionAlias());
+            SequenceLoader seqLoader = new SequenceLoader(
+                    dataProvider,
+                    settings.getSessionStartTime(),
+                    channel.getSessionAlias(),
+                    context.getBookName()
+            );
             SequenceHolder sequences = seqLoader.load();
             LOGGER.info("Loaded sequences are: client - {}, server - {}", sequences.getClientSeq(), sequences.getServerSeq());
-            // FIXME: delete `... + 1` when logout on close will consistently be saved to cradle
-            msgSeqNum.set(sequences.getClientSeq() + 1);
+            msgSeqNum.set(sequences.getClientSeq());
             serverMsgSeqNum.set(sequences.getServerSeq());
         }
         channel.open();
@@ -231,6 +241,7 @@ public class FixHandler implements AutoCloseable, IHandler {
         if (!sessionActive.get()) {
             throw new IllegalStateException("Session is not active. It is not possible to send messages.");
         }
+
         if (!channel.isOpen()) {
             try {
                 channel.open().get();
@@ -319,6 +330,13 @@ public class FixHandler implements AutoCloseable, IHandler {
             isDup = possDup.getValue().equals(IS_POSS_DUP);
         }
 
+        String msgTypeValue = requireNonNull(msgType.getValue());
+        if(msgTypeValue.equals(MSG_TYPE_LOGOUT)) {
+            serverMsgSeqNum.incrementAndGet();
+            handleLogout(message);
+            return metadata;
+        }
+
         int receivedMsgSeqNum = Integer.parseInt(requireNonNull(msgSeqNumValue.getValue()));
 
         if(receivedMsgSeqNum < serverMsgSeqNum.get() && !isDup) {
@@ -335,12 +353,11 @@ public class FixHandler implements AutoCloseable, IHandler {
             sendResendRequest(serverMsgSeqNum.get(), receivedMsgSeqNum);
         }
 
-        String msgTypeValue = requireNonNull(msgType.getValue());
+
         switch (msgTypeValue) {
             case MSG_TYPE_HEARTBEAT:
                 if (LOGGER.isInfoEnabled()) LOGGER.info("Heartbeat received - {}", message.toString(US_ASCII));
                 checkHeartbeat(message);
-                testRequestTimer = executorService.schedule(this::sendTestRequest, settings.getTestRequestDelay(), TimeUnit.SECONDS);
                 break;
             case MSG_TYPE_LOGON:
                 if (LOGGER.isInfoEnabled()) LOGGER.info("Logon received - {}", message.toString(US_ASCII));
@@ -357,8 +374,8 @@ public class FixHandler implements AutoCloseable, IHandler {
                         int nextExpectedSeqNumber = Integer.parseInt(requireNonNull(nextExpectedSeqField.getValue()));
                         int seqNum = msgSeqNum.incrementAndGet() + 1;
                         if(nextExpectedSeqNumber < seqNum) {
-                            recovery(nextExpectedSeqNumber, seqNum);}
-                        else if (nextExpectedSeqNumber > seqNum) {
+                            recovery(nextExpectedSeqNumber, seqNum);
+                        } else if (nextExpectedSeqNumber > seqNum) {
                             context.send(
                                     Event.start()
                                             .name(String.format("Corrected next client seq num from %s to %s", seqNum, nextExpectedSeqNumber))
@@ -376,47 +393,16 @@ public class FixHandler implements AutoCloseable, IHandler {
                         connStarted.set(true);
                     }
 
-                    if (heartbeatTimer != null) {
-                        heartbeatTimer.cancel(false);
-                    }
-                    heartbeatTimer = executorService.scheduleWithFixedDelay(this::sendHeartbeat, 1, 1, TimeUnit.SECONDS);
+                    resetHeartbeatTask();
 
-                    testRequestTimer = executorService.schedule(this::sendTestRequest, settings.getTestRequestDelay(), TimeUnit.SECONDS);
+                    resetTestRequestTask();
                 } else {
                     enabled.set(false);
                     reconnectRequestTimer = executorService.schedule(this::sendLogon, settings.getReconnectDelay(), TimeUnit.SECONDS);
                 }
                 break;
             case MSG_TYPE_LOGOUT: //extract logout reason
-                if (LOGGER.isInfoEnabled()) LOGGER.info("Logout received - {}", message.toString(US_ASCII));
-                FixField sessionStatus = findField(message, SESSION_STATUS_TAG);
-                boolean isSequenceChanged = false;
-                if(sessionStatus != null) {
-                    int statusCode = Integer.parseInt(Objects.requireNonNull(sessionStatus.getValue()));
-                    if(statusCode != SUCCESSFUL_LOGOUT_CODE) {
-                        FixField text = findField(message, TEXT_TAG);
-                        if (text != null) {
-                            LOGGER.warn("Received Logout has text (58) tag: {}", text.getValue());
-                            String value = StringUtils.substringBetween(text.getValue(), "expecting ", " but received");
-                            if (value != null) {
-                                msgSeqNum.set(Integer.parseInt(value) - 1);
-                                isSequenceChanged = true;
-                            }
-                        }
-                        serverMsgSeqNum.set(Integer.parseInt(msgSeqNumValue.getValue()) - 1);
-                    }
-                }
-                if(!enabled.get() && !isSequenceChanged) {
-                    msgSeqNum.incrementAndGet();
-                }
-                if (heartbeatTimer != null) {
-                    heartbeatTimer.cancel(false);
-                }
-                if (testRequestTimer != null) {
-                    testRequestTimer.cancel(false);
-                }
-                enabled.set(false);
-                context.send(CommonUtil.toEvent("logout for sender - " + settings.getSenderCompID()));//make more useful
+                handleLogout(message);
                 break;
             case MSG_TYPE_RESEND_REQUEST:
                 if (LOGGER.isInfoEnabled()) LOGGER.info("Resend request received - {}", message.toString(US_ASCII));
@@ -428,13 +414,44 @@ public class FixHandler implements AutoCloseable, IHandler {
                 break;
         }
 
-        if (testRequestTimer != null && !testRequestTimer.isCancelled()) {
-            testRequestTimer.cancel(false);
-        }
+        resetTestRequestTask();
 
         metadata.put(STRING_MSG_TYPE, msgTypeValue);
 
         return metadata;
+    }
+
+    private void handleLogout(@NotNull ByteBuf message) {
+        if (LOGGER.isInfoEnabled()) LOGGER.info("Logout received - {}", message.toString(US_ASCII));
+        FixField sessionStatus = findField(message, SESSION_STATUS_TAG);
+        boolean isSequenceChanged = false;
+        if(sessionStatus != null) {
+            int statusCode = Integer.parseInt(Objects.requireNonNull(sessionStatus.getValue()));
+            if(statusCode != SUCCESSFUL_LOGOUT_CODE) {
+                FixField text = findField(message, TEXT_TAG);
+                if (text != null) {
+                    LOGGER.warn("Received Logout has text (58) tag: {}", text.getValue());
+                    String wrongClientSequence = StringUtils.substringBetween(text.getValue(), "expecting ", " but received");
+                    if (wrongClientSequence != null) {
+                        msgSeqNum.set(Integer.parseInt(wrongClientSequence) - 1);
+                        isSequenceChanged = true;
+                    }
+                    String wrongClientNextExpectedSequence = StringUtils.substringBetween(text.getValue(), "MSN to be sent is ", " but received");
+                    if(wrongClientNextExpectedSequence != null && settings.getResetStateOnServerReset()) {
+                        serverMsgSeqNum.set(Integer.parseInt(wrongClientNextExpectedSequence));
+                    }
+                }
+            }
+        }
+
+        if(!enabled.get() && !isSequenceChanged) {
+            msgSeqNum.incrementAndGet();
+        }
+
+        cancelFuture(heartbeatTimer);
+        cancelFuture(testRequestTimer);
+        enabled.set(false);
+        context.send(CommonUtil.toEvent("logout for sender - " + settings.getSenderCompID()));//make more useful
     }
 
     private void resetSequence(ByteBuf message) {
@@ -456,21 +473,20 @@ public class FixHandler implements AutoCloseable, IHandler {
         msgSeqNum.set(0);
         serverMsgSeqNum.set(0);
         sessionActive.set(true);
-        sendLogon();
+        channel.open();
     }
 
     public void sendResendRequest(int beginSeqNo, int endSeqNo) { //do private
-        lastSendTime = System.currentTimeMillis();
         StringBuilder resendRequest = new StringBuilder();
         setHeader(resendRequest, MSG_TYPE_RESEND_REQUEST, msgSeqNum.incrementAndGet());
         resendRequest.append(BEGIN_SEQ_NO).append(beginSeqNo).append(SOH);
         resendRequest.append(END_SEQ_NO).append(endSeqNo).append(SOH);
         setChecksumAndBodyLength(resendRequest);
         channel.send(Unpooled.wrappedBuffer(resendRequest.toString().getBytes(StandardCharsets.UTF_8)), Collections.emptyMap(), null, IChannel.SendMode.MANGLE);
+        resetHeartbeatTask();
     }
 
     void sendResendRequest(int beginSeqNo) { //do private
-        lastSendTime = System.currentTimeMillis();
         StringBuilder resendRequest = new StringBuilder();
         setHeader(resendRequest, MSG_TYPE_RESEND_REQUEST, msgSeqNum.incrementAndGet());
         resendRequest.append(BEGIN_SEQ_NO).append(beginSeqNo);
@@ -479,6 +495,7 @@ public class FixHandler implements AutoCloseable, IHandler {
 
         if (enabled.get()) {
             channel.send(Unpooled.wrappedBuffer(resendRequest.toString().getBytes(StandardCharsets.UTF_8)), Collections.emptyMap(), null, IChannel.SendMode.MANGLE);
+            resetHeartbeatTask();
         } else {
             sendLogon();
         }
@@ -504,7 +521,7 @@ public class FixHandler implements AutoCloseable, IHandler {
 
     private void recovery(int beginSeqNo, int endSeqNo) {
         if (endSeqNo == 0) {
-            endSeqNo = msgSeqNum.get();
+            endSeqNo = msgSeqNum.get() + 1;
         }
         LOGGER.info("Returning messages from {} to {}", beginSeqNo, endSeqNo);
 
@@ -515,10 +532,10 @@ public class FixHandler implements AutoCloseable, IHandler {
         setChecksumAndBodyLength(sequenceReset);
 
         channel.send(Unpooled.wrappedBuffer(sequenceReset.toString().getBytes(StandardCharsets.UTF_8)), Collections.emptyMap(), null, SendMode.MANGLE);
+        resetHeartbeatTask();
     }
 
     private void sendSequenceReset() {
-        lastSendTime = System.currentTimeMillis();
         StringBuilder sequenceReset = new StringBuilder();
         setHeader(sequenceReset, MSG_TYPE_SEQUENCE_RESET, msgSeqNum.incrementAndGet());
         sequenceReset.append(NEW_SEQ_NO).append(msgSeqNum.get() + 1);
@@ -526,6 +543,7 @@ public class FixHandler implements AutoCloseable, IHandler {
 
         if (enabled.get()) {
             channel.send(Unpooled.wrappedBuffer(sequenceReset.toString().getBytes(StandardCharsets.UTF_8)), Collections.emptyMap(), null, IChannel.SendMode.MANGLE);
+            resetHeartbeatTask();
         } else {
             sendLogon();
         }
@@ -558,7 +576,6 @@ public class FixHandler implements AutoCloseable, IHandler {
 
     @Override
     public void onOutgoing(@NotNull IChannel channel, @NotNull ByteBuf message, @NotNull Map<String, String> metadata) {
-        lastSendTime = System.currentTimeMillis();
         onOutgoingUpdateTag(message, metadata);
 
         if (LOGGER.isDebugEnabled()) {
@@ -676,12 +693,6 @@ public class FixHandler implements AutoCloseable, IHandler {
     }
 
     public void sendHeartbeat() {
-        long secondsSinceLastSend = (System.currentTimeMillis() - lastSendTime) / 1000;
-
-        if (secondsSinceLastSend < settings.getHeartBtInt()) {
-            return;
-        }
-
         StringBuilder heartbeat = new StringBuilder();
         int seqNum = msgSeqNum.incrementAndGet();
 
@@ -691,21 +702,23 @@ public class FixHandler implements AutoCloseable, IHandler {
         if (enabled.get()) {
             LOGGER.info("Send Heartbeat to server - {}", heartbeat);
             channel.send(Unpooled.wrappedBuffer(heartbeat.toString().getBytes(StandardCharsets.UTF_8)), Collections.emptyMap(), null, IChannel.SendMode.MANGLE);
-            lastSendTime = System.currentTimeMillis();
+            resetHeartbeatTask();
+
         } else {
             sendLogon();
         }
     }
 
     public void sendTestRequest() { //do private
-        lastSendTime = System.currentTimeMillis();
         StringBuilder testRequest = new StringBuilder();
-        setHeader(testRequest, MSG_TYPE_TEST_REQUEST, msgSeqNum.get());
+        setHeader(testRequest, MSG_TYPE_TEST_REQUEST, msgSeqNum.incrementAndGet());
         testRequest.append(TEST_REQ_ID).append(testReqID.incrementAndGet());
         setChecksumAndBodyLength(testRequest);
         if (enabled.get()) {
             channel.send(Unpooled.wrappedBuffer(testRequest.toString().getBytes(StandardCharsets.UTF_8)), Collections.emptyMap(), null, IChannel.SendMode.MANGLE);
             LOGGER.info("Send TestRequest to server - {}", testRequest);
+            resetTestRequestTask();
+            resetHeartbeatTask();
         } else {
             sendLogon();
         }
@@ -717,7 +730,6 @@ public class FixHandler implements AutoCloseable, IHandler {
             LOGGER.info("Logon is not sent to server because session is not active.");
             return;
         }
-        lastSendTime = System.currentTimeMillis();
         StringBuilder logon = new StringBuilder();
         Boolean reset;
         if (!connStarted.get()) reset = settings.getResetSeqNumFlag();
@@ -786,17 +798,17 @@ public class FixHandler implements AutoCloseable, IHandler {
     @Override
     public void onClose(@NotNull IChannel channel) {
         enabled.set(false);
-        if (heartbeatTimer != null) {
-            heartbeatTimer.cancel(false);
-        }
-        if (testRequestTimer != null) {
-            testRequestTimer.cancel(false);
-        }
+        cancelFuture(heartbeatTimer);
+        cancelFuture(testRequestTimer);
     }
 
     @Override
     public void close() {
         sendLogout();
+        waitLogoutResponse();
+    }
+
+    private void waitLogoutResponse() {
         long start = System.currentTimeMillis();
         while(System.currentTimeMillis() - start < settings.getDisconnectRequestDelay() && enabled.get()) {
             if (LOGGER.isWarnEnabled()) LOGGER.warn("Waiting session logout: {}", channel.getSessionAlias());
@@ -852,7 +864,6 @@ public class FixHandler implements AutoCloseable, IHandler {
     }
 
     public int getBodyLength(StringBuilder message) { //do private
-
         int start = message.indexOf(SOH, message.indexOf(BODY_LENGTH) + 1);
         int end = message.indexOf(CHECKSUM);
         return end - start;
@@ -866,12 +877,36 @@ public class FixHandler implements AutoCloseable, IHandler {
     }
 
     public String getTime() {
-        String FIX_DATE_TIME_FORMAT_MS = "yyyyMMdd-HH:mm:ss.SSSSSSSSS";
+        DateTimeFormatter formatter = settings.getSendingDateTimeFormat();
         LocalDateTime datetime = LocalDateTime.now();
-        return DateTimeFormatter.ofPattern(FIX_DATE_TIME_FORMAT_MS).format(datetime);
+        return formatter.format(datetime);
     }
 
     public AtomicBoolean getEnabled() {
         return enabled;
+    }
+
+    private void resetHeartbeatTask() {
+        heartbeatTimer.getAndSet(
+            executorService.schedule(
+                this::sendHeartbeat,
+                settings.getHeartBtInt(),
+                TimeUnit.SECONDS
+            )
+        ).cancel(false);
+    }
+
+    private void resetTestRequestTask() {
+        testRequestTimer.getAndSet(
+            executorService.schedule(
+                this::sendTestRequest,
+                settings.getHeartBtInt() * 3,
+                TimeUnit.SECONDS
+            )
+        ).cancel(false);
+    }
+
+    private void cancelFuture(AtomicReference<Future<?>> future) {
+        future.get().cancel(false);
     }
 }

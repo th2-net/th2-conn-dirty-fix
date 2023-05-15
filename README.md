@@ -1,4 +1,4 @@
-# th2-conn-dirty-fix (0.1.0)
+# th2-conn-dirty-fix (1.1.0)
 
 This microservice allows sending and receiving messages via FIX protocol
 
@@ -12,6 +12,7 @@ This microservice allows sending and receiving messages via FIX protocol
 
 ## Session settings
 
++ *sessionGroup* - session group for incoming/outgoing th2 messages (equal to session alias by default)
 + *sessionAlias* - session alias for incoming/outgoing th2 messages
 + *handler* - handler settings
 + *mangler* - mangler settings
@@ -43,8 +44,10 @@ This microservice allows sending and receiving messages via FIX protocol
 + *loadSequencesFromCradle* - defines if sequences will be loaded from cradle to use them in logon message.
 + *sessionStartTime* - UTC time when session starts. (`nullable`)
 + *sessionEndTime* - UTC time when session ends. required if startSessionTime is filled.
++ *sendingDateTimeFormat* - `SendingTime` field format for outgoing messages. (`nullable`, `default format` in this case is `"yyyyMMdd-HH:mm:ss.SSSSSSSSS"`) 
 + *useNextExpectedSeqNum* - session management based on next expected sequence number. (`false` by default)
 + *saveAdminMessages* - defines if admin messages will be saved to internal outgoing buffer. (`false` by default)
++ *resetStateOnServerReset* - whether to reset the server sequence after receiving logout with text `Next Expected MSN too high, MSN to be sent is x but received y`.
 
 ### Security settings
 
@@ -285,11 +288,12 @@ metadata:
   name: fix-client
 spec:
   image-name: ghcr.io/th2-net/th2-conn-dirty-fix
-  image-version: 0.0.6
+  image-version: 1.0.0
   type: th2-conn
   custom-config:
     maxBatchSize: 1000
     maxFlushTime: 1000
+    batchByGroup: true
     publishSentEvents: true
     publishConnectEvents: true
     sessions:
@@ -398,6 +402,34 @@ spec:
 ## 0.1.0
 
 * add basic support for repeating groups to mangler
+## 1.0.2
+* dev releases
+* apply changes from version-0
+
+## 1.0.1
+* Add bookId to lw data provider query
+
+## 1.0.0
+
+* Bump `conn-dirty-tcp-core` to `3.0.0` for books and pages support
+
+## 0.2.0
+* optional state reset on silent server reset.
+
+## 0.1.1
+* correct sequence numbers increments.
+* update conn-dirty-tcp-core to `2.3.0`
+
+## 0.1.0
+* correct handling of sequence reset with `endSeqNo = 0`
+* Skip messages mangling on error in `demo-fix-mangler` with error event instead of throwing exception.
+* allow unconditional rule application
+
+## 0.0.10
+* disable reconnect when session is in not-active state.
+
+## 0.0.9
+* correct heartbeat and test request handling
 
 ## 0.0.8
 
@@ -428,7 +460,7 @@ spec:
 ## 0.0.3
 
 * Added new password option into settings
-* Provided ability to specify encrypt algorithm for reading key from file and encrypting password and new password fields 
+* Provided ability to specify encrypt algorithm for reading key from file and encrypting password and new password fields
 
 ## 0.0.2
 
