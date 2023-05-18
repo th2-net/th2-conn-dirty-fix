@@ -281,6 +281,13 @@ fun Iterable<FixField>.findGroup(counter: Int, delimiter: Int, tags: Iterable<In
     return FixGroup(counter, delimiter, tags)
 }
 
+fun Iterable<FixField>.findGroups(counter: Int, delimiter: Int, tags: Iterable<Int>) = sequence {
+    for(counter in filter { it.tag == counter }) {
+        val delimiter = counter.next()?.takeIf { it.tag == delimiter } ?: continue
+        yield(FixGroup(counter, delimiter, tags))
+    }
+}
+
 interface FixElement {
     fun previous(): FixElement?
     fun next(): FixElement?
@@ -514,6 +521,22 @@ class FixField private constructor(
         val delimiter: FixField,
         val tags: Iterable<Int>,
     ) : Iterable<FixField>, FixElement {
+        fun decrement() {
+            counter.value?.let {
+                val value = it.toInt()
+                counter.value = (value - 1).toString()
+                if(value - 1 == 0) {
+                    counter.clear()
+                }
+            }
+        }
+
+        fun increment() {
+            counter.value?.let {
+                counter.value = (it.toInt() + 1).toString()
+            }
+        }
+
         override fun iterator(): Iterator<FixField> = iterator {
             var field: FixField? = delimiter
 

@@ -109,6 +109,30 @@ class TestMessageTransformer {
         assertEquals("99=2|100=a|110=b|100=d|110=e|120=f|", buffer.asString())
     }
 
+    @Test fun `remove group`() {
+        val buffer = GROUP_MESSAGE.toBuffer()
+        val transform = removeGroup("test" where (110 matches "b")) onlyIf (99 matches "2")
+        val description = transform.applyTo(buffer)
+        assertEquals("removeGroup on group 'test' where tag 110 ~= /b/", description)
+        assertEquals("99=1|100=d|110=e|120=f|", buffer.asString())
+    }
+
+    @Test fun `add group`() {
+        val buffer = GROUP_MESSAGE.toBuffer()
+        val transform = addGroup(GroupDefinition(99, listOf(field(100, "c"), field(110, "d")))) inGroup ("test") onlyIf (99 matches "2")
+        val description = transform.applyTo(buffer)
+        assertEquals("addGroup [tag 100 = 'c', tag 110 = 'd'] on group 'test'", description)
+        assertEquals("99=3|100=a|110=b|120=c|100=d|110=e|120=f|100=c|110=d|", buffer.asString())
+    }
+
+    @Test fun `add group entry when there is no group`() {
+        val buffer = MESSAGE.toBuffer()
+        val transform = GroupDefinition(199, listOf(field(200, "c"), field(210, "d"))) after (34 matches ".*") onlyIf (34 matches "177")
+        val description = transform.applyTo(buffer)
+        assertEquals("addGroup [tag 200 = 'c', tag 210 = 'd'] after tag 34 ~= /.*/", description)
+        assertEquals("8=FIX.4.2|9=83|35=A|49=SERVER|56=CLIENT|34=177|199=1|200=c|210=d|52=20090107-18:15:16|98=0|108=30|10=184|", buffer.asString())
+    }
+
     private fun List<Transform>.applyTo(buffer: ByteBuf): String {
         val transform = MessageTransformer.transform(buffer, Rule("test", this))
         assertNotNull(transform, "transformation yielded no results")
@@ -134,13 +158,17 @@ class TestMessageTransformer {
         private fun move(field: FieldSelector) = field
         private fun replace(field: FieldSelector) = field
         private fun remove(field: FieldSelector) = Action(remove = field)
+        private fun removeGroup(group: GroupSelector) = Action(removeGroup = group)
+        private fun addGroup(group: GroupDefinition) = Action(addGroup = group)
         private infix fun FieldDefinition.before(field: FieldSelector) = Action(add = this, before = field)
+        private infix fun GroupDefinition.after(field: FieldSelector) = Action(addGroup = this, after = field)
         private infix fun FieldSelector.before(field: FieldSelector) = Action(move = this, before = field)
         private infix fun FieldDefinition.after(field: FieldSelector) = Action(add = this, after = field)
         private infix fun FieldSelector.after(field: FieldSelector) = Action(move = this, after = field)
         private infix fun FieldSelector.with(field: FieldDefinition) = Action(replace = this, with = field)
         private infix fun Action.onlyIf(condition: FieldSelector) = listOf(Transform(listOf(condition), listOf(this)))
         private infix fun String.where(selector: FieldSelector) = GroupSelector(this, listOf(selector)).apply { init(CONTEXT) }
-        private infix fun Action.inGroup(group: GroupSelector) = copy(group = group)
+        private infix fun Action.inGroup(name: String) = copy(groupScope = GroupSelector(name, emptyList()).apply { init(CONTEXT) })
+        private infix fun Action.inGroup(group: GroupSelector) = copy(groupScope = group)
     }
 }

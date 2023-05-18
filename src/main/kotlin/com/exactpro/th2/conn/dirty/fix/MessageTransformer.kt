@@ -70,69 +70,88 @@ object MessageTransformer {
     private fun transform(message: ByteBuf, actions: List<Action>) = sequence {
         for (action in actions) {
             try {
-                val context = when (val group = action.group) {
-                    null -> message.fields
-                    else -> group.find(message) ?: continue
-                }
+                if (action.removeGroup != null) {
+                    for (group in action.removeGroup.findAll(message)) {
+                        var deleted = false
 
-                action.set?.apply {
-                    val tag = singleTag
-                    val value = singleValue
-                    val field = context.find { it.tag == tag }
+                        for (field in group) {
+                            if (field.tag != null) {
+                                deleted = true
+                                field.clear()
+                            }
+                        }
 
-                    if (field != null) {
-                        field.value = singleValue
-                        yield(ActionResult(tag, value, action))
+                        if (deleted) {
+                            group.decrement()
+                            yield(ActionResult(0, null, action))
+                        }
                     }
                 }
 
-                action.add?.also { field ->
-                    val tag = field.singleTag
-                    val value = field.singleValue
+                if (action.addGroup != null) {
+                    var added = false
+                    action.groupScope?.findInsertPositions(message)?.let { groups ->
+                        groups.forEach { group ->
+                            var next = group.lastOrNull() ?: return@forEach
 
-                    action.before?.find(context)?.let { next ->
-                        next.insertPrevious(tag, value)
-                        yield(ActionResult(tag, value, action))
+                            var addedThisTime = false
+
+                            for (field in action.addGroup.fields) {
+                                val tag = field.singleTag
+                                val value = field.singleValue
+                                next = next.insertNext(tag, value)
+                                added = true
+                                addedThisTime = true
+                            }
+
+                            if (addedThisTime) {
+                                group.increment()
+                                yield(ActionResult(0, null, action))
+                            }
+                        }
                     }
 
-                    action.after?.find(context)?.let { previous ->
-                        previous.insertNext(tag, value)
-                        yield(ActionResult(tag, value, action))
+                    if (added) continue
+
+                    action.before?.find(message)?.let { insertPosition ->
+                        var next = insertPosition
+                        next = next.insertNext(action.addGroup.counter, "1")
+                        for (field in action.addGroup.fields) {
+                            val tag = field.singleTag
+                            val value = field.singleValue
+                            next = next.insertNext(tag, value)
+                            added = true
+                        }
+
+                        if (added) {
+                            yield(ActionResult(0, null, action))
+                        }
+                    }
+
+                    if (added) continue
+
+                    action.after?.find(message)?.let { insertPosition ->
+                        var next = insertPosition
+                        next = next.insertNext(action.addGroup.counter, "1")
+                        for (field in action.addGroup.fields) {
+                            val tag = field.singleTag
+                            val value = field.singleValue
+                            next = next.insertNext(tag, value)
+                            added = true
+                        }
+
+                        if (added) {
+                            yield(ActionResult(0, null, action))
+                        }
                     }
                 }
 
-                action.move?.find(context)?.let { field ->
-                    val tag = checkNotNull(field.tag) { "Field tag for move was empty" }
-                    val value = field.value
-
-                    action.before?.find(context)?.let { next ->
-                        field.clear()
-                        next.insertPrevious(tag, value)
-                        yield(ActionResult(tag, value, action))
+                if (action.groupScope != null) {
+                    for (group in action.groupScope.findAll(message)) {
+                        yield(transform(action, group) ?: continue)
                     }
-
-                    action.after?.find(context)?.let { previous ->
-                        previous.insertNext(tag, value)
-                        field.clear()
-                        yield(ActionResult(tag, null, action))
-                    }
-                }
-
-                action.remove?.find(context)?.let { field ->
-                    val tag = checkNotNull(field.tag) { "Field tag for remove was empty" }
-                    field.clear()
-                    yield(ActionResult(tag, null, action))
-                }
-
-                action.replace?.find(context)?.let { field ->
-                    val with = action.with!!
-                    val tag = with.singleTag
-                    val value = with.singleValue
-
-                    field.tag = tag
-                    field.value = value
-
-                    yield(ActionResult(tag, value, action))
+                } else {
+                    yield(transform(action, message.fields) ?: continue)
                 }
             } catch (e: Exception) {
                 logger.error(e) { "Error while applying action $action" }
@@ -149,6 +168,70 @@ object MessageTransformer {
                 )
             }
         }
+    }
+
+    private fun transform(action: Action, context: Iterable<FixField>): ActionResult? {
+        action.set?.apply {
+            val tag = singleTag
+            val value = singleValue
+            val field = context.find { it.tag == tag }
+
+            if (field != null) {
+                field.value = singleValue
+                return ActionResult(tag, value, action)
+            }
+        }
+
+        action.add?.also { field ->
+            val tag = field.singleTag
+            val value = field.singleValue
+
+            action.before?.find(context)?.let { next ->
+                next.insertPrevious(tag, value)
+                return ActionResult(tag, value, action)
+            }
+
+            action.after?.find(context)?.let { previous ->
+                previous.insertNext(tag, value)
+                return ActionResult(tag, value, action)
+            }
+        }
+
+        action.move?.find(context)?.let { field ->
+            val tag = checkNotNull(field.tag) { "Field tag for move was empty" }
+            val value = field.value
+
+            action.before?.find(context)?.let { next ->
+                field.clear()
+                next.insertPrevious(tag, value)
+                return ActionResult(tag, value, action)
+            }
+
+            action.after?.find(context)?.let { previous ->
+                previous.insertNext(tag, value)
+                field.clear()
+                return ActionResult(tag, null, action)
+            }
+        }
+
+        action.remove?.find(context)?.let { field ->
+            val tag = checkNotNull(field.tag) { "Field tag for remove was empty" }
+            field.clear()
+            return ActionResult(tag, null, action)
+        }
+
+        action.replace?.find(context)?.let { field ->
+            val with = action.with!!
+            val tag = with.singleTag
+            val value = with.singleValue
+
+            field.tag = tag
+            field.value = value
+
+            return ActionResult(tag, value, action)
+        }
+
+        return null
     }
 }
 
@@ -180,7 +263,7 @@ fun Iterable<FixField>.contains(selector: Selector): Boolean = selector.find(thi
 data class FieldSelector(
     val tag: Tag?,
     @JsonAlias("one-of-tags", "tagOneOf") val tags: List<Tag>?,
-    @JsonAlias("matching") val matches: Pattern,
+    @JsonAlias("matching") val matches: Pattern = Pattern.compile(".*"),
 ) : Selector {
     init {
         require((tag != null) xor !tags.isNullOrEmpty()) { "Either 'tag' or 'one-of-tags' must be specified" }
@@ -210,10 +293,6 @@ data class GroupSelector(
     private var delimiter by notNull<Int>()
     private lateinit var tags: Iterable<Int>
 
-    init {
-        require(selectors.isNotEmpty()) { "group selector has no fields: $group" }
-    }
-
     override fun init(context: Context) {
         val group = context.groups[group] ?: error("Unknown group: $group")
         counter = group.counter
@@ -234,7 +313,38 @@ data class GroupSelector(
 
     override fun find(message: ByteBuf): FixGroup? = find(message.fields)
 
-    override fun toString() = "group '$group' where ${selectors.joinToString(" && ")}"
+    override fun toString() = buildString {
+        append("group '$group'")
+        if(selectors.isNotEmpty()) append(" where ${selectors.joinToString(" && ")}")
+    }
+
+    fun findAll(message: ByteBuf) = sequence {
+        var groups = message.fields.findGroups(counter, delimiter, tags)
+
+        for(group in groups) {
+            var entry: FixGroup? = group
+            while (entry != null) {
+                if (selectors.all(group::contains)) yield(group)
+                entry = entry.next()
+            }
+        }
+    }
+
+    fun findInsertPositions(message: ByteBuf) = sequence {
+        var groups = message.fields.findGroups(counter, delimiter, tags)
+
+        for(group in groups) {
+            var lastEntry: FixGroup? = group
+            var entry: FixGroup? = group
+
+            while (entry != null) {
+                lastEntry = entry
+                entry = entry.next()
+            }
+
+            if(lastEntry != null) yield(lastEntry)
+        }
+    }
 }
 
 data class FieldDefinition(
@@ -260,6 +370,13 @@ data class FieldDefinition(
     }
 }
 
+data class GroupDefinition(
+    val counter: Tag,
+    val fields: List<FieldDefinition>
+) {
+    override fun toString() = fields.toString()
+}
+
 data class Action(
     val set: FieldDefinition? = null,
     val add: FieldDefinition? = null,
@@ -269,10 +386,12 @@ data class Action(
     val with: FieldDefinition? = null,
     val before: FieldSelector? = null,
     val after: FieldSelector? = null,
-    @JsonAlias("in") val group: GroupSelector? = null,
+    val removeGroup: GroupSelector? = null,
+    val addGroup: GroupDefinition? = null,
+    @JsonAlias("in") val groupScope: GroupSelector? = null,
 ) {
     init {
-        val operations = listOfNotNull(set, add, move, remove, replace)
+        val operations = listOfNotNull(set, add, move, remove, replace, removeGroup, addGroup)
 
         require(operations.isNotEmpty()) { "Action must have at least one operation" }
         require(operations.size == 1) { "Action has more than one operation" }
@@ -304,19 +423,21 @@ data class Action(
         remove?.init(context)
         before?.init(context)
         after?.init(context)
-        group?.init(context)
+        groupScope?.init(context)
     }
 
     override fun toString() = buildString {
         set?.apply { append("set $this") }
         add?.apply { append("add $this") }
+        addGroup?.apply { append("addGroup $this") }
         move?.apply { append("move $this") }
         replace?.apply { append("replace $this") }
         remove?.apply { append("remove $this") }
         with?.apply { append(" with $this") }
         before?.apply { append(" before $this") }
         after?.apply { append(" after $this") }
-        group?.apply { append(" on $this") }
+        groupScope?.apply { append(" on $this") }
+        removeGroup?.apply { append("removeGroup on $this") }
     }
 }
 
