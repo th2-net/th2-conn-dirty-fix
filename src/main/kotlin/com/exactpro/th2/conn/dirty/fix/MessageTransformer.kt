@@ -71,7 +71,7 @@ object MessageTransformer {
         for (action in actions) {
             try {
                 if (action.removeGroup != null) {
-                    for (group in action.removeGroup.findAll(message)) {
+                    for (group in action.removeGroup.findAll(message).toList()) {
                         var deleted = false
 
                         for (field in group) {
@@ -91,7 +91,7 @@ object MessageTransformer {
                 if (action.addGroup != null) {
                     var added = false
                     action.groupScope?.findInsertPositions(message)?.let { groups ->
-                        groups.forEach { group ->
+                        groups.toList().forEach { group ->
                             var next = group.lastOrNull() ?: return@forEach
 
                             var addedThisTime = false
@@ -147,7 +147,7 @@ object MessageTransformer {
                 }
 
                 if (action.groupScope != null) {
-                    for (group in action.groupScope.findAll(message)) {
+                    for (group in action.groupScope.findAll(message).toList()) {
                         yield(transform(action, group) ?: continue)
                     }
                 } else {
@@ -319,19 +319,19 @@ data class GroupSelector(
     }
 
     fun findAll(message: ByteBuf) = sequence {
-        var groups = message.fields.findGroups(counter, delimiter, tags)
+        var groups = message.fields.findGroups(counter, delimiter, tags).toList()
 
         for(group in groups) {
             var entry: FixGroup? = group
             while (entry != null) {
-                if (selectors.all(group::contains)) yield(group)
+                if (selectors.all(entry::contains)) yield(entry)
                 entry = entry.next()
             }
         }
     }
 
     fun findInsertPositions(message: ByteBuf) = sequence {
-        var groups = message.fields.findGroups(counter, delimiter, tags)
+        var groups = message.fields.findGroups(counter, delimiter, tags).toList()
 
         for(group in groups) {
             var lastEntry: FixGroup? = group
