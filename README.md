@@ -108,7 +108,7 @@ context:
 
 Where `counter` is a counter tag, `delimiter` is a delimiter tag and `tags` is a set of tags that could follow delimiter
 
-Actions describe modifications which will be applied to a message. There are 4 types of actions:
+Actions describe modifications which will be applied to a message. There are 4 types of actions for fields:
 
 * set - sets value of an existing field to the specified value:
 
@@ -158,6 +158,37 @@ Actions describe modifications which will be applied to a message. There are 4 t
     tag: 110
     matching: (.*)
   ```
+  
+There is also 2 actions for group level:
+* addGroup - allows user to add group into message
+
+  ```yaml
+  addGroup:
+    counter: 453 ( group counter tag name )
+    fields:
+      - tag: 447
+        equal: A
+      - tag: 452
+        equal: B
+  in:
+    group: group-name
+    where: []  # unconditionally
+  before: 
+    tag: 112
+    matching: (.*)
+  ```
+  
+In this example: group will be added to the end of existing 453 group if already exist
+Or after tag 112 if there is no group
+  
+* removeGroup - removes group entries which matches condition
+  ```yaml
+  removeGroup:
+    group: group-name
+    where: 
+      - tag: 452
+        matches: C
+  ```
 
 Action scope could be limited to a certain group by specifying group selector in `in` field:
 
@@ -172,7 +203,7 @@ in:
       matches: C
 ```
 
-**NOTE**: When multiple groups match the specified selector the first one matching will be selected
+**NOTE**: When multiple groups match the specified selector the action will be applied to all of them.
 
 Actions are specified in `then` block of transformation definition:
 

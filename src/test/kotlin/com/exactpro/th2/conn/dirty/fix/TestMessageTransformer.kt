@@ -109,12 +109,33 @@ class TestMessageTransformer {
         assertEquals("99=2|100=a|110=b|100=d|110=e|120=f|", buffer.asString())
     }
 
+    @Test fun `apply action to multiple group entries`() {
+        val buffer = GROUP_MESSAGE.toBuffer()
+        val transform = remove(120 matching "(.*)") inGroup ("test") onlyIf (99 matches "2")
+        val description = transform.applyTo(buffer)
+        val expectedDescription = "remove tag 120 ~= /(.*)/ on group 'test'\r\n" +
+            "remove tag 120 ~= /(.*)/ on group 'test'"
+        assertEquals(expectedDescription, description)
+        assertEquals("99=2|100=a|110=b|100=d|110=e|", buffer.asString())
+    }
+
     @Test fun `remove group`() {
         val buffer = GROUP_MESSAGE.toBuffer()
         val transform = removeGroup("test" where (110 matches "b")) onlyIf (99 matches "2")
         val description = transform.applyTo(buffer)
         assertEquals("removeGroup on group 'test' where tag 110 ~= /b/", description)
         assertEquals("99=1|100=d|110=e|120=f|", buffer.asString())
+    }
+
+    @Test fun `remove group fully`() {
+        val buffer = GROUP_MESSAGE.toBuffer()
+        val transform = removeGroup("test" where (110 matches "(.*)")) onlyIf (99 matches "2")
+        val description = transform.applyTo(buffer)
+        val expectedDescription = "removeGroup on group 'test' where tag 110 ~= /(.*)/\r\n" +
+                "removeGroup on group 'test' where tag 110 ~= /(.*)/"
+
+        assertEquals(expectedDescription, description)
+        assertEquals("", buffer.asString())
     }
 
     @Test fun `add group`() {

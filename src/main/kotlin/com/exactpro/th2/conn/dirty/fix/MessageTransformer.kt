@@ -91,7 +91,7 @@ object MessageTransformer {
                 if (action.addGroup != null) {
                     var added = false
                     action.groupScope?.findInsertPositions(message)?.let { groups ->
-                        groups.toList().forEach { group ->
+                        groups.forEach { group ->
                             var next = group.lastOrNull() ?: return@forEach
 
                             var addedThisTime = false
