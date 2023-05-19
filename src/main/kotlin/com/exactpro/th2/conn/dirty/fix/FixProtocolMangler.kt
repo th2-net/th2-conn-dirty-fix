@@ -65,6 +65,8 @@ class FixProtocolMangler(context: IManglerContext) : IMangler {
 
         val (name, results, message) = MessageTransformer.transform(message, rule, unconditionally) ?: return null
 
+        LOGGER.trace { "Message after transformation: ${message.toString(Charsets.UTF_8)}" }
+
         return Event.start().apply {
             type(MANGLE_EVENT_TYPE)
             if(results.any { it.statusDesc.status == ActionStatus.FAIL }) {
