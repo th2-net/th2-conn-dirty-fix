@@ -17,8 +17,10 @@
 package com.exactpro.th2;
 
 import com.exactpro.th2.common.event.Event;
+import com.exactpro.th2.common.grpc.EventID;
 import com.exactpro.th2.common.grpc.MessageID;
 import com.exactpro.th2.common.grpc.RawMessage;
+import com.exactpro.th2.common.message.MessageUtils;
 import com.exactpro.th2.conn.dirty.fix.FixField;
 import com.exactpro.th2.conn.dirty.fix.SequenceLoader;
 import com.exactpro.th2.conn.dirty.tcp.core.api.IChannel;
@@ -53,6 +55,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -146,8 +149,8 @@ public class FixHandler implements AutoCloseable, IHandler {
     private final InetSocketAddress address;
     private final DataProviderService dataProvider;
 
-    private AtomicReference<Future<?>> heartbeatTimer = new AtomicReference<>(CompletableFuture.completedFuture(null));
-    private AtomicReference<Future<?>> testRequestTimer = new AtomicReference<>(CompletableFuture.completedFuture(null));
+    private final AtomicReference<Future<?>> heartbeatTimer = new AtomicReference<>(CompletableFuture.completedFuture(null));
+    private final AtomicReference<Future<?>> testRequestTimer = new AtomicReference<>(CompletableFuture.completedFuture(null));
     private Future<?> reconnectRequestTimer = CompletableFuture.completedFuture(null);
     private volatile IChannel channel;
     protected FixHandlerSettings settings;
@@ -227,8 +230,7 @@ public class FixHandler implements AutoCloseable, IHandler {
     }
 
     @NotNull
-    @Override
-    public CompletableFuture<MessageID> send(@NotNull RawMessage rawMessage) {
+    private CompletableFuture<MessageID> send(@NotNull ByteBuf body, @NotNull Map<String, String> properties, @Nullable EventID eventID) {
         if (!sessionActive.get()) {
             throw new IllegalStateException("Session is not active. It is not possible to send messages.");
         }
@@ -250,7 +252,32 @@ public class FixHandler implements AutoCloseable, IHandler {
             }
         }
 
-        return channel.send(toByteBuf(rawMessage.getBody()), rawMessage.getMetadata().getPropertiesMap(), getEventId(rawMessage), SendMode.HANDLE_AND_MANGLE);
+        return channel.send(body, properties, eventID, SendMode.HANDLE_AND_MANGLE);
+    }
+
+    @NotNull
+    @Override
+    public CompletableFuture<MessageID> send(@NotNull RawMessage rawMessage) {
+        return send(toByteBuf(rawMessage.getBody()), rawMessage.getMetadata().getPropertiesMap(), getEventId(rawMessage));
+    }
+
+    @NotNull
+    @Override
+    public CompletableFuture<MessageID> send(@NotNull com.exactpro.th2.common.schema.message.impl.rabbitmq.transport.RawMessage message) {
+        final var id = message.getEventId();
+        final EventID eventID;
+        if (id != null) {
+            eventID = EventID.newBuilder()
+                    .setId(id.getId())
+                    .setBookName(id.getBook())
+                    .setScope(id.getScope())
+                    .setStartTimestamp(MessageUtils.toTimestamp(id.getTimestamp()))
+                    .build();
+        } else {
+            eventID = null;
+        }
+
+        return send(message.getBody(), message.getMetadata(), eventID);
     }
 
     @Override
