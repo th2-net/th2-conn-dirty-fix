@@ -20,7 +20,7 @@ import com.exactpro.th2.common.event.Event;
 import com.exactpro.th2.common.grpc.EventID;
 import com.exactpro.th2.common.grpc.MessageID;
 import com.exactpro.th2.common.grpc.RawMessage;
-import com.exactpro.th2.common.message.MessageUtils;
+import com.exactpro.th2.common.schema.message.impl.rabbitmq.transport.TransportUtilsKt;
 import com.exactpro.th2.conn.dirty.fix.FixField;
 import com.exactpro.th2.conn.dirty.fix.SequenceLoader;
 import com.exactpro.th2.conn.dirty.tcp.core.api.IChannel;
@@ -265,19 +265,7 @@ public class FixHandler implements AutoCloseable, IHandler {
     @Override
     public CompletableFuture<MessageID> send(@NotNull com.exactpro.th2.common.schema.message.impl.rabbitmq.transport.RawMessage message) {
         final var id = message.getEventId();
-        final EventID eventID;
-        if (id != null) {
-            eventID = EventID.newBuilder()
-                    .setId(id.getId())
-                    .setBookName(id.getBook())
-                    .setScope(id.getScope())
-                    .setStartTimestamp(MessageUtils.toTimestamp(id.getTimestamp()))
-                    .build();
-        } else {
-            eventID = null;
-        }
-
-        return send(message.getBody(), message.getMetadata(), eventID);
+        return send(message.getBody(), message.getMetadata(), id != null ? TransportUtilsKt.toProto(id) : null);
     }
 
     @Override
