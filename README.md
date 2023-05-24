@@ -326,6 +326,7 @@ spec:
 ```
 
 # Changelog
+
 ## 1.1.0
 * migrated to TH2 Transport Protocol
 
