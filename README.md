@@ -326,11 +326,12 @@ spec:
 ```
 
 # Changelog
+## 1.1.0
+* migrated to TH2 Transport Protocol
 
 ## 1.0.2
 * dev releases
 * apply changes from version-0
-* migrated to TH2 Transport Protocol
 
 ## 1.0.1
 * Add bookId to lw data provider query
