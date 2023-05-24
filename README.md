@@ -328,7 +328,7 @@ spec:
 # Changelog
 
 ## 1.2.0
-* migrated to TH2 Transport Protocol
+* Added support for th2 transport protocol
 
 ## 1.1.0
 * state reset option on server update.
