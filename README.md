@@ -327,6 +327,9 @@ spec:
 
 # Changelog
 
+## 1.1.0
+* state reset option on server update.
+
 ## 1.0.2
 * dev releases
 * apply changes from version-0
@@ -337,6 +340,7 @@ spec:
 ## 1.0.0
 
 * Bump `conn-dirty-tcp-core` to `3.0.0` for books and pages support
+
 ## 0.2.0
 * optional state reset on silent server reset.
 
