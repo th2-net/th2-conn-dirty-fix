@@ -65,7 +65,7 @@ class SequenceLoader(
         var message: MessageGroupResponse? = null
         for (response in dataProvider.searchMessages(request)) {
             message = response.message
-            if (sessionStartTime != null && compare(sessionStartDateTime, message.timestamp) > 0) {
+            if (sessionStartTime != null && compare(sessionStartDateTime, message.messageId.timestamp) > 0) {
                 return 0
             }
             val buffer = Unpooled.wrappedBuffer(message.bodyRaw.asReadOnlyByteBuffer())
@@ -73,7 +73,7 @@ class SequenceLoader(
         }
         return when (message) {
             null -> 0
-            else -> searchSeq(createSearchRequest(message.timestamp, message.messageId.direction))
+            else -> searchSeq(createSearchRequest(message.messageId.timestamp, message.messageId.direction))
         }
     }
 
