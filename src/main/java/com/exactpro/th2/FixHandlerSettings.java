@@ -242,6 +242,7 @@ public class FixHandlerSettings implements IHandlerSettings {
     public void setLoadMissedMessagesFromCradle(Boolean loadMissedMessagesFromCradle) {
         this.loadMissedMessagesFromCradle = loadMissedMessagesFromCradle;
     }
+
     public Boolean getResetStateOnServerReset() {
         return resetStateOnServerReset;
     }

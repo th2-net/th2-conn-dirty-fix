@@ -328,7 +328,12 @@ spec:
 
 # Changelog
 
-<<<<<<< HEAD
+## 1.2.0
+* loading requested messages from cradle.
+
+## 1.1.0
+* state reset option on server update.
+
 ## 1.0.2
 * dev releases
 * apply changes from version-0
@@ -337,15 +342,12 @@ spec:
 * Add bookId to lw data provider query
 
 ## 1.0.0
-
 * Bump `conn-dirty-tcp-core` to `3.0.0` for books and pages support
-## 0.2.0
-=======
+
 ## 0.3.0
 * Ability to recover messages from cradle.
 
-## 0.2.1
->>>>>>> ts-1290
+## 0.2.0
 * optional state reset on silent server reset.
 
 ## 0.1.1
