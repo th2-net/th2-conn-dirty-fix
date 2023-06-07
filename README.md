@@ -1,4 +1,4 @@
-# th2-conn-dirty-fix (0.2.1)
+# th2-conn-dirty-fix (0.2.2)
 
 This microservice allows sending and receiving messages via FIX protocol
 
@@ -324,10 +324,10 @@ spec:
 ```
 
 # Changelog
-## 0.2.1
+## 0.2.2
 * session scheduling fix: hasn't worked for some ranges.
 
-## 0.2.0
+## 0.2.1
 * optional state reset on silent server reset.
 
 ## 0.1.1
