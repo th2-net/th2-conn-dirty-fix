@@ -98,5 +98,6 @@ public class Constants {
     );
 
     public static final String IS_POSS_DUP = "Y";
+    public static final String IS_SEQUENCE_RESET_FLAG = "Y";
     public static final int SUCCESSFUL_LOGOUT_CODE = 4;
 }

@@ -81,6 +81,7 @@ import static com.exactpro.th2.constants.Constants.GAP_FILL_FLAG;
 import static com.exactpro.th2.constants.Constants.GAP_FILL_FLAG_TAG;
 import static com.exactpro.th2.constants.Constants.HEART_BT_INT;
 import static com.exactpro.th2.constants.Constants.IS_POSS_DUP;
+import static com.exactpro.th2.constants.Constants.IS_SEQUENCE_RESET_FLAG;
 import static com.exactpro.th2.constants.Constants.MSG_SEQ_NUM;
 import static com.exactpro.th2.constants.Constants.MSG_SEQ_NUM_TAG;
 import static com.exactpro.th2.constants.Constants.MSG_TYPE;
@@ -100,6 +101,7 @@ import static com.exactpro.th2.constants.Constants.NEXT_EXPECTED_SEQ_NUMBER_TAG;
 import static com.exactpro.th2.constants.Constants.PASSWORD;
 import static com.exactpro.th2.constants.Constants.POSS_DUP_TAG;
 import static com.exactpro.th2.constants.Constants.RESET_SEQ_NUM;
+import static com.exactpro.th2.constants.Constants.RESET_SEQ_NUM_TAG;
 import static com.exactpro.th2.constants.Constants.SENDER_COMP_ID;
 import static com.exactpro.th2.constants.Constants.SENDER_COMP_ID_TAG;
 import static com.exactpro.th2.constants.Constants.SENDER_SUB_ID;
@@ -324,6 +326,13 @@ public class FixHandler implements AutoCloseable, IHandler {
         }
 
         int receivedMsgSeqNum = Integer.parseInt(requireNonNull(msgSeqNumValue.getValue()));
+
+        if(msgTypeValue.equals(MSG_TYPE_LOGON) && receivedMsgSeqNum < serverMsgSeqNum.get()) {
+            FixField resetSeqNumFlagField = findField(message, RESET_SEQ_NUM_TAG);
+            if(resetSeqNumFlagField != null && Objects.equals(resetSeqNumFlagField.getValue(), IS_SEQUENCE_RESET_FLAG)) {
+                serverMsgSeqNum.set(0);
+            }
+        }
 
         if(receivedMsgSeqNum < serverMsgSeqNum.get() && !isDup) {
             sendLogout();
@@ -718,8 +727,12 @@ public class FixHandler implements AutoCloseable, IHandler {
         }
         StringBuilder logon = new StringBuilder();
         Boolean reset;
-        if (!connStarted.get()) reset = settings.getResetSeqNumFlag();
-        else reset = settings.getResetOnLogon();
+        if (!connStarted.get()) {
+            reset = settings.getResetSeqNumFlag();
+        }
+        else {
+            reset = settings.getResetOnLogon();
+        }
         if (reset) msgSeqNum.getAndSet(0);
 
         setHeader(logon, MSG_TYPE_LOGON, msgSeqNum.get() + 1);
