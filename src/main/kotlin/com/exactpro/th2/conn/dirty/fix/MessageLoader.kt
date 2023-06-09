@@ -44,6 +44,8 @@ import java.time.OffsetTime
 import java.time.ZoneId
 import java.time.ZoneOffset
 import java.time.ZonedDateTime
+import java.util.concurrent.locks.ReentrantLock
+import kotlin.concurrent.withLock
 import kotlin.math.ceil
 import mu.KotlinLogging
 
@@ -52,6 +54,7 @@ class MessageLoader(
     private val sessionStartTime: LocalTime?
 ) {
     private var sessionStart: ZonedDateTime
+    private val searchLock = ReentrantLock()
 
     init {
         val today = LocalDate.now(ZoneOffset.UTC)
@@ -78,21 +81,28 @@ class MessageLoader(
         }
     }
 
-    private var sessionStartDateTime = sessionStart
+    private var sessionStartTimestamp = sessionStart
         .toInstant()
         .toTimestamp()
 
-    private var sessionStartYesterday = sessionStart
+    private var previousDaySessionStart = sessionStart
         .minusDays(1)
         .toInstant()
         .toTimestamp()
 
     fun updateTime() {
-        sessionStart = ZonedDateTime
-            .now(ZoneOffset.UTC)
-            .with(OffsetTime.now(ZoneOffset.UTC))
-        sessionStartDateTime = Instant.now().toTimestamp()
-        sessionStartYesterday = Instant.now().toTimestamp()
+        searchLock.withLock {
+            sessionStart = ZonedDateTime
+                .now(ZoneOffset.UTC)
+                .with(OffsetTime.now(ZoneOffset.UTC))
+            sessionStartTimestamp = sessionStart
+                .toInstant()
+                .toTimestamp()
+            previousDaySessionStart = sessionStart
+                .minusDays(1)
+                .toInstant()
+                .toTimestamp()
+        }
     }
 
     fun loadInitialSequences(sessionAlias: String): SequenceHolder {
@@ -143,7 +153,7 @@ class MessageLoader(
 
             while (backwardIterator.hasNext() && messagesToSkip > 0) {
                 val message = backwardIterator.next().message
-                if(compare(message.timestamp, sessionStartYesterday) <= 0) {
+                if(compare(message.timestamp, previousDaySessionStart) <= 0) {
                     continue
                 }
                 timestamp = message.timestamp
@@ -206,7 +216,7 @@ class MessageLoader(
         var message: MessageGroupResponse?
         while (iterator.hasNext()) {
             message = iterator.next().message
-            if(sessionStartTime != null && compare(sessionStartDateTime, message.timestamp) > 0) {
+            if(sessionStartTime != null && compare(sessionStartTimestamp, message.timestamp) > 0) {
                 return extractValue(message, null)
             }
 
@@ -233,7 +243,7 @@ class MessageLoader(
         direction: Direction,
         sessionAlias: String,
         searchDirection: TimeRelation = TimeRelation.PREVIOUS,
-        endTimestamp: Timestamp = sessionStartYesterday
+        endTimestamp: Timestamp = previousDaySessionStart
     ) = MessageSearchRequest.newBuilder().apply {
         startTimestamp = timestamp
         this.endTimestamp = endTimestamp
