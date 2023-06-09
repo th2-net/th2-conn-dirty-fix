@@ -325,9 +325,11 @@ spec:
 ```
 
 # Changelog
-
 ## 0.3.0
 * Ability to recover messages from cradle.
+
+## 0.2.2
+* session scheduling fix: hasn't worked for some ranges.
 
 ## 0.2.1
 * optional state reset on silent server reset.

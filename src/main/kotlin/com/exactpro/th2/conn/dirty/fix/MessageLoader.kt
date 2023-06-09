@@ -36,11 +36,14 @@ import com.google.protobuf.util.Timestamps.compare
 import io.netty.buffer.ByteBuf
 import io.netty.buffer.Unpooled
 import java.time.Instant
+import java.time.LocalDate
+import java.time.LocalDateTime
 import java.time.LocalTime
 import java.time.OffsetDateTime
 import java.time.OffsetTime
 import java.time.ZoneId
 import java.time.ZoneOffset
+import java.time.ZonedDateTime
 import kotlin.math.ceil
 import mu.KotlinLogging
 
@@ -48,23 +51,48 @@ class MessageLoader(
     private val dataProvider: DataProviderService,
     private val sessionStartTime: LocalTime?
 ) {
-    private var sessionStart = OffsetDateTime
-        .now(ZoneOffset.UTC)
-        .with(sessionStartTime ?: OffsetTime.now(ZoneOffset.UTC))
-    private var sessionStartTimestamp = sessionStart
+    private var sessionStart: ZonedDateTime
+
+    init {
+        val today = LocalDate.now(ZoneOffset.UTC)
+        val start = sessionStartTime?.atDate(today)
+        val now = LocalDateTime.now()
+        if(start == null) {
+            sessionStart = OffsetDateTime
+                .now(ZoneOffset.UTC)
+                .with(LocalTime.now())
+                .atZoneSameInstant(ZoneId.systemDefault())
+        } else {
+            sessionStart = if(start.isAfter(now)) {
+                OffsetDateTime
+                    .now(ZoneOffset.UTC)
+                    .minusDays(1)
+                    .with(sessionStartTime)
+                    .atZoneSameInstant(ZoneId.systemDefault())
+            } else {
+                OffsetDateTime
+                    .now(ZoneOffset.UTC)
+                    .with(sessionStartTime)
+                    .atZoneSameInstant(ZoneId.systemDefault())
+            }
+        }
+    }
+
+    private var sessionStartDateTime = sessionStart
         .toInstant()
         .toTimestamp()
-    private var previousDaySessionStart = sessionStart
+
+    private var sessionStartYesterday = sessionStart
         .minusDays(1)
         .toInstant()
         .toTimestamp()
 
     fun updateTime() {
-        sessionStart = OffsetDateTime
+        sessionStart = ZonedDateTime
             .now(ZoneOffset.UTC)
             .with(OffsetTime.now(ZoneOffset.UTC))
-        sessionStartTimestamp = Instant.now().toTimestamp()
-        previousDaySessionStart = Instant.now().toTimestamp()
+        sessionStartDateTime = Instant.now().toTimestamp()
+        sessionStartYesterday = Instant.now().toTimestamp()
     }
 
     fun loadInitialSequences(sessionAlias: String): SequenceHolder {
@@ -115,7 +143,7 @@ class MessageLoader(
 
             while (backwardIterator.hasNext() && messagesToSkip > 0) {
                 val message = backwardIterator.next().message
-                if(compare(message.timestamp, previousDaySessionStart) <= 0) {
+                if(compare(message.timestamp, sessionStartYesterday) <= 0) {
                     continue
                 }
                 timestamp = message.timestamp
@@ -178,7 +206,7 @@ class MessageLoader(
         var message: MessageGroupResponse?
         while (iterator.hasNext()) {
             message = iterator.next().message
-            if(sessionStartTime != null && compare(sessionStartTimestamp, message.timestamp) > 0) {
+            if(sessionStartTime != null && compare(sessionStartDateTime, message.timestamp) > 0) {
                 return extractValue(message, null)
             }
 
@@ -205,7 +233,7 @@ class MessageLoader(
         direction: Direction,
         sessionAlias: String,
         searchDirection: TimeRelation = TimeRelation.PREVIOUS,
-        endTimestamp: Timestamp = previousDaySessionStart
+        endTimestamp: Timestamp = sessionStartYesterday
     ) = MessageSearchRequest.newBuilder().apply {
         startTimestamp = timestamp
         this.endTimestamp = endTimestamp
