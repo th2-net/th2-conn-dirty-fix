@@ -32,6 +32,7 @@ import io.netty.buffer.Unpooled;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Paths;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.ZoneOffset;
@@ -181,8 +182,6 @@ public class FixHandler implements AutoCloseable, IHandler {
 
             if(scheduleTime.isBefore(now)) {
                 scheduleTime = now.plusDays(1).with(resetTime);
-            } else if(now.isBefore(now.with(settings.getSessionStartTime()))) {
-                sessionActive.set(false);
             }
 
             long time = now.until(scheduleTime, ChronoUnit.SECONDS);
@@ -192,6 +191,16 @@ public class FixHandler implements AutoCloseable, IHandler {
                 channel.close();
                 sessionActive.set(false);
             }, time, DAY_SECONDS, TimeUnit.SECONDS);
+
+            LocalDate today = LocalDate.now(ZoneOffset.UTC);
+
+            LocalDateTime start = settings.getSessionStartTime().atDate(today);
+            LocalDateTime end = settings.getSessionEndTime().atDate(today);
+
+            LocalDateTime nowDateTime = LocalDateTime.now(ZoneOffset.UTC);
+            if(nowDateTime.isAfter(end) && nowDateTime.isBefore(start)) {
+                sessionActive.set(false);
+            }
         }
 
         String host = settings.getHost();
