@@ -331,6 +331,9 @@ spec:
 ## 1.2.0
 * loading requested messages from cradle.
 
+## 1.1.1
+* fix scheduling: hasn't worked for some ranges.
+
 ## 1.1.0
 * state reset option on server update.
 
