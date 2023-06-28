@@ -20,9 +20,14 @@ import com.exactpro.th2.common.grpc.EventID;
 import com.exactpro.th2.common.grpc.MessageID;
 import com.exactpro.th2.conn.dirty.tcp.core.api.IChannel;
 import com.exactpro.th2.conn.dirty.tcp.core.api.IHandlerContext;
+import com.exactpro.th2.dataprovider.grpc.DataProviderService;
+import com.exactpro.th2.dataprovider.grpc.MessageGroupResponse;
+import com.exactpro.th2.dataprovider.grpc.MessageSearchResponse;
 import com.exactpro.th2.util.MessageUtil;
+import com.google.protobuf.ByteString;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
+import java.nio.charset.Charset;
 import kotlin.Unit;
 import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.AfterAll;
@@ -49,18 +54,22 @@ import static com.exactpro.th2.constants.Constants.BEGIN_STRING_TAG;
 import static com.exactpro.th2.constants.Constants.BODY_LENGTH_TAG;
 import static com.exactpro.th2.constants.Constants.CHECKSUM_TAG;
 import static com.exactpro.th2.constants.Constants.DEFAULT_APPL_VER_ID_TAG;
-import static com.exactpro.th2.constants.Constants.END_SEQ_NO_TAG;
+import static com.exactpro.th2.constants.Constants.GAP_FILL_FLAG_TAG;
 import static com.exactpro.th2.constants.Constants.MSG_SEQ_NUM_TAG;
+import static com.exactpro.th2.constants.Constants.MSG_TYPE_SEQUENCE_RESET;
 import static com.exactpro.th2.constants.Constants.MSG_TYPE_TAG;
 import static com.exactpro.th2.constants.Constants.NEW_SEQ_NO_TAG;
+import static com.exactpro.th2.constants.Constants.POSS_DUP;
+import static com.exactpro.th2.constants.Constants.POSS_DUP_TAG;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class FixHandlerTest {
 
-
+    private static final ByteBuf logonResponse = Unpooled.wrappedBuffer("8=FIXT.1.1\0019=105\00135=A\00134=1\00149=server\00156=client\00150=system\00152=2014-12-22T10:15:30Z\00198=0\001108=30\0011137=9\0011409=0\00110=203\001".getBytes(StandardCharsets.US_ASCII));
     private Channel channel;
     private FixHandler fixHandler;
     private static ByteBuf buffer;
@@ -77,10 +86,9 @@ class FixHandlerTest {
 
     @BeforeEach
     void beforeEach() {
-        channel = new Channel(createHandlerSettings());
+        channel = new Channel(createHandlerSettings(), null);
         fixHandler = channel.getFixHandler();
         fixHandler.onOpen(channel);
-        ByteBuf logonResponse = Unpooled.wrappedBuffer("8=FIXT.1.1\0019=105\00135=A\00134=1\00149=server\00156=client\00150=system\00152=2014-12-22T10:15:30Z\00198=0\001108=30\0011137=9\0011409=0\00110=203\001".getBytes(StandardCharsets.US_ASCII));
         fixHandler.onIncoming(channel, logonResponse);
     }
 
@@ -329,7 +337,7 @@ class FixHandlerTest {
         channel.clearQueue();
         fixHandler.onIncoming(channel, resendRequest);
         ByteBuf sequenceReset = channel.getQueue().get(0);
-        assertEquals("8=FIXT.1.1\u00019=75\u000135=4\u000134=1\u000149=client\u000156=server\u000150=trader\u000152=2014-12-22T10:15:30Z\u0001123=Y\u000136=5\u000110=115\u0001", new String(sequenceReset.array()));
+        assertEquals("8=FIXT.1.1\u00019=105\u000135=4\u000134=1\u000149=client\u000156=server\u000150=trader\u000152=2014-12-22T10:15:30Z\u0001122=2014-12-22T10:15:30Z\u000143=Y\u0001123=Y\u000136=5\u000110=162\u0001", new String(sequenceReset.array()));
         channel.clearQueue();
         fixHandler.sendResendRequest(2);
         ByteBuf resendRequestOutgoing = channel.getQueue().get(0);
@@ -410,7 +418,6 @@ class FixHandlerTest {
         MessageUtil.updateTag(buf, DEFAULT_APPL_VER_ID_TAG.toString(), "1");
         assertEquals(expected2, buf.toString(StandardCharsets.US_ASCII));
     }
-
 }
 
 class Channel implements IChannel {
@@ -418,10 +425,11 @@ class Channel implements IChannel {
     private final MyFixHandler fixHandler;
     private final List<ByteBuf> queue = new ArrayList<>();
 
-    Channel(FixHandlerSettings fixHandlerSettings) {
+    Channel(FixHandlerSettings fixHandlerSettings, DataProviderService dataProviderService) {
         this.fixHandlerSettings = fixHandlerSettings;
         IHandlerContext context = Mockito.mock(IHandlerContext.class);
         Mockito.when(context.getSettings()).thenReturn(this.fixHandlerSettings);
+        Mockito.when(context.getGrpcService(DataProviderService.class)).thenReturn(dataProviderService);
 
         this.fixHandler = new MyFixHandler(context);
     }
