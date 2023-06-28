@@ -1,4 +1,4 @@
-# th2-conn-dirty-fix (1.2.0)
+# th2-conn-dirty-fix (1.2.1)
 
 This microservice allows sending and receiving messages via FIX protocol
 
@@ -328,6 +328,9 @@ spec:
 
 # Changelog
 
+## 1.2.1
+* race condition with maintenance tasks ( heartbeats and test requests ) fix.
+
 ## 1.2.0
 * loading requested messages from cradle.
 
@@ -346,6 +349,9 @@ spec:
 
 ## 1.0.0
 * Bump `conn-dirty-tcp-core` to `3.0.0` for books and pages support
+
+## 0.3.1
+* race condition with maintenance tasks ( heartbeats and test requests ) fix.
 
 ## 0.3.0
 * Ability to recover messages from cradle.
