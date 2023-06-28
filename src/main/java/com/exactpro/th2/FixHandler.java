@@ -103,7 +103,6 @@ import static com.exactpro.th2.constants.Constants.NEW_SEQ_NO_TAG;
 import static com.exactpro.th2.constants.Constants.NEXT_EXPECTED_SEQ_NUM;
 import static com.exactpro.th2.constants.Constants.NEXT_EXPECTED_SEQ_NUMBER_TAG;
 import static com.exactpro.th2.constants.Constants.ORIG_SENDING_TIME;
-import static com.exactpro.th2.constants.Constants.ORIG_SENDING_TIME_TAG;
 import static com.exactpro.th2.constants.Constants.PASSWORD;
 import static com.exactpro.th2.constants.Constants.POSS_DUP;
 import static com.exactpro.th2.constants.Constants.POSS_DUP_TAG;
@@ -153,7 +152,9 @@ public class FixHandler implements AutoCloseable, IHandler {
     private final IHandlerContext context;
     private final InetSocketAddress address;
     private final MessageLoader messageLoader;
+
     private final ReentrantLock recoveryLock = new ReentrantLock();
+    private final ReentrantLock connectivityMaintenanceLock = new ReentrantLock();
 
     private AtomicReference<Future<?>> heartbeatTimer = new AtomicReference<>(CompletableFuture.completedFuture(null));
     private AtomicReference<Future<?>> testRequestTimer = new AtomicReference<>(CompletableFuture.completedFuture(null));
@@ -197,7 +198,7 @@ public class FixHandler implements AutoCloseable, IHandler {
 
             long time = now.until(scheduleTime, ChronoUnit.SECONDS);
             executorService.scheduleAtFixedRate(() -> {
-                sendLogout();
+                withMaintenanceLock(() -> sendLogout());
                 waitLogoutResponse();
                 channel.close();
                 sessionActive.set(false);
@@ -267,9 +268,13 @@ public class FixHandler implements AutoCloseable, IHandler {
         CompletableFuture<MessageID> result = CompletableFuture.completedFuture(null);
         try {
             recoveryLock.lock();
+            connectivityMaintenanceLock.lock();
             result = channel.send(toByteBuf(rawMessage.getBody()), rawMessage.getMetadata().getPropertiesMap(), getEventId(rawMessage), SendMode.HANDLE_AND_MANGLE);
+        } catch (Exception e) {
+            LOGGER.error("Error while sending message.", e);
         } finally {
             recoveryLock.unlock();
+            connectivityMaintenanceLock.unlock();
         }
         return result;
     }
@@ -352,7 +357,7 @@ public class FixHandler implements AutoCloseable, IHandler {
         int receivedMsgSeqNum = Integer.parseInt(requireNonNull(msgSeqNumValue.getValue()));
 
         if(receivedMsgSeqNum < serverMsgSeqNum.get() && !isDup) {
-            sendLogout();
+            withMaintenanceLock(() -> sendLogout());
             reconnectRequestTimer = executorService.schedule(this::sendLogon, settings.getReconnectDelay(), TimeUnit.SECONDS);
             metadata.put(REJECT_REASON, "SeqNum is less than expected.");
             if (LOGGER.isErrorEnabled()) LOGGER.error("Invalid message. SeqNum is less than expected {}: {}", serverMsgSeqNum.get(), message.toString(US_ASCII));
@@ -362,7 +367,7 @@ public class FixHandler implements AutoCloseable, IHandler {
         serverMsgSeqNum.incrementAndGet();
 
         if (serverMsgSeqNum.get() < receivedMsgSeqNum && !isDup && enabled.get()) {
-            sendResendRequest(serverMsgSeqNum.get(), receivedMsgSeqNum);
+            withMaintenanceLock( () -> sendResendRequest(serverMsgSeqNum.get(), receivedMsgSeqNum) );
         }
 
 
@@ -527,7 +532,7 @@ public class FixHandler implements AutoCloseable, IHandler {
                 // FIXME: there is not syn on the outgoing sequence. Should make operations with seq more careful
                 recovery(beginSeqNo, endSeqNo);
             } catch (Exception e) {
-                sendSequenceReset();
+                withMaintenanceLock(() -> sendSequenceReset());
             }
         }
     }
@@ -666,6 +671,8 @@ public class FixHandler implements AutoCloseable, IHandler {
         if (LOGGER.isDebugEnabled()) {
             LOGGER.debug("Outgoing message: {}", message.toString(US_ASCII));
         }
+
+        resetHeartbeatTask();
     }
 
     public void onOutgoingUpdateTag(@NotNull ByteBuf message, @NotNull Map<String, String> metadata) {
@@ -889,7 +896,7 @@ public class FixHandler implements AutoCloseable, IHandler {
 
     @Override
     public void close() {
-        sendLogout();
+        withMaintenanceLock(() -> sendLogout());
         waitLogoutResponse();
     }
 
@@ -1016,7 +1023,7 @@ public class FixHandler implements AutoCloseable, IHandler {
     private void resetHeartbeatTask() {
         heartbeatTimer.getAndSet(
             executorService.schedule(
-                this::sendHeartbeat,
+                () -> withMaintenanceLock(this::sendHeartbeat),
                 settings.getHeartBtInt(),
                 TimeUnit.SECONDS
             )
@@ -1026,7 +1033,7 @@ public class FixHandler implements AutoCloseable, IHandler {
     private void resetTestRequestTask() {
         testRequestTimer.getAndSet(
             executorService.schedule(
-                this::sendTestRequest,
+                () -> withMaintenanceLock(this::sendTestRequest),
                 settings.getHeartBtInt() * 3,
                 TimeUnit.SECONDS
             )
@@ -1035,5 +1042,13 @@ public class FixHandler implements AutoCloseable, IHandler {
 
     private void cancelFuture(AtomicReference<Future<?>> future) {
         future.get().cancel(false);
+    }
+
+    private void withMaintenanceLock(Runnable execution) {
+        try {
+            execution.run();
+        } catch (Exception e) {
+            LOGGER.error("Error while handling maintenance lock", e);
+        }
     }
 }
