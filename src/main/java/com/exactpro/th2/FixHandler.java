@@ -153,7 +153,15 @@ public class FixHandler implements AutoCloseable, IHandler {
     private final InetSocketAddress address;
     private final MessageLoader messageLoader;
 
+    /**
+     * recoveryLock is used to prevent messages sending while conn providing missed messages to server.
+     */
     private final ReentrantLock recoveryLock = new ReentrantLock();
+    /**
+     * connectivityMaintenanceLock is used to prevent message reordering.
+     * It is used to make sequence number increment and send() atomic operation.
+     * Without atomicity, message reordering is possible.
+     */
     private final ReentrantLock connectivityMaintenanceLock = new ReentrantLock();
 
     private AtomicReference<Future<?>> heartbeatTimer = new AtomicReference<>(CompletableFuture.completedFuture(null));
@@ -273,8 +281,8 @@ public class FixHandler implements AutoCloseable, IHandler {
         } catch (Exception e) {
             LOGGER.error("Error while sending message.", e);
         } finally {
-            recoveryLock.unlock();
             connectivityMaintenanceLock.unlock();
+            recoveryLock.unlock();
         }
         return result;
     }
@@ -1046,9 +1054,12 @@ public class FixHandler implements AutoCloseable, IHandler {
 
     private void withMaintenanceLock(Runnable execution) {
         try {
+            connectivityMaintenanceLock.lock();
             execution.run();
         } catch (Exception e) {
             LOGGER.error("Error while handling maintenance lock", e);
+        } finally {
+            connectivityMaintenanceLock.unlock();
         }
     }
 }
