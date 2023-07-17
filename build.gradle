@@ -45,13 +45,13 @@ repositories {
 }
 
 dependencies {
-    api platform('com.exactpro.th2:bom:4.2.0')
+    api platform('com.exactpro.th2:bom:4.4.0')
 
-    implementation "com.exactpro.th2:common:5.3.0-json-raw-body-5200549463-bac6816-SNAPSHOT"
-    implementation "com.exactpro.th2:common-utils:2.1.0-transport-protocol-5153730274-14792e9-SNAPSHOT"
+    implementation "com.exactpro.th2:common:5.3.0-separate-executor+"
+    implementation "com.exactpro.th2:common-utils:2.1.0-transport-protocol+"
 
     implementation 'com.exactpro.th2:netty-bytebuf-utils:0.0.1'
-    implementation('com.exactpro.th2:conn-dirty-tcp-core:3.1.0-TH2-4907-5201637508-59b18cc-SNAPSHOT') {
+    implementation('com.exactpro.th2:conn-dirty-tcp-core:3.1.0-TH2-4991+') {
         exclude group: 'org.slf4j', module: 'slf4j-log4j12'
         because 'Projects should use only slf4j-api, without coupling to a certain implementation'
     }

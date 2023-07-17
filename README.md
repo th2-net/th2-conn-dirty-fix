@@ -329,6 +329,7 @@ spec:
 
 ## 1.2.0
 * Added support for th2 transport protocol
+* Added configuration option for non-default book per session.
 
 ## 1.1.0
 * state reset option on server update.
