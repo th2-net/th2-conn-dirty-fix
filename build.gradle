@@ -46,7 +46,7 @@ dependencies {
     implementation "com.exactpro.th2:common-utils:2.1.0-transport-protocol-+"
 
     implementation 'com.exactpro.th2:netty-bytebuf-utils:0.0.1'
-    implementation 'com.exactpro.th2:conn-dirty-tcp-core:3.1.0-TH2-4997-+'
+    implementation 'com.exactpro.th2:conn-dirty-tcp-core:3.1.0-TH2-4907-+'
     implementation 'com.exactpro.th2:grpc-lw-data-provider:2.0.0-dev-version-2-+'
 
     implementation 'org.slf4j:slf4j-api'
@@ -62,6 +62,7 @@ dependencies {
 
     testImplementation 'org.mockito:mockito-all:1.10.19'
     testImplementation 'org.jetbrains.kotlin:kotlin-test-junit5:1.7.10'
+    testImplementation 'org.junit.jupiter:junit-jupiter-params:5.9.3'
 
     annotationProcessor 'com.google.auto.service:auto-service:1.0.1'
     kapt 'com.google.auto.service:auto-service:1.0.1'

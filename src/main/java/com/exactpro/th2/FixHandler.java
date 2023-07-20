@@ -31,6 +31,13 @@ import com.exactpro.th2.conn.dirty.tcp.core.util.CommonUtil;
 import com.exactpro.th2.dataprovider.lw.grpc.DataProviderService;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
+import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.lang3.exception.ExceptionUtils;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Paths;
@@ -52,12 +59,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
-import org.apache.commons.lang3.StringUtils;
-import org.apache.commons.lang3.exception.ExceptionUtils;
-import org.jetbrains.annotations.NotNull;
-import org.jetbrains.annotations.Nullable;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import static com.exactpro.th2.conn.dirty.fix.FixByteBufUtilKt.findField;
 import static com.exactpro.th2.conn.dirty.fix.FixByteBufUtilKt.findLastField;
@@ -598,11 +599,13 @@ public class FixHandler implements AutoCloseable, IHandler {
 
         if (beginString == null) {
             beginString = firstField(message).insertPrevious(BEGIN_STRING_TAG, settings.getBeginString());
+        } else if (!settings.getBeginString().equals(beginString.getValue())) {
+            beginString.setValue(settings.getBeginString());
         }
 
         FixField bodyLength = findField(message, BODY_LENGTH_TAG, US_ASCII, beginString);
 
-        if (bodyLength == null) {
+        if (bodyLength == null) { // Length is updated at the of the current method
             bodyLength = beginString.insertNext(BODY_LENGTH_TAG, STUBBING_VALUE);
         }
 
@@ -620,59 +623,49 @@ public class FixHandler implements AutoCloseable, IHandler {
 
         FixField checksum = findLastField(message, CHECKSUM_TAG);
 
-        if (checksum == null) {
-            checksum = lastField(message).insertNext(CHECKSUM_TAG, STUBBING_VALUE); //stubbing until finish checking message
+        if (checksum == null) { // Length is updated at the of the current method
+            lastField(message).insertNext(CHECKSUM_TAG, STUBBING_VALUE); //stubbing until finish checking message
         }
 
         FixField msgSeqNum = findField(message, MSG_SEQ_NUM_TAG, US_ASCII, bodyLength);
 
+        String msgSeqNumValue = Integer.toString(this.msgSeqNum.incrementAndGet());
         if (msgSeqNum == null) {
-            int msgSeqNumValue = this.msgSeqNum.incrementAndGet();
-
             if (msgType != null) {
-                msgSeqNum = msgType.insertNext(MSG_SEQ_NUM_TAG, Integer.toString(msgSeqNumValue));
+                msgSeqNum = msgType.insertNext(MSG_SEQ_NUM_TAG, msgSeqNumValue);
             } else {
-                msgSeqNum = bodyLength.insertNext(MSG_SEQ_NUM_TAG, Integer.toString(msgSeqNumValue));
+                msgSeqNum = bodyLength.insertNext(MSG_SEQ_NUM_TAG, msgSeqNumValue);
             }
+        } else {
+            msgSeqNum.setValue(msgSeqNumValue);
         }
-
-        int msgSeqNumValue = Integer.parseInt(msgSeqNum.getValue());
 
         FixField senderCompID = findField(message, SENDER_COMP_ID_TAG, US_ASCII, bodyLength);
 
         if (senderCompID == null) {
             senderCompID = msgSeqNum.insertNext(SENDER_COMP_ID_TAG, settings.getSenderCompID());
-        } else {
-            String value = senderCompID.getValue();
-
-            if (value == null || value.isEmpty() || value.equals("null")) {
-                senderCompID.setValue(settings.getSenderCompID());
-            }
+        } else if (!settings.getSenderCompID().equals(senderCompID.getValue())) {
+            senderCompID.setValue(settings.getSenderCompID());
         }
 
         FixField targetCompID = findField(message, TARGET_COMP_ID_TAG, US_ASCII, bodyLength);
 
         if (targetCompID == null) {
             targetCompID = senderCompID.insertNext(TARGET_COMP_ID_TAG, settings.getTargetCompID());
-        } else {
-            String value = targetCompID.getValue();
-
-            if (value == null || value.isEmpty() || value.equals("null")) {
-                targetCompID.setValue(settings.getTargetCompID());
-            }
+        } else if (!settings.getTargetCompID().equals(targetCompID.getValue())) {
+            targetCompID.setValue(settings.getTargetCompID());
         }
 
-        if (settings.getSenderSubID() != null) {
-            FixField senderSubID = findField(message, SENDER_SUB_ID_TAG, US_ASCII, bodyLength);
-
-            if (senderSubID == null) {
-                senderSubID = targetCompID.insertNext(SENDER_SUB_ID_TAG, settings.getSenderSubID());
-            } else {
-                String value = senderSubID.getValue();
-
-                if (value == null || value.isEmpty() || value.equals("null")) {
-                    senderSubID.setValue(settings.getSenderSubID());
-                }
+        FixField senderSubID = findField(message, SENDER_SUB_ID_TAG, US_ASCII, bodyLength);
+        if (senderSubID == null) {
+            if (settings.getSenderSubID() != null) {
+                targetCompID.insertNext(SENDER_SUB_ID_TAG, settings.getSenderSubID());
+            }
+        } else {
+            if (settings.getSenderSubID() == null) {
+                senderSubID.clear();
+            } else if (!settings.getSenderSubID().equals(senderSubID.getValue())) {
+                senderSubID.setValue(settings.getSenderSubID());
             }
         }
 
@@ -681,11 +674,7 @@ public class FixHandler implements AutoCloseable, IHandler {
         if (sendingTime == null) {
             targetCompID.insertNext(SENDING_TIME_TAG, getTime());
         } else {
-            String value = sendingTime.getValue();
-
-            if (value == null || value.isEmpty() || value.equals("null")) {
-                sendingTime.setValue(getTime());
-            }
+            sendingTime.setValue(getTime());
         }
 
         updateLength(message);
