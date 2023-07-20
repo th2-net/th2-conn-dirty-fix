@@ -329,6 +329,7 @@ spec:
 
 ## 1.2.0
 * Added support for th2 transport protocol
+* Header tags are forced to update by conn
 
 ## 1.1.0
 * state reset option on server update.
