@@ -1,4 +1,4 @@
-# th2-conn-dirty-fix (1.2.0)
+# th2-conn-dirty-fix (1.3.0)
 
 This microservice allows sending and receiving messages via FIX protocol
 
@@ -327,6 +327,10 @@ spec:
 ```
 
 # Changelog
+
+## 1.3.0
+* added ability to filter by "book", "session_group", "session_alias", "message_type", "direction", "protocol".
+* conditions inside the message and metadata now combined as "and".
 
 ## 1.2.0
 * loading requested messages from cradle.

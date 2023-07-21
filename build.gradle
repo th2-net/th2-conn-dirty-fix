@@ -38,18 +38,18 @@ repositories {
 
     mavenLocal()
 
-    configurations.all {
+    configurations.configureEach {
         resolutionStrategy.cacheChangingModulesFor 0, 'seconds'
         resolutionStrategy.cacheDynamicVersionsFor 0, 'seconds'
     }
 }
 
 dependencies {
-    api platform('com.exactpro.th2:bom:4.2.0')
+    api platform('com.exactpro.th2:bom:4.4.0')
 
-    implementation 'com.exactpro.th2:common:5.2.0-dev'
+    implementation 'com.exactpro.th2:common:5.2.2-dev'
     implementation 'com.exactpro.th2:netty-bytebuf-utils:0.0.1'
-    implementation('com.exactpro.th2:conn-dirty-tcp-core:3.0.0-dev') {
+    implementation('com.exactpro.th2:conn-dirty-tcp-core:3.1.0-TS-1547-5623395607-a2f5f3c-SNAPSHOT') {
         exclude group: 'org.slf4j', module: 'slf4j-log4j12'
         because 'Projects should use only slf4j-api, without coupling to a certain implementation'
     }
@@ -60,8 +60,9 @@ dependencies {
 
     implementation 'io.netty:netty-all'
     implementation 'org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.6.21'
-    implementation 'com.google.auto.service:auto-service:1.0.1'
+    implementation 'com.google.auto.service:auto-service:1.1.1'
 
+    implementation "org.apache.commons:commons-lang3"
     implementation group: 'com.fasterxml.jackson.core', name: 'jackson-core', version: jackson_version
     implementation group: 'com.fasterxml.jackson.core', name: 'jackson-databind', version: jackson_version
     implementation group: 'com.fasterxml.jackson.module', name: 'jackson-module-kotlin', version: jackson_version
@@ -69,8 +70,8 @@ dependencies {
     testImplementation 'org.mockito:mockito-all:1.10.19'
     testImplementation 'org.jetbrains.kotlin:kotlin-test-junit5:1.7.10'
 
-    annotationProcessor 'com.google.auto.service:auto-service:1.0.1'
-    kapt 'com.google.auto.service:auto-service:1.0.1'
+    annotationProcessor 'com.google.auto.service:auto-service:1.1.1'
+    kapt 'com.google.auto.service:auto-service:1.1.1'
 }
 
 test {
