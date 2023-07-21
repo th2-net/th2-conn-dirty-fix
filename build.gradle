@@ -2,7 +2,7 @@ plugins {
     id 'java'
     id 'org.jetbrains.kotlin.jvm' version '1.6.21'
     id 'com.palantir.docker' version '0.25.0'
-    id "org.owasp.dependencycheck" version "8.1.2"
+    id "org.owasp.dependencycheck" version "8.2.1"
 }
 
 apply plugin: 'application'
@@ -55,7 +55,7 @@ dependencies {
         exclude group: 'org.slf4j', module: 'slf4j-log4j12'
         because 'Projects should use only slf4j-api, without coupling to a certain implementation'
     }
-    implementation 'com.exactpro.th2:grpc-lw-data-provider:2.0.0-dev-version-2-4112857941-SNAPSHOT'
+    implementation 'com.exactpro.th2:grpc-lw-data-provider:2.0.0-dev-version-2+'
 
     implementation 'org.slf4j:slf4j-api'
     implementation 'io.github.microutils:kotlin-logging:2.1.23'
