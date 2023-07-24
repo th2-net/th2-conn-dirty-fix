@@ -3,6 +3,7 @@ plugins {
     id 'org.jetbrains.kotlin.jvm' version '1.6.21'
     id 'com.palantir.docker' version '0.25.0'
     id "org.owasp.dependencycheck" version "8.2.1"
+    id "com.gorylenko.gradle-git-properties" version "2.4.1"
 }
 
 apply plugin: 'application'
@@ -15,15 +16,7 @@ version release_version
 sourceCompatibility = 11
 targetCompatibility = 11
 
-ext {
-    sharedDir = file("${project.rootDir}/shared")
-}
-
 repositories {
-    maven {
-        name 'MavenLocal'
-        url sharedDir
-    }
     mavenCentral()
 
     maven {
@@ -61,16 +54,15 @@ dependencies {
     implementation 'com.exactpro.th2:grpc-lw-data-provider:2.0.0-dev-version-2+'
 
     implementation 'org.slf4j:slf4j-api'
-    implementation 'io.github.microutils:kotlin-logging:2.1.23'
-    implementation 'org.apache.commons:commons-lang3:3.12.0'
+    implementation 'io.github.microutils:kotlin-logging:3.0.0' // The last version bases on kotlin 1.6.0
+    implementation 'org.apache.commons:commons-lang3'
 
     implementation 'io.netty:netty-all'
-    implementation 'org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.6.21'
     implementation 'com.google.auto.service:auto-service:1.0.1'
 
-    implementation group: 'com.fasterxml.jackson.core', name: 'jackson-core', version: jackson_version
-    implementation group: 'com.fasterxml.jackson.core', name: 'jackson-databind', version: jackson_version
-    implementation group: 'com.fasterxml.jackson.module', name: 'jackson-module-kotlin', version: jackson_version
+    implementation 'com.fasterxml.jackson.core:jackson-core'
+    implementation 'com.fasterxml.jackson.core:jackson-databind'
+    implementation 'com.fasterxml.jackson.module:jackson-module-kotlin'
 
     testImplementation 'org.mockito:mockito-all:1.10.19'
     testImplementation 'org.jetbrains.kotlin:kotlin-test-junit5:1.7.10'
