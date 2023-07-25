@@ -560,7 +560,7 @@ public class FixHandler implements AutoCloseable, IHandler {
 
                     if(ADMIN_MESSAGES.contains(msgType)) return true;
                     FixField possDup = findField(buf, POSS_DUP_TAG);
-                    if(possDup != null && possDup.getValue() == IS_POSS_DUP) return true;
+                    if(possDup != null && Objects.equals(possDup.getValue(), IS_POSS_DUP)) return true;
 
                     if(sequence - 1 != lastProcessedSequence.get() ) {
                         int newSeqNo = sequence;
@@ -979,16 +979,16 @@ public class FixHandler implements AutoCloseable, IHandler {
 
         String time = getTime();
         if (sendingTime == null) {
-            seqNum.insertNext(SENDING_TIME, time).insertNext(ORIG_SENDING_TIME, time);
+            seqNum.insertNext(SENDING_TIME_TAG, time).insertNext(SENDING_TIME_TAG, time);
         } else {
             String value = sendingTime.getValue();
 
             if (value == null || value.isEmpty() || value.equals("null")) {
                 sendingTime.setValue(time);
-                sendingTime.insertNext(ORIG_SENDING_TIME, time);
+                sendingTime.insertNext(ORIG_SENDING_TIME_TAG, time);
             } else {
                 sendingTime.setValue(time);
-                sendingTime.insertNext(ORIG_SENDING_TIME, value);
+                sendingTime.insertNext(ORIG_SENDING_TIME_TAG, value);
             }
         }
     }
