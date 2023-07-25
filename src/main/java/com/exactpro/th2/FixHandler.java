@@ -425,6 +425,10 @@ public class FixHandler implements AutoCloseable, IHandler {
                 if (LOGGER.isInfoEnabled()) LOGGER.info("Sequence reset received - {}", message.toString(US_ASCII));
                 resetSequence(message);
                 break;
+            case MSG_TYPE_TEST_REQUEST:
+                if (LOGGER.isInfoEnabled()) LOGGER.info("Test request received - {}", message.toString(US_ASCII));
+                handleTestRequest(message, metadata);
+                break;
         }
 
         resetTestRequestTask();
@@ -432,6 +436,18 @@ public class FixHandler implements AutoCloseable, IHandler {
         metadata.put(STRING_MSG_TYPE, msgTypeValue);
 
         return metadata;
+    }
+
+    private Map<String, String> handleTestRequest(ByteBuf message, Map<String, String> metadata) {
+        FixField testReqId = findField(message, TEST_REQ_ID_TAG);
+        if(testReqId == null || testReqId.getValue() == null) {
+            metadata.put(REJECT_REASON, "Test Request message hasn't got TestReqId field.");
+            return metadata;
+        }
+
+        sendHeartbeatWithTestRequestId(testReqId.getValue());
+
+        return null;
     }
 
     private void handleLogout(@NotNull ByteBuf message) {
@@ -779,10 +795,17 @@ public class FixHandler implements AutoCloseable, IHandler {
     }
 
     public void sendHeartbeat() {
+        sendHeartbeatWithTestRequestId(null);
+    }
+
+    private void sendHeartbeatWithTestRequestId(String testReqId) {
         StringBuilder heartbeat = new StringBuilder();
         int seqNum = msgSeqNum.incrementAndGet();
 
         setHeader(heartbeat, MSG_TYPE_HEARTBEAT, seqNum, null);
+        if(testReqId != null) {
+            heartbeat.append(TEST_REQ_ID).append(testReqId);
+        }
         setChecksumAndBodyLength(heartbeat);
 
         if (enabled.get()) {
