@@ -82,6 +82,7 @@ public class Constants {
     public static final String NEXT_EXPECTED_SEQ_NUM = SOH + NEXT_EXPECTED_SEQ_NUMBER_TAG + "=";
     public static final String POSS_DUP = SOH + POSS_DUP_TAG + "=";
     public static final String ORIG_SENDING_TIME = SOH + ORIG_SENDING_TIME_TAG + "=";
+    public static final String TEXT = SOH + TEXT_TAG + "=";
 
     //message types
     public static final String MSG_TYPE_LOGON = "A";

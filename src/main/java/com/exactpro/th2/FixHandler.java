@@ -308,10 +308,16 @@ public class FixHandler implements AutoCloseable, IHandler {
         }
 
         if(receivedMsgSeqNum < serverMsgSeqNum.get() && !isDup) {
-            sendLogout();
-            reconnectRequestTimer = executorService.schedule(this::sendLogon, settings.getReconnectDelay(), TimeUnit.SECONDS);
+            if(settings.isLogoutOnIncorrectServerSequence()) {
+                context.send(CommonUtil.toEvent(String.format("Received server sequence %d but expected %d. Sending logout with text: MsgSeqNum is too low...", receivedMsgSeqNum, serverMsgSeqNum.get())));
+                sendLogout(String.format("MsgSeqNum too low, expecting %d but received %d", serverMsgSeqNum.get() + 1, receivedMsgSeqNum));
+                reconnectRequestTimer = executorService.schedule(this::sendLogon, settings.getReconnectDelay(), TimeUnit.SECONDS);
+                if (LOGGER.isErrorEnabled()) LOGGER.error("Invalid message. SeqNum is less than expected {}: {}", serverMsgSeqNum.get() + 1, message.toString(US_ASCII));
+            } else {
+                context.send(CommonUtil.toEvent(String.format("Received server sequence %d but expected %d. Correcting server sequence.", receivedMsgSeqNum, serverMsgSeqNum.get() + 1)));
+                serverMsgSeqNum.set(receivedMsgSeqNum - 1);
+            }
             metadata.put(REJECT_REASON, "SeqNum is less than expected.");
-            if (LOGGER.isErrorEnabled()) LOGGER.error("Invalid message. SeqNum is less than expected {}: {}", serverMsgSeqNum.get(), message.toString(US_ASCII));
             return metadata;
         }
 
@@ -400,7 +406,7 @@ public class FixHandler implements AutoCloseable, IHandler {
             return metadata;
         }
 
-        sendHeartbeatWithTestRequestId(testReqId.getValue());
+        sendHeartbeatTestReqId(testReqId.getValue());
 
         return null;
     }
@@ -749,11 +755,9 @@ public class FixHandler implements AutoCloseable, IHandler {
         sendLogon();
     }
 
-    public void sendHeartbeat() {
-        sendHeartbeatWithTestRequestId(null);
-    }
+    public void sendHeartbeat() {sendHeartbeatTestReqId(null);}
 
-    private void sendHeartbeatWithTestRequestId(String testReqId) {
+    private void sendHeartbeatTestReqId(String testReqId) {
         StringBuilder heartbeat = new StringBuilder();
         int seqNum = msgSeqNum.incrementAndGet();
 
@@ -831,9 +835,16 @@ public class FixHandler implements AutoCloseable, IHandler {
     }
 
     private void sendLogout() {
+        sendLogout(null);
+    }
+
+    private void sendLogout(String text) {
         if (enabled.get()) {
             StringBuilder logout = new StringBuilder();
             setHeader(logout, MSG_TYPE_LOGOUT, msgSeqNum.incrementAndGet(), null);
+            if(text != null) {
+               logout.append(TEXT).append(text);
+            }
             setChecksumAndBodyLength(logout);
 
             LOGGER.debug("Sending logout - {}", logout);
