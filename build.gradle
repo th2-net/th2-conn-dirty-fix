@@ -2,7 +2,7 @@ plugins {
     id 'java'
     id 'org.jetbrains.kotlin.jvm' version '1.6.21'
     id 'com.palantir.docker' version '0.25.0'
-    id "org.owasp.dependencycheck" version "8.1.2"
+    id "org.owasp.dependencycheck" version "8.2.1"
 }
 
 apply plugin: 'application'
@@ -45,9 +45,9 @@ repositories {
 }
 
 dependencies {
-    api platform('com.exactpro.th2:bom:4.2.0')
+    api platform('com.exactpro.th2:bom:4.4.0')
 
-    implementation 'com.exactpro.th2:common:5.2.0-dev'
+    implementation 'com.exactpro.th2:common:5.2.2-dev'
     implementation 'com.exactpro.th2:netty-bytebuf-utils:0.0.1'
     implementation('com.exactpro.th2:conn-dirty-tcp-core:3.0.0-dev') {
         exclude group: 'org.slf4j', module: 'slf4j-log4j12'
@@ -57,6 +57,7 @@ dependencies {
 
     implementation 'org.slf4j:slf4j-api'
     implementation 'io.github.microutils:kotlin-logging:2.1.23'
+    implementation 'org.apache.commons:commons-lang3:3.13.0'
 
     implementation 'io.netty:netty-all'
     implementation 'org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.6.21'
