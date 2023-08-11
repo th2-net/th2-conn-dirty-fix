@@ -86,6 +86,7 @@ import static com.exactpro.th2.constants.Constants.GAP_FILL_FLAG;
 import static com.exactpro.th2.constants.Constants.GAP_FILL_FLAG_TAG;
 import static com.exactpro.th2.constants.Constants.HEART_BT_INT;
 import static com.exactpro.th2.constants.Constants.IS_POSS_DUP;
+import static com.exactpro.th2.constants.Constants.IS_SEQUENCE_RESET_FLAG;
 import static com.exactpro.th2.constants.Constants.MSG_SEQ_NUM;
 import static com.exactpro.th2.constants.Constants.MSG_SEQ_NUM_TAG;
 import static com.exactpro.th2.constants.Constants.MSG_TYPE;
@@ -103,11 +104,11 @@ import static com.exactpro.th2.constants.Constants.NEW_SEQ_NO_TAG;
 import static com.exactpro.th2.constants.Constants.NEXT_EXPECTED_SEQ_NUM;
 import static com.exactpro.th2.constants.Constants.NEXT_EXPECTED_SEQ_NUMBER_TAG;
 import static com.exactpro.th2.constants.Constants.ORIG_SENDING_TIME;
-import static com.exactpro.th2.constants.Constants.ORIG_SENDING_TIME_TAG;
 import static com.exactpro.th2.constants.Constants.PASSWORD;
 import static com.exactpro.th2.constants.Constants.POSS_DUP;
 import static com.exactpro.th2.constants.Constants.POSS_DUP_TAG;
 import static com.exactpro.th2.constants.Constants.RESET_SEQ_NUM;
+import static com.exactpro.th2.constants.Constants.RESET_SEQ_NUM_TAG;
 import static com.exactpro.th2.constants.Constants.SENDER_COMP_ID;
 import static com.exactpro.th2.constants.Constants.SENDER_COMP_ID_TAG;
 import static com.exactpro.th2.constants.Constants.SENDER_SUB_ID;
@@ -120,6 +121,7 @@ import static com.exactpro.th2.constants.Constants.TARGET_COMP_ID;
 import static com.exactpro.th2.constants.Constants.TARGET_COMP_ID_TAG;
 import static com.exactpro.th2.constants.Constants.TEST_REQ_ID;
 import static com.exactpro.th2.constants.Constants.TEST_REQ_ID_TAG;
+import static com.exactpro.th2.constants.Constants.TEXT;
 import static com.exactpro.th2.constants.Constants.TEXT_TAG;
 import static com.exactpro.th2.constants.Constants.USERNAME;
 import static com.exactpro.th2.netty.bytebuf.util.ByteBufUtil.indexOf;
@@ -352,11 +354,24 @@ public class FixHandler implements AutoCloseable, IHandler {
 
         int receivedMsgSeqNum = Integer.parseInt(requireNonNull(msgSeqNumValue.getValue()));
 
+        if(msgTypeValue.equals(MSG_TYPE_LOGON) && receivedMsgSeqNum < serverMsgSeqNum.get()) {
+            FixField resetSeqNumFlagField = findField(message, RESET_SEQ_NUM_TAG);
+            if(resetSeqNumFlagField != null && Objects.equals(resetSeqNumFlagField.getValue(), IS_SEQUENCE_RESET_FLAG)) {
+                serverMsgSeqNum.set(0);
+            }
+        }
+
         if(receivedMsgSeqNum < serverMsgSeqNum.get() && !isDup) {
-            sendLogout();
-            reconnectRequestTimer = executorService.schedule(this::sendLogon, settings.getReconnectDelay(), TimeUnit.SECONDS);
+            if(settings.isLogoutOnIncorrectServerSequence()) {
+                context.send(CommonUtil.toEvent(String.format("Received server sequence %d but expected %d. Sending logout with text: MsgSeqNum is too low...", receivedMsgSeqNum, serverMsgSeqNum.get())));
+                sendLogout(String.format("MsgSeqNum too low, expecting %d but received %d", serverMsgSeqNum.get() + 1, receivedMsgSeqNum));
+                reconnectRequestTimer = executorService.schedule(this::sendLogon, settings.getReconnectDelay(), TimeUnit.SECONDS);
+                if (LOGGER.isErrorEnabled()) error("Invalid message. SeqNum is less than expected %d: %s", null, serverMsgSeqNum.get(), message.toString(US_ASCII));
+            } else {
+                context.send(CommonUtil.toEvent(String.format("Received server sequence %d but expected %d. Correcting server sequence.", receivedMsgSeqNum, serverMsgSeqNum.get() + 1)));
+                serverMsgSeqNum.set(receivedMsgSeqNum - 1);
+            }
             metadata.put(REJECT_REASON, "SeqNum is less than expected.");
-            error("Invalid message. SeqNum is less than expected %d: %s", null, serverMsgSeqNum.get(), message.toString(US_ASCII));
             return metadata;
         }
 
@@ -423,6 +438,10 @@ public class FixHandler implements AutoCloseable, IHandler {
                 if(LOGGER.isInfoEnabled()) info("Sequence reset received  - %s", message.toString(US_ASCII));
                 resetSequence(message);
                 break;
+            case MSG_TYPE_TEST_REQUEST:
+                if (LOGGER.isInfoEnabled()) LOGGER.info("Test request received - {}", message.toString(US_ASCII));
+                handleTestRequest(message, metadata);
+                break;
         }
 
         resetTestRequestTask();
@@ -432,26 +451,32 @@ public class FixHandler implements AutoCloseable, IHandler {
         return metadata;
     }
 
+    private Map<String, String> handleTestRequest(ByteBuf message, Map<String, String> metadata) {
+        FixField testReqId = findField(message, TEST_REQ_ID_TAG);
+        if(testReqId == null || testReqId.getValue() == null) {
+            metadata.put(REJECT_REASON, "Test Request message hasn't got TestReqId field.");
+            return metadata;
+        }
+
+        sendHeartbeatTestReqId(testReqId.getValue());
+
+        return null;
+    }
+
     private void handleLogout(@NotNull ByteBuf message) {
         if(LOGGER.isInfoEnabled()) info("Logout received - %s", message.toString(US_ASCII));
-        FixField sessionStatus = findField(message, SESSION_STATUS_TAG);
         boolean isSequenceChanged = false;
-        if(sessionStatus != null) {
-            int statusCode = Integer.parseInt(Objects.requireNonNull(sessionStatus.getValue()));
-            if(statusCode != SUCCESSFUL_LOGOUT_CODE) {
-                FixField text = findField(message, TEXT_TAG);
-                if (text != null) {
-                    warn("Received Logout has text (58) tag: %s", text.getValue());
-                    String wrongClientSequence = StringUtils.substringBetween(text.getValue(), "expecting ", " but received");
-                    if (wrongClientSequence != null) {
-                        msgSeqNum.set(Integer.parseInt(wrongClientSequence) - 1);
-                        isSequenceChanged = true;
-                    }
-                    String wrongClientNextExpectedSequence = StringUtils.substringBetween(text.getValue(), "MSN to be sent is ", " but received");
-                    if(wrongClientNextExpectedSequence != null && settings.getResetStateOnServerReset()) {
-                        serverMsgSeqNum.set(Integer.parseInt(wrongClientNextExpectedSequence));
-                    }
-                }
+        FixField text = findField(message, TEXT_TAG);
+        if (text != null) {
+            LOGGER.warn("Received Logout has text (58) tag: {}", text.getValue());
+            String wrongClientSequence = StringUtils.substringBetween(text.getValue(), "expecting ", " but received");
+            if (wrongClientSequence != null) {
+                msgSeqNum.set(Integer.parseInt(wrongClientSequence) - 1);
+                isSequenceChanged = true;
+            }
+            String wrongClientNextExpectedSequence = StringUtils.substringBetween(text.getValue(), "MSN to be sent is ", " but received");
+            if(wrongClientNextExpectedSequence != null && settings.getResetStateOnServerReset()) {
+                serverMsgSeqNum.set(Integer.parseInt(wrongClientNextExpectedSequence));
             }
         }
 
@@ -772,11 +797,16 @@ public class FixHandler implements AutoCloseable, IHandler {
         sendLogon();
     }
 
-    public void sendHeartbeat() {
+    public void sendHeartbeat() {sendHeartbeatTestReqId(null);}
+
+    private void sendHeartbeatTestReqId(String testReqId) {
         StringBuilder heartbeat = new StringBuilder();
         int seqNum = msgSeqNum.incrementAndGet();
 
         setHeader(heartbeat, MSG_TYPE_HEARTBEAT, seqNum, null);
+        if(testReqId != null) {
+            heartbeat.append(TEST_REQ_ID).append(testReqId);
+        }
         setChecksumAndBodyLength(heartbeat);
 
         if (enabled.get()) {
@@ -812,8 +842,11 @@ public class FixHandler implements AutoCloseable, IHandler {
         }
         StringBuilder logon = new StringBuilder();
         Boolean reset;
-        if (!connStarted.get()) reset = settings.getResetSeqNumFlag();
-        else reset = settings.getResetOnLogon();
+        if (!connStarted.get()) {
+            reset = settings.getResetSeqNumFlag();
+        } else {
+            reset = settings.getResetOnLogon();
+        }
         if (reset) msgSeqNum.getAndSet(0);
 
         setHeader(logon, MSG_TYPE_LOGON, msgSeqNum.get() + 1, null);
@@ -844,9 +877,16 @@ public class FixHandler implements AutoCloseable, IHandler {
     }
 
     private void sendLogout() {
+        sendLogout(null);
+    }
+
+    private void sendLogout(String text) {
         if (enabled.get()) {
             StringBuilder logout = new StringBuilder();
             setHeader(logout, MSG_TYPE_LOGOUT, msgSeqNum.incrementAndGet(), null);
+            if(text != null) {
+               logout.append(TEXT).append(text);
+            }
             setChecksumAndBodyLength(logout);
 
             debug("Sending logout - %s", logout);
