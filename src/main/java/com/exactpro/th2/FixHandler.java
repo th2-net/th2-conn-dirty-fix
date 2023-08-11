@@ -240,7 +240,7 @@ public class FixHandler implements AutoCloseable, IHandler {
     public void onStart() {
         channel = context.createChannel(address, settings.getSecurity(), Map.of(), true, settings.getReconnectDelay() * 1000L, Integer.MAX_VALUE);
         if(settings.isLoadSequencesFromCradle()) {
-            SequenceHolder sequences = messageLoader.loadInitialSequences(channel.getSessionAlias());
+            SequenceHolder sequences = messageLoader.loadInitialSequences(channel.getSessionGroup(), channel.getSessionAlias());
             LOGGER.info("Loaded sequences are: client - {}, server - {}", sequences.getClientSeq(), sequences.getServerSeq());
             msgSeqNum.set(sequences.getClientSeq());
             serverMsgSeqNum.set(sequences.getServerSeq());
@@ -312,7 +312,7 @@ public class FixHandler implements AutoCloseable, IHandler {
     }
 
     @Override
-    public ByteBuf onReceive(IChannel channel, ByteBuf buffer) {
+    public ByteBuf onReceive(@NotNull IChannel channel, ByteBuf buffer) {
         int offset = buffer.readerIndex();
         if (offset == buffer.writerIndex()) return null;
 
@@ -376,7 +376,7 @@ public class FixHandler implements AutoCloseable, IHandler {
         FixField possDup = findField(message, POSS_DUP_TAG);
         boolean isDup = false;
         if(possDup != null) {
-            isDup = possDup.getValue().equals(IS_POSS_DUP);
+            isDup = Objects.equals(possDup.getValue(), IS_POSS_DUP);
         }
 
         String msgTypeValue = requireNonNull(msgType.getValue());
@@ -508,7 +508,7 @@ public class FixHandler implements AutoCloseable, IHandler {
         FixField seqNumValue = findField(message, NEW_SEQ_NO_TAG);
 
         if(seqNumValue != null) {
-            if(gapFillMode == null || gapFillMode.getValue().equals("N")) {
+            if(gapFillMode == null || Objects.equals(gapFillMode.getValue(), "N")) {
                 serverMsgSeqNum.set(Integer.parseInt(requireNonNull(seqNumValue.getValue())));
             } else {
                 serverMsgSeqNum.set(Integer.parseInt(requireNonNull(seqNumValue.getValue())) - 1);
@@ -588,7 +588,7 @@ public class FixHandler implements AutoCloseable, IHandler {
                             || msgTypeField == null || msgTypeField.getValue() == null) {
                         return true;
                     }
-                    Integer sequence = Integer.parseInt(seqNum.getValue());
+                    int sequence = Integer.parseInt(seqNum.getValue());
                     String msgType = msgTypeField.getValue();
 
                     if(sequence < beginSeqNo) return true;
@@ -599,9 +599,8 @@ public class FixHandler implements AutoCloseable, IHandler {
                     if(possDup != null && Objects.equals(possDup.getValue(), IS_POSS_DUP)) return true;
 
                     if(sequence - 1 != lastProcessedSequence.get() ) {
-                        int newSeqNo = sequence;
                         StringBuilder sequenceReset =
-                                createSequenceReset(Math.max(beginSeqNo, lastProcessedSequence.get() + 1), newSeqNo);
+                                createSequenceReset(Math.max(beginSeqNo, lastProcessedSequence.get() + 1), sequence);
                         channel.send(Unpooled.wrappedBuffer(sequenceReset.toString().getBytes(StandardCharsets.UTF_8)), Collections.emptyMap(), null, SendMode.MANGLE);
                         resetHeartbeatTask();
                     }
@@ -619,9 +618,8 @@ public class FixHandler implements AutoCloseable, IHandler {
                 };
 
                 messageLoader.processMessagesInRange(
-                    Direction.SECOND,
-                    channel.getSessionAlias(),
-                    beginSeqNo,
+                        channel.getSessionGroup(), channel.getSessionAlias(), Direction.SECOND,
+                        beginSeqNo,
                     processMessage
                 );
 
@@ -737,7 +735,7 @@ public class FixHandler implements AutoCloseable, IHandler {
         FixField checksum = findLastField(message, CHECKSUM_TAG);
 
         if (checksum == null) {
-            checksum = lastField(message).insertNext(CHECKSUM_TAG, STUBBING_VALUE); //stubbing until finish checking message
+            lastField(message).insertNext(CHECKSUM_TAG, STUBBING_VALUE); //stubbing until finish checking message
         }
 
         FixField msgSeqNum = findField(message, MSG_SEQ_NUM_TAG, US_ASCII, bodyLength);
