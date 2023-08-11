@@ -325,14 +325,14 @@ public class FixHandler implements AutoCloseable, IHandler {
         FixField msgSeqNumValue = findField(message, MSG_SEQ_NUM_TAG);
         if (msgSeqNumValue == null) {
             metadata.put(REJECT_REASON, "No msgSeqNum Field");
-            error("Invalid message. No MsgSeqNum in message: %s", null, message.toString(US_ASCII));
+            if(LOGGER.isErrorEnabled()) error("Invalid message. No MsgSeqNum in message: %s", null, message.toString(US_ASCII));
             return metadata;
         }
 
         FixField msgType = findField(message, MSG_TYPE_TAG);
         if (msgType == null) {
             metadata.put(REJECT_REASON, "No msgType Field");
-            error("Invalid message. No MsgType in message: %s", null,  message.toString(US_ASCII));
+            if(LOGGER.isErrorEnabled()) error("Invalid message. No MsgType in message: %s", null,  message.toString(US_ASCII));
             return metadata;
         }
 
@@ -368,18 +368,18 @@ public class FixHandler implements AutoCloseable, IHandler {
 
         switch (msgTypeValue) {
             case MSG_TYPE_HEARTBEAT:
-                info("Heartbeat received - %s", message.toString(US_ASCII));
+                if(LOGGER.isInfoEnabled()) info("Heartbeat received - %s", message.toString(US_ASCII));
                 checkHeartbeat(message);
                 break;
             case MSG_TYPE_LOGON:
-                info("Logon received - %s", message.toString(US_ASCII));
+                if(LOGGER.isInfoEnabled()) info("Logon received - %s", message.toString(US_ASCII));
                 boolean connectionSuccessful = checkLogon(message);
                 if (connectionSuccessful) {
                     if(settings.useNextExpectedSeqNum()) {
                         FixField nextExpectedSeqField = findField(message, NEXT_EXPECTED_SEQ_NUMBER_TAG);
                         if(nextExpectedSeqField == null) {
                             metadata.put(REJECT_REASON, "No NextExpectedSeqNum field");
-                            error("Invalid message. No NextExpectedSeqNum in message: %s", null, message.toString(US_ASCII));
+                            if(LOGGER.isErrorEnabled()) error("Invalid message. No NextExpectedSeqNum in message: %s", null, message.toString(US_ASCII));
                             return metadata;
                         }
 
@@ -415,11 +415,11 @@ public class FixHandler implements AutoCloseable, IHandler {
                 break;
             //extract logout reason
             case MSG_TYPE_RESEND_REQUEST:
-                info("Resend request received - %s", message.toString(US_ASCII));
+                if(LOGGER.isInfoEnabled()) info("Resend request received - %s", message.toString(US_ASCII));
                 handleResendRequest(message);
                 break;
             case MSG_TYPE_SEQUENCE_RESET: //gap fill
-                info("Sequence reset received  - %s", message.toString(US_ASCII));
+                if(LOGGER.isInfoEnabled()) info("Sequence reset received  - %s", message.toString(US_ASCII));
                 resetSequence(message);
                 break;
         }
@@ -432,7 +432,7 @@ public class FixHandler implements AutoCloseable, IHandler {
     }
 
     private void handleLogout(@NotNull ByteBuf message) {
-        info("Logout received - %s", message.toString(US_ASCII));
+        if(LOGGER.isInfoEnabled()) info("Logout received - %s", message.toString(US_ASCII));
         FixField sessionStatus = findField(message, SESSION_STATUS_TAG);
         boolean isSequenceChanged = false;
         if(sessionStatus != null) {
@@ -475,7 +475,7 @@ public class FixHandler implements AutoCloseable, IHandler {
                 serverMsgSeqNum.set(Integer.parseInt(requireNonNull(seqNumValue.getValue())) - 1);
             }
         } else {
-            warn("Failed to reset servers MsgSeqNum. No such tag in message: %s", message.toString(US_ASCII));
+            if(LOGGER.isWarnEnabled()) warn("Failed to reset servers MsgSeqNum. No such tag in message: %s", message.toString(US_ASCII));
         }
     }
 
@@ -661,7 +661,7 @@ public class FixHandler implements AutoCloseable, IHandler {
     public void onOutgoing(@NotNull IChannel channel, @NotNull ByteBuf message, @NotNull Map<String, String> metadata) {
         onOutgoingUpdateTag(message, metadata);
 
-        debug("Outgoing message: %s", message.toString(US_ASCII));
+        if(LOGGER.isDebugEnabled()) debug("Outgoing message: %s", message.toString(US_ASCII));
     }
 
     public void onOutgoingUpdateTag(@NotNull ByteBuf message, @NotNull Map<String, String> metadata) {
@@ -684,7 +684,7 @@ public class FixHandler implements AutoCloseable, IHandler {
         FixField msgType = findField(message, MSG_TYPE_TAG, US_ASCII, bodyLength);
 
         if (msgType == null) {                                                        //should we interrupt sending message?
-            error("No msgType in message %s", null, message.toString(US_ASCII));
+            if(LOGGER.isErrorEnabled()) error("No msgType in message %s", null, message.toString(US_ASCII));
 
             if (metadata.get("MsgType") != null) {
                 msgType = bodyLength.insertNext(MSG_TYPE_TAG, metadata.get("MsgType"));
