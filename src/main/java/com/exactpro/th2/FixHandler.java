@@ -467,24 +467,18 @@ public class FixHandler implements AutoCloseable, IHandler {
 
     private void handleLogout(@NotNull ByteBuf message) {
         if (LOGGER.isInfoEnabled()) LOGGER.info("Logout received - {}", message.toString(US_ASCII));
-        FixField sessionStatus = findField(message, SESSION_STATUS_TAG);
         boolean isSequenceChanged = false;
-        if(sessionStatus != null) {
-            int statusCode = Integer.parseInt(Objects.requireNonNull(sessionStatus.getValue()));
-            if(statusCode != SUCCESSFUL_LOGOUT_CODE) {
-                FixField text = findField(message, TEXT_TAG);
-                if (text != null) {
-                    LOGGER.warn("Received Logout has text (58) tag: {}", text.getValue());
-                    String wrongClientSequence = StringUtils.substringBetween(text.getValue(), "expecting ", " but received");
-                    if (wrongClientSequence != null) {
-                        msgSeqNum.set(Integer.parseInt(wrongClientSequence) - 1);
-                        isSequenceChanged = true;
-                    }
-                    String wrongClientNextExpectedSequence = StringUtils.substringBetween(text.getValue(), "MSN to be sent is ", " but received");
-                    if(wrongClientNextExpectedSequence != null && settings.getResetStateOnServerReset()) {
-                        serverMsgSeqNum.set(Integer.parseInt(wrongClientNextExpectedSequence));
-                    }
-                }
+        FixField text = findField(message, TEXT_TAG);
+        if (text != null) {
+            LOGGER.warn("Received Logout has text (58) tag: {}", text.getValue());
+            String wrongClientSequence = StringUtils.substringBetween(text.getValue(), "expecting ", " but received");
+            if (wrongClientSequence != null) {
+                msgSeqNum.set(Integer.parseInt(wrongClientSequence) - 1);
+                isSequenceChanged = true;
+            }
+            String wrongClientNextExpectedSequence = StringUtils.substringBetween(text.getValue(), "MSN to be sent is ", " but received");
+            if(wrongClientNextExpectedSequence != null && settings.getResetStateOnServerReset()) {
+                serverMsgSeqNum.set(Integer.parseInt(wrongClientNextExpectedSequence));
             }
         }
 
