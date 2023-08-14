@@ -1,9 +1,14 @@
+import com.github.jk1.license.filter.LicenseBundleNormalizer
+import com.github.jk1.license.render.JsonReportRenderer
+
 plugins {
     id 'java'
-    id 'org.jetbrains.kotlin.jvm' version '1.6.21'
+    id 'org.jetbrains.kotlin.jvm' version '1.8.10'
     id 'com.palantir.docker' version '0.25.0'
-    id "org.owasp.dependencycheck" version "8.2.1"
+    id "org.owasp.dependencycheck" version "8.3.1"
     id "com.gorylenko.gradle-git-properties" version "2.4.1"
+    id 'com.github.jk1.dependency-license-report' version '2.5'
+    id "de.undercouch.download" version "5.4.0"
 }
 
 apply plugin: 'application'
@@ -40,14 +45,14 @@ repositories {
 dependencies {
     api platform('com.exactpro.th2:bom:4.4.0')
 
-    implementation("com.exactpro.th2:common:5.3.0-separate-executor-+") {
+    implementation("com.exactpro.th2:common:5.3.2-dev") {
         exclude group: 'com.exactpro.th2', module: 'task-utils'
     }
-    implementation "com.exactpro.th2:common-utils:2.1.0-transport-protocol-+"
+    implementation "com.exactpro.th2:common-utils:2.1.1-dev"
 
     implementation 'com.exactpro.th2:netty-bytebuf-utils:0.0.1'
-    implementation 'com.exactpro.th2:conn-dirty-tcp-core:3.1.0-TH2-4907-+'
-    implementation 'com.exactpro.th2:grpc-lw-data-provider:2.0.0-dev-version-2-+'
+    implementation 'com.exactpro.th2:conn-dirty-tcp-core:3.1.0-dev'
+    implementation 'com.exactpro.th2:grpc-lw-data-provider:2.0.0-dev'
 
     implementation 'org.slf4j:slf4j-api'
     implementation 'io.github.microutils:kotlin-logging:3.0.0' // The last version bases on kotlin 1.6.0
@@ -115,4 +120,25 @@ dependencyCheck {
 
 dependencyLocking {
     lockAllConfigurations()
+}
+
+licenseReport {
+    def licenseNormalizerBundlePath = "$buildDir/license-normalizer-bundle.json"
+
+    if (!file(licenseNormalizerBundlePath).exists()) {
+        download.run {
+            src 'https://raw.githubusercontent.com/th2-net/.github/main/license-compliance/gradle-license-report/license-normalizer-bundle.json'
+            dest "$buildDir/license-normalizer-bundle.json"
+            overwrite false
+        }
+    }
+
+    filters = [
+            new LicenseBundleNormalizer(licenseNormalizerBundlePath, false)
+    ]
+    renderers = [
+            new JsonReportRenderer('licenses.json', false),
+    ]
+    excludeOwnGroup = false
+    allowedLicensesFile = new URL("https://raw.githubusercontent.com/th2-net/.github/main/license-compliance/gradle-license-report/allowed-licenses.json")
 }
