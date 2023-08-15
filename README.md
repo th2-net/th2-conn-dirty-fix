@@ -1,4 +1,4 @@
-# th2-conn-dirty-fix (1.2.1)
+# th2-conn-dirty-fix (1.3.1)
 
 This microservice allows sending and receiving messages via FIX protocol
 
@@ -49,6 +49,7 @@ This microservice allows sending and receiving messages via FIX protocol
 + *useNextExpectedSeqNum* - session management based on next expected sequence number. (`false` by default)
 + *saveAdminMessages* - defines if admin messages will be saved to internal outgoing buffer. (`false` by default)
 + *resetStateOnServerReset* - whether to reset the server sequence after receiving logout with text `Next Expected MSN too high, MSN to be sent is x but received y`.
++ *logoutOnIncorrectServerSequence* - whether to logout session when server send message with sequence number less than expected. If `false` then internal conn sequence will be reset to sequence number from server message.
 
 ### Security settings
 
@@ -327,8 +328,13 @@ spec:
 ```
 
 # Changelog
-# 1.2.1
+# 1.3.1
 * fix multiple consequent SOH characters
+
+## 1.3.0
+* Added handling for incoming test request messages
+* Fixed resetSeqNum flag handling on incoming logon messages.
+* Added option to automatically reset server sequence when internal conn sequence doesn't match with sequence that server sent.
 
 ## 1.2.0
 * loading requested messages from cradle.
