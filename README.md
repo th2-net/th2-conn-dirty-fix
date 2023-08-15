@@ -1,4 +1,4 @@
-# th2-conn-dirty-fix (1.3.0)
+# th2-conn-dirty-fix (1.3.1)
 
 This microservice allows sending and receiving messages via FIX protocol
 
@@ -328,6 +328,8 @@ spec:
 ```
 
 # Changelog
+# 1.3.1
+* fix multiple consequent SOH characters
 
 ## 1.3.0
 * Added handling for incoming test request messages
