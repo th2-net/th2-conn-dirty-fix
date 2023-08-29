@@ -237,7 +237,7 @@ public class FixHandler implements AutoCloseable, IHandler {
         channel = context.createChannel(address, settings.getSecurity(), Map.of(), true, settings.getReconnectDelay() * 1000L, Integer.MAX_VALUE);
         if(settings.isLoadSequencesFromCradle()) {
             SequenceHolder sequences = messageLoader.loadInitialSequences(channel.getSessionAlias());
-            LOGGER.info("Loaded sequences are: client - {}, server - {}", sequences.getClientSeq(), sequences.getServerSeq());
+            info("Loaded sequences are: client - %d, server - %d", sequences.getClientSeq(), sequences.getServerSeq());
             msgSeqNum.set(sequences.getClientSeq());
             serverMsgSeqNum.set(sequences.getServerSeq());
         }
@@ -260,11 +260,11 @@ public class FixHandler implements AutoCloseable, IHandler {
         }
 
         while (channel.isOpen() && !enabled.get()) {
-            if (LOGGER.isWarnEnabled()) LOGGER.warn("Session is not yet logged in: {}", channel.getSessionAlias());
+            warn("Session is not yet logged in");
             try {
                 Thread.sleep(1000);
             } catch (InterruptedException e) {
-                LOGGER.error("Error while sleeping.");
+                error("Error while sleeping.", null);
             }
         }
 
@@ -329,14 +329,14 @@ public class FixHandler implements AutoCloseable, IHandler {
         FixField msgSeqNumValue = findField(message, MSG_SEQ_NUM_TAG);
         if (msgSeqNumValue == null) {
             metadata.put(REJECT_REASON, "No msgSeqNum Field");
-            if (LOGGER.isErrorEnabled()) LOGGER.error("Invalid message. No MsgSeqNum in message: {}", message.toString(US_ASCII));
+            if(LOGGER.isErrorEnabled()) error("Invalid message. No MsgSeqNum in message: %s", null, message.toString(US_ASCII));
             return metadata;
         }
 
         FixField msgType = findField(message, MSG_TYPE_TAG);
         if (msgType == null) {
             metadata.put(REJECT_REASON, "No msgType Field");
-            if (LOGGER.isErrorEnabled()) LOGGER.error("Invalid message. No MsgType in message: {}", message.toString(US_ASCII));
+            if(LOGGER.isErrorEnabled()) error("Invalid message. No MsgType in message: %s", null,  message.toString(US_ASCII));
             return metadata;
         }
 
@@ -367,7 +367,7 @@ public class FixHandler implements AutoCloseable, IHandler {
                 context.send(CommonUtil.toEvent(String.format("Received server sequence %d but expected %d. Sending logout with text: MsgSeqNum is too low...", receivedMsgSeqNum, serverMsgSeqNum.get())));
                 sendLogout(String.format("MsgSeqNum too low, expecting %d but received %d", serverMsgSeqNum.get() + 1, receivedMsgSeqNum));
                 reconnectRequestTimer = executorService.schedule(this::sendLogon, settings.getReconnectDelay(), TimeUnit.SECONDS);
-                if (LOGGER.isErrorEnabled()) LOGGER.error("Invalid message. SeqNum is less than expected {}: {}", serverMsgSeqNum.get() + 1, message.toString(US_ASCII));
+                if (LOGGER.isErrorEnabled()) error("Invalid message. SeqNum is less than expected %d: %s", null, serverMsgSeqNum.get(), message.toString(US_ASCII));
             } else {
                 context.send(CommonUtil.toEvent(String.format("Received server sequence %d but expected %d. Correcting server sequence.", receivedMsgSeqNum, serverMsgSeqNum.get() + 1)));
                 serverMsgSeqNum.set(receivedMsgSeqNum - 1);
@@ -385,18 +385,18 @@ public class FixHandler implements AutoCloseable, IHandler {
 
         switch (msgTypeValue) {
             case MSG_TYPE_HEARTBEAT:
-                if (LOGGER.isInfoEnabled()) LOGGER.info("Heartbeat received - {}", message.toString(US_ASCII));
+                if(LOGGER.isInfoEnabled()) info("Heartbeat received - %s", message.toString(US_ASCII));
                 checkHeartbeat(message);
                 break;
             case MSG_TYPE_LOGON:
-                if (LOGGER.isInfoEnabled()) LOGGER.info("Logon received - {}", message.toString(US_ASCII));
+                if(LOGGER.isInfoEnabled()) info("Logon received - %s", message.toString(US_ASCII));
                 boolean connectionSuccessful = checkLogon(message);
                 if (connectionSuccessful) {
                     if(settings.useNextExpectedSeqNum()) {
                         FixField nextExpectedSeqField = findField(message, NEXT_EXPECTED_SEQ_NUMBER_TAG);
                         if(nextExpectedSeqField == null) {
                             metadata.put(REJECT_REASON, "No NextExpectedSeqNum field");
-                            if (LOGGER.isErrorEnabled()) LOGGER.error("Invalid message. No NextExpectedSeqNum in message: {}", message.toString(US_ASCII));
+                            if(LOGGER.isErrorEnabled()) error("Invalid message. No NextExpectedSeqNum in message: %s", null, message.toString(US_ASCII));
                             return metadata;
                         }
 
@@ -430,15 +430,13 @@ public class FixHandler implements AutoCloseable, IHandler {
                     reconnectRequestTimer = executorService.schedule(this::sendLogon, settings.getReconnectDelay(), TimeUnit.SECONDS);
                 }
                 break;
-            case MSG_TYPE_LOGOUT: //extract logout reason
-                handleLogout(message);
-                break;
+            //extract logout reason
             case MSG_TYPE_RESEND_REQUEST:
-                if (LOGGER.isInfoEnabled()) LOGGER.info("Resend request received - {}", message.toString(US_ASCII));
+                if(LOGGER.isInfoEnabled()) info("Resend request received - %s", message.toString(US_ASCII));
                 handleResendRequest(message);
                 break;
             case MSG_TYPE_SEQUENCE_RESET: //gap fill
-                if (LOGGER.isInfoEnabled()) LOGGER.info("Sequence reset received - {}", message.toString(US_ASCII));
+                if(LOGGER.isInfoEnabled()) info("Sequence reset received  - %s", message.toString(US_ASCII));
                 resetSequence(message);
                 break;
             case MSG_TYPE_TEST_REQUEST:
@@ -467,7 +465,7 @@ public class FixHandler implements AutoCloseable, IHandler {
     }
 
     private void handleLogout(@NotNull ByteBuf message) {
-        if (LOGGER.isInfoEnabled()) LOGGER.info("Logout received - {}", message.toString(US_ASCII));
+        if(LOGGER.isInfoEnabled()) info("Logout received - %s", message.toString(US_ASCII));
         boolean isSequenceChanged = false;
         FixField text = findField(message, TEXT_TAG);
         if (text != null) {
@@ -504,7 +502,7 @@ public class FixHandler implements AutoCloseable, IHandler {
                 serverMsgSeqNum.set(Integer.parseInt(requireNonNull(seqNumValue.getValue())) - 1);
             }
         } else {
-            LOGGER.trace("Failed to reset servers MsgSeqNum. No such tag in message: {}", message.toString(US_ASCII));
+            if(LOGGER.isWarnEnabled()) warn("Failed to reset servers MsgSeqNum. No such tag in message: %s", message.toString(US_ASCII));
         }
     }
 
@@ -569,7 +567,7 @@ public class FixHandler implements AutoCloseable, IHandler {
             }
 
             int endSeq = endSeqNo;
-            LOGGER.info("Loading messages from {} to {}", beginSeqNo, endSeqNo);
+            info("Loading messages from %d to %d", beginSeqNo, endSeqNo);
             if(settings.isLoadMissedMessagesFromCradle()) {
                 Function1<ByteBuf, Boolean> processMessage = (buf) -> {
                     FixField seqNum = findField(buf, MSG_SEQ_NUM_TAG);
@@ -633,7 +631,7 @@ public class FixHandler implements AutoCloseable, IHandler {
             resetHeartbeatTask();
 
         } catch (Exception e) {
-            LOGGER.error("Error while loading messages for recovery", e);
+            error("Error while loading messages for recovery", e);
             String seqReset =
                 createSequenceReset(Math.max(beginSeqNo, lastProcessedSequence.get() + 1), msgSeqNum.get() + 1).toString();
             channel.send(
@@ -690,9 +688,7 @@ public class FixHandler implements AutoCloseable, IHandler {
     public void onOutgoing(@NotNull IChannel channel, @NotNull ByteBuf message, @NotNull Map<String, String> metadata) {
         onOutgoingUpdateTag(message, metadata);
 
-        if (LOGGER.isDebugEnabled()) {
-            LOGGER.debug("Outgoing message: {}", message.toString(US_ASCII));
-        }
+        if(LOGGER.isDebugEnabled()) debug("Outgoing message: %s", message.toString(US_ASCII));
     }
 
     public void onOutgoingUpdateTag(@NotNull ByteBuf message, @NotNull Map<String, String> metadata) {
@@ -715,9 +711,7 @@ public class FixHandler implements AutoCloseable, IHandler {
         FixField msgType = findField(message, MSG_TYPE_TAG, US_ASCII, bodyLength);
 
         if (msgType == null) {                                                        //should we interrupt sending message?
-            if (LOGGER.isErrorEnabled()) {
-                LOGGER.error("No msgType in message {}", message.toString(US_ASCII));
-            }
+            if(LOGGER.isErrorEnabled()) error("No msgType in message %s", null, message.toString(US_ASCII));
 
             if (metadata.get("MsgType") != null) {
                 msgType = bodyLength.insertNext(MSG_TYPE_TAG, metadata.get("MsgType"));
@@ -817,7 +811,7 @@ public class FixHandler implements AutoCloseable, IHandler {
         setChecksumAndBodyLength(heartbeat);
 
         if (enabled.get()) {
-            LOGGER.info("Send Heartbeat to server - {}", heartbeat);
+            info("Send Heartbeat to server - %s", heartbeat);
             channel.send(Unpooled.wrappedBuffer(heartbeat.toString().getBytes(StandardCharsets.UTF_8)), Collections.emptyMap(), null, IChannel.SendMode.MANGLE);
             resetHeartbeatTask();
 
@@ -833,7 +827,7 @@ public class FixHandler implements AutoCloseable, IHandler {
         setChecksumAndBodyLength(testRequest);
         if (enabled.get()) {
             channel.send(Unpooled.wrappedBuffer(testRequest.toString().getBytes(StandardCharsets.UTF_8)), Collections.emptyMap(), null, IChannel.SendMode.MANGLE);
-            LOGGER.info("Send TestRequest to server - {}", testRequest);
+            info("Send TestRequest to server - %s", testRequest);
             resetTestRequestTask();
             resetHeartbeatTask();
         } else {
@@ -844,7 +838,7 @@ public class FixHandler implements AutoCloseable, IHandler {
 
     public void sendLogon() {
         if(!sessionActive.get() || !channel.isOpen()) {
-            LOGGER.info("Logon is not sent to server because session is not active.");
+            info("Logon is not sent to server because session is not active.");
             return;
         }
         StringBuilder logon = new StringBuilder();
@@ -879,7 +873,7 @@ public class FixHandler implements AutoCloseable, IHandler {
         }
 
         setChecksumAndBodyLength(logon);
-        LOGGER.info("Send logon - {}", logon);
+        info("Send logon - %s", logon);
         channel.send(Unpooled.wrappedBuffer(logon.toString().getBytes(StandardCharsets.UTF_8)), Collections.emptyMap(), null, IChannel.SendMode.MANGLE);
     }
 
@@ -896,7 +890,7 @@ public class FixHandler implements AutoCloseable, IHandler {
             }
             setChecksumAndBodyLength(logout);
 
-            LOGGER.debug("Sending logout - {}", logout);
+            debug("Sending logout - %s", logout);
 
             try {
                 channel.send(
@@ -906,9 +900,9 @@ public class FixHandler implements AutoCloseable, IHandler {
                         IChannel.SendMode.MANGLE
                 ).get();
 
-                LOGGER.info("Sent logout - {}", logout);
+                info("Sent logout - %s", logout);
             } catch (Exception e) {
-                LOGGER.error("Failed to send logout - {}", logout, e);
+                error("Failed to send logout - %s", e, logout);
             }
         }
     }
@@ -938,11 +932,11 @@ public class FixHandler implements AutoCloseable, IHandler {
     private void waitLogoutResponse() {
         long start = System.currentTimeMillis();
         while(System.currentTimeMillis() - start < settings.getDisconnectRequestDelay() && enabled.get()) {
-            if (LOGGER.isWarnEnabled()) LOGGER.warn("Waiting session logout: {}", channel.getSessionAlias());
+            warn("Waiting session logout");
             try {
                 Thread.sleep(1000);
             } catch (InterruptedException e) {
-                LOGGER.error("Error while sleeping.");
+                error("Error while sleeping.", null);
             }
         }
     }
@@ -1077,5 +1071,29 @@ public class FixHandler implements AutoCloseable, IHandler {
 
     private void cancelFuture(AtomicReference<Future<?>> future) {
         future.get().cancel(false);
+    }
+
+    private void info(String message, Object... args) {
+        if(LOGGER.isInfoEnabled()) {
+            LOGGER.info("{} - {}: {}", channel.getSessionGroup(), channel.getSessionAlias(), String.format(message, args));
+        }
+    }
+
+    private void error(String message, Throwable throwable, Object... args) {
+        if(LOGGER.isErrorEnabled()) {
+            LOGGER.error("{} - {}: {}", channel.getSessionGroup(), channel.getSessionAlias(), String.format(message, args), throwable);
+        }
+    }
+
+    private void warn(String message, Object... args) {
+        if(LOGGER.isWarnEnabled()) {
+            LOGGER.warn("{} - {}: {}", channel.getSessionGroup(), channel.getSessionAlias(), String.format(message, args));
+        }
+    }
+
+    private void debug(String message, Object... args) {
+        if(LOGGER.isDebugEnabled()) {
+            LOGGER.debug("{} - {}: {}", channel.getSessionGroup(), channel.getSessionAlias(), String.format(message, args));
+        }
     }
 }
