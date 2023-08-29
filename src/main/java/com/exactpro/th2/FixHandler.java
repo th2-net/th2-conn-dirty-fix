@@ -45,6 +45,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
@@ -141,6 +142,7 @@ public class FixHandler implements AutoCloseable, IHandler {
     private static final byte BYTE_SOH = 1;
     private static final String STRING_MSG_TYPE = "MsgType";
     private static final String REJECT_REASON = "Reject reason";
+    private static final String UNGRACEFUL_DISCONNECT_PROPERTY = "ungracefulDisconnect";
     private static final String STUBBING_VALUE = "XXX";
 
     private final AtomicInteger msgSeqNum = new AtomicInteger(0);
@@ -245,6 +247,29 @@ public class FixHandler implements AutoCloseable, IHandler {
     public CompletableFuture<MessageID> send(@NotNull RawMessage rawMessage) {
         if (!sessionActive.get()) {
             throw new IllegalStateException("Session is not active. It is not possible to send messages.");
+        }
+
+        ByteBuf buf = Unpooled.copiedBuffer(rawMessage.getBody().toByteArray());
+        Map<String, String> props = rawMessage.getMetadata().getPropertiesMap();
+
+        FixField msgType = findField(buf, MSG_TYPE_TAG);
+        boolean isLogout = msgType != null && Objects.equals(msgType.getValue(), MSG_TYPE_LOGOUT);
+        if(isLogout && !channel.isOpen()) {
+            String message = String.format("%s - %s: Logout ignored as channel is already closed.", channel.getSessionGroup(), channel.getSessionAlias());
+            LOGGER.warn(message);
+            context.send(CommonUtil.toEvent(message));
+            return CompletableFuture.completedFuture(null);
+        }
+
+        boolean isUngracefulDisconnect = Boolean.getBoolean(props.get(UNGRACEFUL_DISCONNECT_PROPERTY));
+        if(isLogout) {
+            context.send(CommonUtil.toEvent(String.format("Closing session %s. Is graceful disconnect: %b", channel.getSessionAlias(), !isUngracefulDisconnect)));
+            try {
+                disconnect(!isUngracefulDisconnect);
+            } catch (Exception e) {
+                context.send(CommonUtil.toErrorEvent(String.format("Error while ending session %s by user logout. Is graceful disconnect: %b", channel.getSessionAlias(), !isUngracefulDisconnect), e));
+            }
+            return CompletableFuture.completedFuture(null);
         }
 
         if (!channel.isOpen()) {
@@ -897,6 +922,16 @@ public class FixHandler implements AutoCloseable, IHandler {
                 error("Error while sleeping.", null);
             }
         }
+    }
+
+    private void disconnect(Boolean graceful) throws ExecutionException, InterruptedException {
+        if(graceful) {
+            sendLogout();
+            waitLogoutResponse();
+        }
+        resetHeartbeatTask();
+        resetTestRequestTask();
+        channel.close().get();
     }
 
     private void setHeader(StringBuilder stringBuilder, String msgType, Integer seqNum, String time) {
