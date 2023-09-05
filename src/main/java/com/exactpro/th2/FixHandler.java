@@ -51,6 +51,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
@@ -230,6 +231,9 @@ public class FixHandler implements AutoCloseable, IHandler {
         if (settings.getHeartBtInt() <= 0) throw new IllegalArgumentException("HeartBtInt cannot be negative or zero");
         if (settings.getTestRequestDelay() <= 0) throw new IllegalArgumentException("TestRequestDelay cannot be negative or zero");
         if (settings.getDisconnectRequestDelay() <= 0) throw new IllegalArgumentException("DisconnectRequestDelay cannot be negative or zero");
+        if (settings.getConnectionTimeoutOnSend() <= 0) {
+            throw new IllegalArgumentException("connectionTimeoutOnSend must be greater than zero");
+        }
     }
 
     @Override
@@ -241,6 +245,9 @@ public class FixHandler implements AutoCloseable, IHandler {
             msgSeqNum.set(sequences.getClientSeq());
             serverMsgSeqNum.set(sequences.getServerSeq());
         }
+        // This method returns CompletableFuture, but we don't handle it
+        // Probably, this is because we don't care in the current moment
+        // whether we are connected or not - just initial trigger for connection
         channel.open();
     }
 
@@ -250,31 +257,45 @@ public class FixHandler implements AutoCloseable, IHandler {
             throw new IllegalStateException("Session is not active. It is not possible to send messages.");
         }
 
+        // TODO: probably, this should be moved to the core part
+        // But those changes will break API
+        // So, let's keep it here for now
+        long deadline = System.currentTimeMillis() + settings.getConnectionTimeoutOnSend();
+
         if (!channel.isOpen()) {
             try {
-                channel.open().get();
+                channel.open().get(settings.getConnectionTimeoutOnSend(), TimeUnit.MILLISECONDS);
+            } catch (TimeoutException e) {
+                ExceptionUtils.rethrow(new TimeoutException(
+                        String.format("could not open connection before timeout %d mls elapsed",
+                                settings.getConnectionTimeoutOnSend())));
             } catch (Exception e) {
                 ExceptionUtils.rethrow(e);
             }
         }
 
         while (channel.isOpen() && !enabled.get()) {
-            if (LOGGER.isWarnEnabled()) LOGGER.warn("Session is not yet logged in: {}", channel.getSessionAlias());
+            if (LOGGER.isWarnEnabled()) {
+                LOGGER.warn("Session is not yet logged in: {}", channel.getSessionAlias());
+            }
             try {
                 Thread.sleep(1000);
             } catch (InterruptedException e) {
                 LOGGER.error("Error while sleeping.");
             }
+            if (System.currentTimeMillis() > deadline) {
+                // The method should have checked exception in signature...
+                ExceptionUtils.rethrow(new TimeoutException(String.format("session was not established within %d mls",
+                        settings.getConnectionTimeoutOnSend())));
+            }
         }
 
-        CompletableFuture<MessageID> result = CompletableFuture.completedFuture(null);
+        recoveryLock.lock();
         try {
-            recoveryLock.lock();
-            result = channel.send(body, properties, eventID, SendMode.HANDLE_AND_MANGLE);
+            return channel.send(body, properties, eventID, SendMode.HANDLE_AND_MANGLE);
         } finally {
             recoveryLock.unlock();
         }
-        return result;
     }
 
     @NotNull
