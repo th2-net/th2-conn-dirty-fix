@@ -264,7 +264,7 @@ public class FixHandler implements AutoCloseable, IHandler {
             return CompletableFuture.completedFuture(null);
         }
 
-        boolean isUngracefulDisconnect = Boolean.getBoolean(props.get(UNGRACEFUL_DISCONNECT_PROPERTY));
+        boolean isUngracefulDisconnect = Boolean.parseBoolean(props.get(UNGRACEFUL_DISCONNECT_PROPERTY));
         if(isLogout) {
             context.send(CommonUtil.toEvent(String.format("Closing session %s. Is graceful disconnect: %b", channel.getSessionAlias(), !isUngracefulDisconnect)));
             try {
