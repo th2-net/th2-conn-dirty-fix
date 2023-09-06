@@ -49,7 +49,9 @@ This microservice allows sending and receiving messages via FIX protocol
 + *useNextExpectedSeqNum* - session management based on next expected sequence number. (`false` by default)
 + *saveAdminMessages* - defines if admin messages will be saved to internal outgoing buffer. (`false` by default)
 + *resetStateOnServerReset* - whether to reset the server sequence after receiving logout with text `Next Expected MSN too high, MSN to be sent is x but received y`.
-+ **connectionTimeoutOnSend** - timeout in milliseconds for sending message from queue thread. _Default, 30000 mls._
++ *connectionTimeoutOnSend* - timeout in milliseconds for sending message from queue thread
+  (please read about [acknowledgment timeout](https://www.rabbitmq.com/consumers.html#acknowledgement-timeout) to understand the problem).
+  _Default, 30000 mls._
   If connection is not established within the specified timeout an error will be reported.
 
 ### Security settings
