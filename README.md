@@ -1,4 +1,4 @@
-# th2-conn-dirty-fix (1.4.0)
+# th2-conn-dirty-fix (1.4.1)
 
 This microservice allows sending and receiving messages via FIX protocol
 
@@ -49,6 +49,10 @@ This microservice allows sending and receiving messages via FIX protocol
 + *useNextExpectedSeqNum* - session management based on next expected sequence number. (`false` by default)
 + *saveAdminMessages* - defines if admin messages will be saved to internal outgoing buffer. (`false` by default)
 + *resetStateOnServerReset* - whether to reset the server sequence after receiving logout with text `Next Expected MSN too high, MSN to be sent is x but received y`.
++ *connectionTimeoutOnSend* - timeout in milliseconds for sending message from queue thread
+  (please read about [acknowledgment timeout](https://www.rabbitmq.com/consumers.html#acknowledgement-timeout) to understand the problem).
+  _Default, 30000 mls._
+  If connection is not established within the specified timeout an error will be reported.
 
 ### Security settings
 
@@ -328,7 +332,11 @@ spec:
 
 # Changelog
 
-1.4.0
+# 1.4.1
+* Timeout on send from queue thread
+  * Parameter `connectionTimeoutOnSend` was added
+
+# 1.4.0
 * Updated bom: `4.5.0-dev`
 * Updated common: `5.4.0-dev`
 * Updated common-utils: `2.2.0-dev`
