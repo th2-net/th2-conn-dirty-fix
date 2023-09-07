@@ -104,8 +104,13 @@ class FixHandlerSendTimeoutTest {
         int deltaMinutes = currentTime.isAfter(LocalTime.NOON)
                 ? -1
                 : 1;
-        settings.setSessionStartTime(currentTime.plusMinutes(deltaMinutes * 2));
-        settings.setSessionEndTime(currentTime.plusMinutes(deltaMinutes));
+        if (deltaMinutes > 0) {
+            settings.setSessionStartTime(currentTime.plusMinutes(deltaMinutes));
+            settings.setSessionEndTime(currentTime.plusMinutes(deltaMinutes * 2));
+        } else {
+            settings.setSessionStartTime(currentTime.plusMinutes(deltaMinutes * 2));
+            settings.setSessionEndTime(currentTime.plusMinutes(deltaMinutes));
+        }
         Mockito.when(contextMock.getSettings())
                 .thenReturn(settings);
         var fixHandler = new FixHandler(contextMock);
