@@ -44,6 +44,7 @@ import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
@@ -56,6 +57,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.stream.Collectors;
+
 import kotlin.jvm.functions.Function1;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.exception.ExceptionUtils;
@@ -253,46 +256,25 @@ public class FixHandler implements AutoCloseable, IHandler {
 
     @NotNull
     private CompletableFuture<MessageID> send(@NotNull ByteBuf body, @NotNull Map<String, String> properties, @Nullable EventID eventID) {
-        if (!sessionActive.get()) {
-            throw new IllegalStateException("Session is not active. It is not possible to send messages.");
-        }
-
-        // TODO: probably, this should be moved to the core part
-        // But those changes will break API
-        // So, let's keep it here for now
-        long deadline = System.currentTimeMillis() + settings.getConnectionTimeoutOnSend();
-
-        if (!channel.isOpen()) {
-            try {
-                channel.open().get(settings.getConnectionTimeoutOnSend(), TimeUnit.MILLISECONDS);
-            } catch (TimeoutException e) {
-                ExceptionUtils.rethrow(new TimeoutException(
-                        String.format("could not open connection before timeout %d mls elapsed",
-                                settings.getConnectionTimeoutOnSend())));
-            } catch (Exception e) {
-                ExceptionUtils.rethrow(e);
-            }
-        }
-
-        while (channel.isOpen() && !enabled.get()) {
-            if (LOGGER.isWarnEnabled()) {
-                LOGGER.warn("Session is not yet logged in: {}", channel.getSessionAlias());
-            }
-            try {
-                Thread.sleep(1000);
-            } catch (InterruptedException e) {
-                LOGGER.error("Error while sleeping.");
-            }
-            if (System.currentTimeMillis() > deadline) {
-                // The method should have checked exception in signature...
-                ExceptionUtils.rethrow(new TimeoutException(String.format("session was not established within %d mls",
-                        settings.getConnectionTimeoutOnSend())));
-            }
-        }
+        insureSessionIsActive();
 
         recoveryLock.lock();
         try {
             return channel.send(body, properties, eventID, SendMode.HANDLE_AND_MANGLE);
+        } finally {
+            recoveryLock.unlock();
+        }
+    }
+
+    @NotNull
+    private CompletableFuture<List<MessageID>> sendAll(
+            @NotNull List<IChannel.Envelope> envelops
+    ) {
+        insureSessionIsActive();
+
+        recoveryLock.lock();
+        try {
+            return channel.sendAll(envelops, SendMode.HANDLE_AND_MANGLE);
         } finally {
             recoveryLock.unlock();
         }
@@ -306,9 +288,33 @@ public class FixHandler implements AutoCloseable, IHandler {
 
     @NotNull
     @Override
+    public CompletableFuture<List<MessageID>> sendAllProto(@NotNull List<RawMessage> list) {
+        return sendAll(
+                list.stream().map(msg -> new IChannel.Envelope(
+                        toByteBuf(msg.getBody()),
+                        msg.getMetadata().getPropertiesMap(),
+                        getEventId(msg)
+                )).collect(Collectors.toUnmodifiableList())
+        );
+    }
+
+    @NotNull
+    @Override
     public CompletableFuture<MessageID> send(@NotNull com.exactpro.th2.common.schema.message.impl.rabbitmq.transport.RawMessage message) {
         final var id = message.getEventId();
         return send(message.getBody(), message.getMetadata(), id != null ? EventUtilsKt.toProto(id) : null);
+    }
+
+    @NotNull
+    @Override
+    public CompletableFuture<List<MessageID>> sendAllTransport(@NotNull List<com.exactpro.th2.common.schema.message.impl.rabbitmq.transport.RawMessage> messages) {
+        return sendAll(
+                messages.stream().map(msg -> new IChannel.Envelope(
+                        msg.getBody(),
+                        msg.getMetadata(),
+                        msg.getEventId() == null ? null : EventUtilsKt.toProto(msg.getEventId())
+                )).collect(Collectors.toUnmodifiableList())
+        );
     }
 
     @Override
@@ -468,6 +474,45 @@ public class FixHandler implements AutoCloseable, IHandler {
         metadata.put(STRING_MSG_TYPE, msgTypeValue);
 
         return metadata;
+    }
+
+    private void insureSessionIsActive() {
+        if (!sessionActive.get()) {
+            throw new IllegalStateException("Session is not active. It is not possible to send messages.");
+        }
+
+        // TODO: probably, this should be moved to the core part
+        // But those changes will break API
+        // So, let's keep it here for now
+        long deadline = System.currentTimeMillis() + settings.getConnectionTimeoutOnSend();
+
+        if (!channel.isOpen()) {
+            try {
+                channel.open().get(settings.getConnectionTimeoutOnSend(), TimeUnit.MILLISECONDS);
+            } catch (TimeoutException e) {
+                ExceptionUtils.rethrow(new TimeoutException(
+                        String.format("could not open connection before timeout %d mls elapsed",
+                                settings.getConnectionTimeoutOnSend())));
+            } catch (Exception e) {
+                ExceptionUtils.rethrow(e);
+            }
+        }
+
+        while (channel.isOpen() && !enabled.get()) {
+            if (LOGGER.isWarnEnabled()) {
+                LOGGER.warn("Session is not yet logged in: {}", channel.getSessionAlias());
+            }
+            try {
+                Thread.sleep(1000);
+            } catch (InterruptedException e) {
+                LOGGER.error("Error while sleeping.");
+            }
+            if (System.currentTimeMillis() > deadline) {
+                // The method should have checked exception in signature...
+                ExceptionUtils.rethrow(new TimeoutException(String.format("session was not established within %d mls",
+                        settings.getConnectionTimeoutOnSend())));
+            }
+        }
     }
 
     private void handleLogout(@NotNull ByteBuf message) {
