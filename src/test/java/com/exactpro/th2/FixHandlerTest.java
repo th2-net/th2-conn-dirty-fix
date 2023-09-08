@@ -437,6 +437,14 @@ class Channel implements IChannel {
         return CompletableFuture.completedFuture(MessageID.getDefaultInstance());
     }
 
+    @NotNull
+    @Override
+    public CompletableFuture<List<MessageID>> sendAll(@NotNull List<Envelope> envelopes, @NotNull IChannel.SendMode sendMode) {
+        envelopes.forEach(it -> queue.add(it.getMessage()));
+        // Probably, should be done in a different way
+        return CompletableFuture.completedFuture(List.of(MessageID.getDefaultInstance()));
+    }
+
     @Override
     public boolean isOpen() {
         return true;
