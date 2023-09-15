@@ -1,4 +1,4 @@
-# th2-conn-dirty-fix (1.3.2)
+# th2-conn-dirty-fix (1.4.0)
 
 This microservice allows sending and receiving messages via FIX protocol
 
@@ -328,6 +328,10 @@ spec:
 ```
 
 # Changelog
+### 1.4.0
+* Ungraceful session disconnect support.
+* Removed NPE when session is reset by schedule.
+
 ### 1.3.2
 * Improve logging: log session group and session alias for each log message.
 
