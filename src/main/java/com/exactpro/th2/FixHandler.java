@@ -689,6 +689,8 @@ public class FixHandler implements AutoCloseable, IHandler {
         onOutgoingUpdateTag(message, metadata);
 
         if(LOGGER.isDebugEnabled()) debug("Outgoing message: %s", message.toString(US_ASCII));
+
+        if(enabled.get()) resetHeartbeatTask();
     }
 
     public void onOutgoingUpdateTag(@NotNull ByteBuf message, @NotNull Map<String, String> metadata) {
