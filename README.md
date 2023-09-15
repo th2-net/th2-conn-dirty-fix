@@ -330,6 +330,7 @@ spec:
 # Changelog
 ### 1.3.3
 * Reset heartbeat task on outgoing business messages.
+* Remove NPE that during session reset.
 
 ### 1.3.2
 * Improve logging: log session group and session alias for each log message.
