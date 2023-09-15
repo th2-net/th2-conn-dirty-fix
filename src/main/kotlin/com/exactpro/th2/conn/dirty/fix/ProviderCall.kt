@@ -7,7 +7,7 @@
  * This is unpublished, licensed software, confidential and proprietary
  * information which is the property of Exactpro Systems LLC or its licensors.
  ******************************************************************************/
-***REMOVED***
+package com.exactpro.th2.conn.dirty.fix
 
 import io.grpc.Context
 
@@ -15,13 +15,7 @@ class ProviderCall {
     companion object {
         fun <T> withCancellation(code: () -> T): T {
             return Context.current().withCancellation().use { context ->
-                val toRestore = context.attach()
-                val result = try {
-                    code()
-                } finally {
-                    context.detach(toRestore)
-                }
-                return@use result
+                context.call { code() }
             }
         }
     }
