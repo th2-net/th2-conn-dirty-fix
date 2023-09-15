@@ -50,8 +50,7 @@ dependencies {
     implementation("com.exactpro.th2:common:5.4.0-dev") {
         exclude group: 'com.exactpro.th2', module: 'task-utils'
     }
-    implementation "com.exactpro.th2:common-utils:2.2.0-dev"
-
+    implementation "com.exactpro.th2:common-utils:2.2.2-dev"
     implementation 'com.exactpro.th2:netty-bytebuf-utils:0.0.1'
     implementation 'com.exactpro.th2:conn-dirty-tcp-core:3.2.0-dev'
     implementation 'com.exactpro.th2:grpc-lw-data-provider:2.2.0-separate-executor-reverse-orders-917aa0b-SNAPSHOT'
@@ -59,6 +58,7 @@ dependencies {
     implementation 'org.slf4j:slf4j-api'
     implementation 'io.github.microutils:kotlin-logging:3.0.0' // The last version bases on kotlin 1.6.0
     implementation 'org.apache.commons:commons-lang3'
+    implementation 'org.apache.commons:commons-lang3:3.13.0'
 
     implementation 'io.netty:netty-all'
     implementation 'com.google.auto.service:auto-service:1.0.1'
