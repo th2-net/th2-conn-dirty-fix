@@ -1,5 +1,5 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
-import org.jetbrains.kotlin.gradle.tasks.KaptGenerateStubs
+import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 import com.github.jk1.license.filter.LicenseBundleNormalizer
 import com.github.jk1.license.render.JsonReportRenderer
 
@@ -79,13 +79,13 @@ test {
 }
 
 application {
-    mainClassName 'com.exactpro.th2.conn.dirty.tcp.core.Main'
+    mainClass.set('com.exactpro.th2.conn.dirty.tcp.core.Main')
 }
 
 applicationName = 'service'
 
 distTar {
-    archiveName "${applicationName}.tar"
+    archiveFileName.set("${applicationName}.tar")
 }
 
 dockerPrepare {
@@ -96,19 +96,7 @@ docker {
     copySpec.from(tarTree("$buildDir/distributions/${applicationName}.tar"))
 }
 
-tasks.withType(KaptGenerateStubs).configureEach {
-    compilerOptions {
-        jvmTarget.set(JvmTarget.JVM_11)
-    }
-}
-
-compileKotlin {
-    compilerOptions {
-        jvmTarget.set(JvmTarget.JVM_11)
-    }
-}
-
-compileTestKotlin {
+tasks.withType(KotlinCompile).configureEach {
     compilerOptions {
         jvmTarget.set(JvmTarget.JVM_11)
     }
