@@ -1,4 +1,4 @@
-# th2-conn-dirty-fix (1.3.3)
+# th2-conn-dirty-fix (1.4.0)
 
 This microservice allows sending and receiving messages via FIX protocol
 
