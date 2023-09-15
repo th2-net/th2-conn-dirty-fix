@@ -1,4 +1,4 @@
-# th2-conn-dirty-fix (1.3.3)
+# th2-conn-dirty-fix (1.4.1)
 
 This microservice allows sending and receiving messages via FIX protocol
 
@@ -328,9 +328,12 @@ spec:
 ```
 
 # Changelog
-### 1.3.3
+### 1.4.1
 * Reset heartbeat task on outgoing business messages.
-* Remove NPE that during session reset.
+
+### 1.4.0
+* Ungraceful session disconnect support.
+* Removed NPE when session is reset by schedule.
 
 ### 1.3.2
 * Improve logging: log session group and session alias for each log message.
