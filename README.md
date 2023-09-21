@@ -1,4 +1,4 @@
-# th2-conn-dirty-fix (1.4.0)
+# th2-conn-dirty-fix (1.4.1)
 
 This microservice allows sending and receiving messages via FIX protocol
 
@@ -328,6 +328,9 @@ spec:
 ```
 
 # Changelog
+### 1.4.1
+* Use UTC time zone for sending time tag
+
 ### 1.4.0
 * Ungraceful session disconnect support.
 * Removed NPE when session is reset by schedule.

@@ -57,7 +57,7 @@ class MessageLoader(
     init {
         val today = LocalDate.now(ZoneOffset.UTC)
         val start = sessionStartTime?.atDate(today)
-        val now = LocalDateTime.now()
+        val now = LocalDateTime.now(ZoneOffset.UTC)
         if(start == null) {
             sessionStart = OffsetDateTime
                 .now(ZoneOffset.UTC)
@@ -152,7 +152,7 @@ class MessageLoader(
                 createSearchRequest(Instant.now().toTimestamp(), direction, sessionAlias)
             )
 
-            var firstValidMessage = firstValidMessageDetails(backwardIterator) ?: return@withCancellation
+            val firstValidMessage = firstValidMessageDetails(backwardIterator) ?: return@withCancellation
 
             var messagesToSkip = firstValidMessage.payloadSequence - fromSequence
 
