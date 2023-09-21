@@ -159,8 +159,8 @@ public class FixHandler implements AutoCloseable, IHandler {
     private final MessageLoader messageLoader;
     private final ReentrantLock recoveryLock = new ReentrantLock();
 
-    private AtomicReference<Future<?>> heartbeatTimer = new AtomicReference<>(CompletableFuture.completedFuture(null));
-    private AtomicReference<Future<?>> testRequestTimer = new AtomicReference<>(CompletableFuture.completedFuture(null));
+    private final AtomicReference<Future<?>> heartbeatTimer = new AtomicReference<>(CompletableFuture.completedFuture(null));
+    private final AtomicReference<Future<?>> testRequestTimer = new AtomicReference<>(CompletableFuture.completedFuture(null));
     private Future<?> reconnectRequestTimer = CompletableFuture.completedFuture(null);
     private volatile IChannel channel;
     protected FixHandlerSettings settings;
@@ -294,18 +294,16 @@ public class FixHandler implements AutoCloseable, IHandler {
             }
         }
 
-        CompletableFuture<MessageID> result = CompletableFuture.completedFuture(null);
         try {
             recoveryLock.lock();
-            result = channel.send(toByteBuf(rawMessage.getBody()), rawMessage.getMetadata().getPropertiesMap(), getEventId(rawMessage), SendMode.HANDLE_AND_MANGLE);
+            return channel.send(toByteBuf(rawMessage.getBody()), rawMessage.getMetadata().getPropertiesMap(), getEventId(rawMessage), SendMode.HANDLE_AND_MANGLE);
         } finally {
             recoveryLock.unlock();
         }
-        return result;
     }
 
     @Override
-    public ByteBuf onReceive(IChannel channel, ByteBuf buffer) {
+    public ByteBuf onReceive(@NotNull IChannel channel, ByteBuf buffer) {
         int offset = buffer.readerIndex();
         if (offset == buffer.writerIndex()) return null;
 
@@ -369,7 +367,7 @@ public class FixHandler implements AutoCloseable, IHandler {
         FixField possDup = findField(message, POSS_DUP_TAG);
         boolean isDup = false;
         if(possDup != null) {
-            isDup = possDup.getValue().equals(IS_POSS_DUP);
+            isDup = IS_POSS_DUP.equals(possDup.getValue());
         }
 
         String msgTypeValue = requireNonNull(msgType.getValue());
@@ -522,7 +520,7 @@ public class FixHandler implements AutoCloseable, IHandler {
         FixField seqNumValue = findField(message, NEW_SEQ_NO_TAG);
 
         if(seqNumValue != null) {
-            if(gapFillMode == null || gapFillMode.getValue().equals("N")) {
+            if(gapFillMode == null || "N".equals(gapFillMode.getValue())) {
                 serverMsgSeqNum.set(Integer.parseInt(requireNonNull(seqNumValue.getValue())));
             } else {
                 serverMsgSeqNum.set(Integer.parseInt(requireNonNull(seqNumValue.getValue())) - 1);
@@ -604,7 +602,7 @@ public class FixHandler implements AutoCloseable, IHandler {
                             || msgTypeField == null || msgTypeField.getValue() == null) {
                         return true;
                     }
-                    Integer sequence = Integer.parseInt(seqNum.getValue());
+                    int sequence = Integer.parseInt(seqNum.getValue());
                     String msgType = msgTypeField.getValue();
 
                     if(sequence < beginSeqNo) return true;
@@ -727,7 +725,8 @@ public class FixHandler implements AutoCloseable, IHandler {
         FixField beginString = findField(message, BEGIN_STRING_TAG);
 
         if (beginString == null) {
-            beginString = firstField(message).insertPrevious(BEGIN_STRING_TAG, settings.getBeginString());
+            beginString = requireNonNull(firstField(message), () -> "First filed isn't found in message: " + message.toString(US_ASCII))
+                    .insertPrevious(BEGIN_STRING_TAG, settings.getBeginString());
         }
 
         FixField bodyLength = findField(message, BODY_LENGTH_TAG, US_ASCII, beginString);
@@ -749,7 +748,8 @@ public class FixHandler implements AutoCloseable, IHandler {
         FixField checksum = findLastField(message, CHECKSUM_TAG);
 
         if (checksum == null) {
-            checksum = lastField(message).insertNext(CHECKSUM_TAG, STUBBING_VALUE); //stubbing until finish checking message
+            checksum = requireNonNull(lastField(message), "Last filed isn't found in message: " + message.toString(US_ASCII))
+                    .insertNext(CHECKSUM_TAG, STUBBING_VALUE); //stubbing until finish checking message
         }
 
         FixField msgSeqNum = findField(message, MSG_SEQ_NUM_TAG, US_ASCII, bodyLength);
@@ -1042,7 +1042,7 @@ public class FixHandler implements AutoCloseable, IHandler {
 
     public String getTime() {
         DateTimeFormatter formatter = settings.getSendingDateTimeFormat();
-        LocalDateTime datetime = LocalDateTime.now();
+        LocalDateTime datetime = LocalDateTime.now(ZoneOffset.UTC);
         return formatter.format(datetime);
     }
 
