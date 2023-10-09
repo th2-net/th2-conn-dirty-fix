@@ -336,6 +336,7 @@ spec:
 ## 1.4.2
 * Ungraceful session disconnect support.
 * Removed NPE when session is reset by schedule.
+* Use UTC time zone for sending time tag
 
 ## 1.4.1
 * Timeout on send from queue thread

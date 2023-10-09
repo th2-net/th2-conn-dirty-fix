@@ -553,7 +553,7 @@ public class FixHandler implements AutoCloseable, IHandler {
         FixField seqNumValue = findField(message, NEW_SEQ_NO_TAG);
 
         if(seqNumValue != null) {
-            if(gapFillMode == null || Objects.equals(gapFillMode.getValue(), "N")) {
+            if(gapFillMode == null || "N".equals(gapFillMode.getValue())) {
                 serverMsgSeqNum.set(Integer.parseInt(requireNonNull(seqNumValue.getValue())));
             } else {
                 serverMsgSeqNum.set(Integer.parseInt(requireNonNull(seqNumValue.getValue())) - 1);
@@ -758,7 +758,8 @@ public class FixHandler implements AutoCloseable, IHandler {
         FixField beginString = findField(message, BEGIN_STRING_TAG);
 
         if (beginString == null) {
-            beginString = firstField(message).insertPrevious(BEGIN_STRING_TAG, settings.getBeginString());
+            beginString = requireNonNull(firstField(message), () -> "First filed isn't found in message: " + message.toString(US_ASCII))
+                    .insertPrevious(BEGIN_STRING_TAG, settings.getBeginString());
         }
 
         FixField bodyLength = findField(message, BODY_LENGTH_TAG, US_ASCII, beginString);
@@ -780,7 +781,8 @@ public class FixHandler implements AutoCloseable, IHandler {
         FixField checksum = findLastField(message, CHECKSUM_TAG);
 
         if (checksum == null) {
-            lastField(message).insertNext(CHECKSUM_TAG, STUBBING_VALUE); //stubbing until finish checking message
+            checksum = requireNonNull(lastField(message), "Last filed isn't found in message: " + message.toString(US_ASCII))
+                    .insertNext(CHECKSUM_TAG, STUBBING_VALUE); //stubbing until finish checking message
         }
 
         FixField msgSeqNum = findField(message, MSG_SEQ_NUM_TAG, US_ASCII, bodyLength);
@@ -1073,7 +1075,7 @@ public class FixHandler implements AutoCloseable, IHandler {
 
     public String getTime() {
         DateTimeFormatter formatter = settings.getSendingDateTimeFormat();
-        LocalDateTime datetime = LocalDateTime.now();
+        LocalDateTime datetime = LocalDateTime.now(ZoneOffset.UTC);
         return formatter.format(datetime);
     }
 

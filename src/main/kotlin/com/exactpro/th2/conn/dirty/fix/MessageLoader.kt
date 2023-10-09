@@ -56,7 +56,7 @@ class MessageLoader(
     init {
         val today = LocalDate.now(ZoneOffset.UTC)
         val start = sessionStartTime?.atDate(today)
-        val now = LocalDateTime.now()
+        val now = LocalDateTime.now(ZoneOffset.UTC)
         if(start == null) {
             sessionStart = OffsetDateTime
                 .now(ZoneOffset.UTC)
