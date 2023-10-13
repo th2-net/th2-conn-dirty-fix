@@ -17,9 +17,11 @@
 package com.exactpro.th2;
 
 import com.exactpro.th2.common.event.Event;
+import com.exactpro.th2.common.grpc.EventID;
 import com.exactpro.th2.common.grpc.Direction;
 import com.exactpro.th2.common.grpc.MessageID;
 import com.exactpro.th2.common.grpc.RawMessage;
+import com.exactpro.th2.common.utils.event.transport.EventUtilsKt;
 import com.exactpro.th2.conn.dirty.fix.FixField;
 import com.exactpro.th2.conn.dirty.fix.MessageLoader;
 import com.exactpro.th2.conn.dirty.tcp.core.api.IChannel;
@@ -50,6 +52,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
@@ -58,6 +61,7 @@ import kotlin.jvm.functions.Function1;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -231,31 +235,33 @@ public class FixHandler implements AutoCloseable, IHandler {
         if (settings.getHeartBtInt() <= 0) throw new IllegalArgumentException("HeartBtInt cannot be negative or zero");
         if (settings.getTestRequestDelay() <= 0) throw new IllegalArgumentException("TestRequestDelay cannot be negative or zero");
         if (settings.getDisconnectRequestDelay() <= 0) throw new IllegalArgumentException("DisconnectRequestDelay cannot be negative or zero");
+        if (settings.getConnectionTimeoutOnSend() <= 0) {
+            throw new IllegalArgumentException("connectionTimeoutOnSend must be greater than zero");
+        }
     }
 
     @Override
     public void onStart() {
         channel = context.createChannel(address, settings.getSecurity(), Map.of(), true, settings.getReconnectDelay() * 1000L, Integer.MAX_VALUE);
         if(settings.isLoadSequencesFromCradle()) {
-            SequenceHolder sequences = messageLoader.loadInitialSequences(channel.getSessionAlias());
+            SequenceHolder sequences = messageLoader.loadInitialSequences(channel.getSessionGroup(), channel.getSessionAlias());
             info("Loaded sequences are: client - %d, server - %d", sequences.getClientSeq(), sequences.getServerSeq());
             msgSeqNum.set(sequences.getClientSeq());
             serverMsgSeqNum.set(sequences.getServerSeq());
         }
+        // This method returns CompletableFuture, but we don't handle it
+        // Probably, this is because we don't care in the current moment
+        // whether we are connected or not - just initial trigger for connection
         channel.open();
     }
 
     @NotNull
-    @Override
-    public CompletableFuture<MessageID> send(@NotNull RawMessage rawMessage) {
+    private CompletableFuture<MessageID> send(@NotNull ByteBuf body, @NotNull Map<String, String> properties, @Nullable EventID eventID) {
         if (!sessionActive.get()) {
             throw new IllegalStateException("Session is not active. It is not possible to send messages.");
         }
 
-        ByteBuf buf = Unpooled.copiedBuffer(rawMessage.getBody().toByteArray());
-        Map<String, String> props = rawMessage.getMetadata().getPropertiesMap();
-
-        FixField msgType = findField(buf, MSG_TYPE_TAG);
+        FixField msgType = findField(body, MSG_TYPE_TAG);
         boolean isLogout = msgType != null && Objects.equals(msgType.getValue(), MSG_TYPE_LOGOUT);
         if(isLogout && !channel.isOpen()) {
             String message = String.format("%s - %s: Logout ignored as channel is already closed.", channel.getSessionGroup(), channel.getSessionAlias());
@@ -264,22 +270,31 @@ public class FixHandler implements AutoCloseable, IHandler {
             return CompletableFuture.completedFuture(null);
         }
 
-        boolean isUngracefulDisconnect = Boolean.parseBoolean(props.get(UNGRACEFUL_DISCONNECT_PROPERTY));
+        boolean isUngracefulDisconnect = Boolean.parseBoolean(properties.get(UNGRACEFUL_DISCONNECT_PROPERTY));
         if(isLogout) {
             context.send(CommonUtil.toEvent(String.format("Closing session %s. Is graceful disconnect: %b", channel.getSessionAlias(), !isUngracefulDisconnect)));
             try {
                 disconnect(!isUngracefulDisconnect);
                 enabled.set(false);
-                channel.open().get();
+                channel.open().get(settings.getConnectionTimeoutOnSend(), TimeUnit.MILLISECONDS);
             } catch (Exception e) {
                 context.send(CommonUtil.toErrorEvent(String.format("Error while ending session %s by user logout. Is graceful disconnect: %b", channel.getSessionAlias(), !isUngracefulDisconnect), e));
             }
             return CompletableFuture.completedFuture(null);
         }
 
+        // TODO: probably, this should be moved to the core part
+        // But those changes will break API
+        // So, let's keep it here for now
+        long deadline = System.currentTimeMillis() + settings.getConnectionTimeoutOnSend();
+
         if (!channel.isOpen()) {
             try {
-                channel.open().get();
+                channel.open().get(settings.getConnectionTimeoutOnSend(), TimeUnit.MILLISECONDS);
+            } catch (TimeoutException e) {
+                ExceptionUtils.rethrow(new TimeoutException(
+                        String.format("could not open connection before timeout %d mls elapsed",
+                                settings.getConnectionTimeoutOnSend())));
             } catch (Exception e) {
                 ExceptionUtils.rethrow(e);
             }
@@ -292,14 +307,32 @@ public class FixHandler implements AutoCloseable, IHandler {
             } catch (InterruptedException e) {
                 error("Error while sleeping.", null);
             }
+            if (System.currentTimeMillis() > deadline) {
+                // The method should have checked exception in signature...
+                ExceptionUtils.rethrow(new TimeoutException(String.format("session was not established within %d mls",
+                        settings.getConnectionTimeoutOnSend())));
+            }
         }
 
+        recoveryLock.lock();
         try {
-            recoveryLock.lock();
-            return channel.send(toByteBuf(rawMessage.getBody()), rawMessage.getMetadata().getPropertiesMap(), getEventId(rawMessage), SendMode.HANDLE_AND_MANGLE);
+            return channel.send(body, properties, eventID, SendMode.HANDLE_AND_MANGLE);
         } finally {
             recoveryLock.unlock();
         }
+    }
+
+    @NotNull
+    @Override
+    public CompletableFuture<MessageID> send(@NotNull RawMessage rawMessage) {
+        return send(toByteBuf(rawMessage.getBody()), rawMessage.getMetadata().getPropertiesMap(), getEventId(rawMessage));
+    }
+
+    @NotNull
+    @Override
+    public CompletableFuture<MessageID> send(@NotNull com.exactpro.th2.common.schema.message.impl.rabbitmq.transport.RawMessage message) {
+        final var id = message.getEventId();
+        return send(message.getBody(), message.getMetadata(), id != null ? EventUtilsKt.toProto(id) : null);
     }
 
     @Override
@@ -367,7 +400,7 @@ public class FixHandler implements AutoCloseable, IHandler {
         FixField possDup = findField(message, POSS_DUP_TAG);
         boolean isDup = false;
         if(possDup != null) {
-            isDup = IS_POSS_DUP.equals(possDup.getValue());
+            isDup = Objects.equals(possDup.getValue(), IS_POSS_DUP);
         }
 
         String msgTypeValue = requireNonNull(msgType.getValue());
@@ -613,9 +646,8 @@ public class FixHandler implements AutoCloseable, IHandler {
                     if(possDup != null && Objects.equals(possDup.getValue(), IS_POSS_DUP)) return true;
 
                     if(sequence - 1 != lastProcessedSequence.get() ) {
-                        int newSeqNo = sequence;
                         StringBuilder sequenceReset =
-                                createSequenceReset(Math.max(beginSeqNo, lastProcessedSequence.get() + 1), newSeqNo);
+                                createSequenceReset(Math.max(beginSeqNo, lastProcessedSequence.get() + 1), sequence);
                         channel.send(Unpooled.wrappedBuffer(sequenceReset.toString().getBytes(StandardCharsets.UTF_8)), Collections.emptyMap(), null, SendMode.MANGLE);
                         resetHeartbeatTask();
                     }
@@ -633,9 +665,8 @@ public class FixHandler implements AutoCloseable, IHandler {
                 };
 
                 messageLoader.processMessagesInRange(
-                    Direction.SECOND,
-                    channel.getSessionAlias(),
-                    beginSeqNo,
+                        channel.getSessionGroup(), channel.getSessionAlias(), Direction.SECOND,
+                        beginSeqNo,
                     processMessage
                 );
 
@@ -715,6 +746,8 @@ public class FixHandler implements AutoCloseable, IHandler {
         onOutgoingUpdateTag(message, metadata);
 
         if(LOGGER.isDebugEnabled()) debug("Outgoing message: %s", message.toString(US_ASCII));
+
+        if(enabled.get()) resetHeartbeatTask();
     }
 
     public void onOutgoingUpdateTag(@NotNull ByteBuf message, @NotNull Map<String, String> metadata) {
