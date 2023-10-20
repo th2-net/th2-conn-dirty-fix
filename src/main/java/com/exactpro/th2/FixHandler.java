@@ -165,6 +165,8 @@ public class FixHandler implements AutoCloseable, IHandler {
 
     private final AtomicReference<Future<?>> heartbeatTimer = new AtomicReference<>(CompletableFuture.completedFuture(null));
     private final AtomicReference<Future<?>> testRequestTimer = new AtomicReference<>(CompletableFuture.completedFuture(null));
+
+    private final TimeoutSendHandler timeoutSendHandler;
     private Future<?> reconnectRequestTimer = CompletableFuture.completedFuture(null);
     private volatile IChannel channel;
     protected FixHandlerSettings settings;
@@ -235,9 +237,10 @@ public class FixHandler implements AutoCloseable, IHandler {
         if (settings.getHeartBtInt() <= 0) throw new IllegalArgumentException("HeartBtInt cannot be negative or zero");
         if (settings.getTestRequestDelay() <= 0) throw new IllegalArgumentException("TestRequestDelay cannot be negative or zero");
         if (settings.getDisconnectRequestDelay() <= 0) throw new IllegalArgumentException("DisconnectRequestDelay cannot be negative or zero");
-        if (settings.getConnectionTimeoutOnSend() <= 0) {
-            throw new IllegalArgumentException("connectionTimeoutOnSend must be greater than zero");
-        }
+        this.timeoutSendHandler = new TimeoutSendHandler(
+                settings.getConnectionTimeoutOnSend(),
+                settings.getMinConnectionTimeoutOnSend()
+        );
     }
 
     @Override
@@ -276,7 +279,7 @@ public class FixHandler implements AutoCloseable, IHandler {
             try {
                 disconnect(!isUngracefulDisconnect);
                 enabled.set(false);
-                channel.open().get(settings.getConnectionTimeoutOnSend(), TimeUnit.MILLISECONDS);
+                timeoutSendHandler.getWithTimeout(channel.open());
             } catch (Exception e) {
                 context.send(CommonUtil.toErrorEvent(String.format("Error while ending session %s by user logout. Is graceful disconnect: %b", channel.getSessionAlias(), !isUngracefulDisconnect), e));
             }
@@ -286,15 +289,16 @@ public class FixHandler implements AutoCloseable, IHandler {
         // TODO: probably, this should be moved to the core part
         // But those changes will break API
         // So, let's keep it here for now
-        long deadline = System.currentTimeMillis() + settings.getConnectionTimeoutOnSend();
+        long deadline = timeoutSendHandler.getDeadline();
+        long currentTimeout = timeoutSendHandler.getCurrentTimeout();
 
         if (!channel.isOpen()) {
             try {
-                channel.open().get(settings.getConnectionTimeoutOnSend(), TimeUnit.MILLISECONDS);
+                timeoutSendHandler.getWithTimeout(channel.open());
             } catch (TimeoutException e) {
                 ExceptionUtils.rethrow(new TimeoutException(
                         String.format("could not open connection before timeout %d mls elapsed",
-                                settings.getConnectionTimeoutOnSend())));
+                                currentTimeout)));
             } catch (Exception e) {
                 ExceptionUtils.rethrow(e);
             }
@@ -310,7 +314,7 @@ public class FixHandler implements AutoCloseable, IHandler {
             if (System.currentTimeMillis() > deadline) {
                 // The method should have checked exception in signature...
                 ExceptionUtils.rethrow(new TimeoutException(String.format("session was not established within %d mls",
-                        settings.getConnectionTimeoutOnSend())));
+                        currentTimeout)));
             }
         }
 
@@ -1165,6 +1169,45 @@ public class FixHandler implements AutoCloseable, IHandler {
     private void debug(String message, Object... args) {
         if(LOGGER.isDebugEnabled()) {
             LOGGER.debug("{} - {}: {}", channel.getSessionGroup(), channel.getSessionAlias(), String.format(message, args));
+        }
+    }
+
+    private static class TimeoutSendHandler {
+        private final long maxTimeout;
+        private final long minTimeout;
+        private long currentTimeout;
+
+        TimeoutSendHandler(long maxTimeout, long minTimeout) {
+            if (maxTimeout < minTimeout) {
+                throw new IllegalArgumentException("max timeout must be greater than min timeout");
+            }
+            if (maxTimeout <= 0) {
+                throw new IllegalArgumentException("connectionTimeoutOnSend must be greater than zero");
+            }
+            if (minTimeout <= 0) {
+                throw new IllegalArgumentException("minConnectionTimeoutOnSend must be greater than zero");
+            }
+            this.maxTimeout = maxTimeout;
+            this.minTimeout = minTimeout;
+            currentTimeout = maxTimeout;
+        }
+
+        public void getWithTimeout(Future<?> future) throws ExecutionException, InterruptedException, TimeoutException {
+            try {
+                future.get(currentTimeout, TimeUnit.MILLISECONDS);
+                currentTimeout = maxTimeout;
+            } catch (ExecutionException | InterruptedException | TimeoutException ex) {
+                currentTimeout = Math.max(minTimeout, currentTimeout / 2);
+                throw ex;
+            }
+        }
+
+        public long getCurrentTimeout() {
+            return currentTimeout;
+        }
+
+        public long getDeadline() {
+            return System.currentTimeMillis() + currentTimeout;
         }
     }
 }

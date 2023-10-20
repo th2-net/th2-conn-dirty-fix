@@ -75,6 +75,8 @@ public class FixHandlerSettings implements IHandlerSettings {
      */
     private long connectionTimeoutOnSend = DEFAULT_CONNECTION_TIMEOUT_ON_SEND;
 
+    private long minConnectionTimeoutOnSend = 1_000;
+
     @JsonDeserialize(using = DateTimeFormatterDeserializer.class)
     private DateTimeFormatter sendingDateTimeFormat = DateTimeFormatter.ofPattern("yyyyMMdd-HH:mm:ss.SSSSSSSSS");
 
@@ -316,5 +318,13 @@ public class FixHandlerSettings implements IHandlerSettings {
 
     public void setConnectionTimeoutOnSend(long connectionTimeoutOnSend) {
         this.connectionTimeoutOnSend = connectionTimeoutOnSend;
+    }
+
+    public long getMinConnectionTimeoutOnSend() {
+        return minConnectionTimeoutOnSend;
+    }
+
+    public void setMinConnectionTimeoutOnSend(long minConnectionTimeoutOnSend) {
+        this.minConnectionTimeoutOnSend = minConnectionTimeoutOnSend;
     }
 }
