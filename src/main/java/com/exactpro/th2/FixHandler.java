@@ -57,7 +57,9 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.Consumer;
 
 import kotlin.jvm.functions.Function1;
@@ -68,6 +70,7 @@ import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.annotation.concurrent.GuardedBy;
 import javax.annotation.concurrent.ThreadSafe;
 
 import static com.exactpro.th2.conn.dirty.fix.FixByteBufUtilKt.findField;
@@ -1183,8 +1186,11 @@ public class FixHandler implements AutoCloseable, IHandler {
         private final Consumer<Event> eventConsumer;
         private final long maxTimeout;
         private final long minTimeout;
-        private final AtomicLong currentTimeout;
-        private final AtomicInteger attempts = new AtomicInteger();
+        private final ReadWriteLock lock = new ReentrantReadWriteLock();
+        @GuardedBy("lock")
+        private long currentTimeout;
+        @GuardedBy("lock")
+        private int attempts;
 
         TimeoutSendHandler(long maxTimeout, long minTimeout, Consumer<Event> eventConsumer) {
             if (maxTimeout < minTimeout) {
@@ -1199,20 +1205,35 @@ public class FixHandler implements AutoCloseable, IHandler {
             this.maxTimeout = maxTimeout;
             this.minTimeout = minTimeout;
             this.eventConsumer = requireNonNull(eventConsumer, "event consumer");
-            currentTimeout = new AtomicLong(maxTimeout);
+            currentTimeout = maxTimeout;
         }
 
         public void getWithTimeout(Future<?> future) throws ExecutionException, InterruptedException, TimeoutException {
             try {
-                future.get(currentTimeout.get(), TimeUnit.MILLISECONDS);
-                int spentAttempts = attempts.getAndSet(0);
-                if (spentAttempts > 0) {
-                    generateEvent(spentAttempts);
+                long timeout = getCurrentTimeout();
+
+                future.get(timeout, TimeUnit.MILLISECONDS);
+
+                int attempts;
+                lock.writeLock().lock();
+                try {
+                    attempts = this.attempts;
+                    this.attempts = 0;
+                    currentTimeout = maxTimeout;
+                } finally {
+                    lock.writeLock().unlock();
                 }
-                currentTimeout.set(maxTimeout);
+                if (attempts > 0) {
+                    generateEvent(attempts);
+                }
             } catch (ExecutionException | InterruptedException | TimeoutException ex) {
-                attempts.incrementAndGet();
-                currentTimeout.updateAndGet(cur -> Math.max(minTimeout, cur / 2));
+                lock.writeLock().lock();
+                try {
+                    attempts += 1;
+                    currentTimeout = Math.max(minTimeout, currentTimeout / 2);
+                } finally {
+                    lock.writeLock().unlock();
+                }
                 throw ex;
             }
         }
@@ -1227,11 +1248,21 @@ public class FixHandler implements AutoCloseable, IHandler {
         }
 
         public long getCurrentTimeout() {
-            return currentTimeout.get();
+            lock.readLock().lock();
+            try {
+                return currentTimeout;
+            } finally {
+                lock.readLock().unlock();
+            }
         }
 
         public long getDeadline() {
-            return System.currentTimeMillis() + currentTimeout.get();
+            lock.readLock().lock();
+            try {
+                return System.currentTimeMillis() + currentTimeout;
+            } finally {
+                lock.readLock().unlock();
+            }
         }
     }
 }
