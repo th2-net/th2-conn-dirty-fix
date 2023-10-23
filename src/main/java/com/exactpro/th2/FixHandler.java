@@ -24,6 +24,7 @@ import com.exactpro.th2.common.grpc.RawMessage;
 import com.exactpro.th2.common.utils.event.transport.EventUtilsKt;
 import com.exactpro.th2.conn.dirty.fix.FixField;
 import com.exactpro.th2.conn.dirty.fix.MessageLoader;
+import com.exactpro.th2.conn.dirty.tcp.core.SendingTimeoutHandler;
 import com.exactpro.th2.conn.dirty.tcp.core.api.IChannel;
 import com.exactpro.th2.conn.dirty.tcp.core.api.IChannel.SendMode;
 import com.exactpro.th2.conn.dirty.tcp.core.api.IHandler;
@@ -55,12 +56,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantLock;
-import java.util.concurrent.locks.ReentrantReadWriteLock;
-import java.util.function.Consumer;
 
 import kotlin.jvm.functions.Function1;
 import org.apache.commons.lang3.StringUtils;
@@ -69,9 +66,6 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import javax.annotation.concurrent.GuardedBy;
-import javax.annotation.concurrent.ThreadSafe;
 
 import static com.exactpro.th2.conn.dirty.fix.FixByteBufUtilKt.findField;
 import static com.exactpro.th2.conn.dirty.fix.FixByteBufUtilKt.findLastField;
@@ -174,7 +168,7 @@ public class FixHandler implements AutoCloseable, IHandler {
     private final AtomicReference<Future<?>> heartbeatTimer = new AtomicReference<>(CompletableFuture.completedFuture(null));
     private final AtomicReference<Future<?>> testRequestTimer = new AtomicReference<>(CompletableFuture.completedFuture(null));
 
-    private final TimeoutSendHandler timeoutSendHandler;
+    private final SendingTimeoutHandler sendingTimeoutHandler;
     private Future<?> reconnectRequestTimer = CompletableFuture.completedFuture(null);
     private volatile IChannel channel;
     protected FixHandlerSettings settings;
@@ -245,9 +239,9 @@ public class FixHandler implements AutoCloseable, IHandler {
         if (settings.getHeartBtInt() <= 0) throw new IllegalArgumentException("HeartBtInt cannot be negative or zero");
         if (settings.getTestRequestDelay() <= 0) throw new IllegalArgumentException("TestRequestDelay cannot be negative or zero");
         if (settings.getDisconnectRequestDelay() <= 0) throw new IllegalArgumentException("DisconnectRequestDelay cannot be negative or zero");
-        this.timeoutSendHandler = new TimeoutSendHandler(
-                settings.getConnectionTimeoutOnSend(),
+        this.sendingTimeoutHandler = SendingTimeoutHandler.create(
                 settings.getMinConnectionTimeoutOnSend(),
+                settings.getConnectionTimeoutOnSend(),
                 context::send
         );
     }
@@ -288,7 +282,7 @@ public class FixHandler implements AutoCloseable, IHandler {
             try {
                 disconnect(!isUngracefulDisconnect);
                 enabled.set(false);
-                timeoutSendHandler.getWithTimeout(channel.open());
+                sendingTimeoutHandler.getWithTimeout(channel.open());
             } catch (Exception e) {
                 context.send(CommonUtil.toErrorEvent(String.format("Error while ending session %s by user logout. Is graceful disconnect: %b", channel.getSessionAlias(), !isUngracefulDisconnect), e));
             }
@@ -298,12 +292,12 @@ public class FixHandler implements AutoCloseable, IHandler {
         // TODO: probably, this should be moved to the core part
         // But those changes will break API
         // So, let's keep it here for now
-        long deadline = timeoutSendHandler.getDeadline();
-        long currentTimeout = timeoutSendHandler.getCurrentTimeout();
+        long deadline = sendingTimeoutHandler.getDeadline();
+        long currentTimeout = sendingTimeoutHandler.getCurrentTimeout();
 
         if (!channel.isOpen()) {
             try {
-                timeoutSendHandler.getWithTimeout(channel.open());
+                sendingTimeoutHandler.getWithTimeout(channel.open());
             } catch (TimeoutException e) {
                 ExceptionUtils.rethrow(new TimeoutException(
                         String.format("could not open connection before timeout %d mls elapsed",
@@ -1178,91 +1172,6 @@ public class FixHandler implements AutoCloseable, IHandler {
     private void debug(String message, Object... args) {
         if(LOGGER.isDebugEnabled()) {
             LOGGER.debug("{} - {}: {}", channel.getSessionGroup(), channel.getSessionAlias(), String.format(message, args));
-        }
-    }
-
-    @ThreadSafe
-    private static class TimeoutSendHandler {
-        private final Consumer<Event> eventConsumer;
-        private final long maxTimeout;
-        private final long minTimeout;
-        private final ReadWriteLock lock = new ReentrantReadWriteLock();
-        @GuardedBy("lock")
-        private long currentTimeout;
-        @GuardedBy("lock")
-        private int attempts;
-
-        TimeoutSendHandler(long maxTimeout, long minTimeout, Consumer<Event> eventConsumer) {
-            if (maxTimeout < minTimeout) {
-                throw new IllegalArgumentException("max timeout must be greater than min timeout");
-            }
-            if (maxTimeout <= 0) {
-                throw new IllegalArgumentException("connectionTimeoutOnSend must be greater than zero");
-            }
-            if (minTimeout <= 0) {
-                throw new IllegalArgumentException("minConnectionTimeoutOnSend must be greater than zero");
-            }
-            this.maxTimeout = maxTimeout;
-            this.minTimeout = minTimeout;
-            this.eventConsumer = requireNonNull(eventConsumer, "event consumer");
-            currentTimeout = maxTimeout;
-        }
-
-        public void getWithTimeout(Future<?> future) throws ExecutionException, InterruptedException, TimeoutException {
-            try {
-                long timeout = getCurrentTimeout();
-
-                future.get(timeout, TimeUnit.MILLISECONDS);
-
-                int attempts;
-                lock.writeLock().lock();
-                try {
-                    attempts = this.attempts;
-                    this.attempts = 0;
-                    currentTimeout = maxTimeout;
-                } finally {
-                    lock.writeLock().unlock();
-                }
-                if (attempts > 0) {
-                    generateEvent(attempts);
-                }
-            } catch (ExecutionException | InterruptedException | TimeoutException ex) {
-                lock.writeLock().lock();
-                try {
-                    attempts += 1;
-                    currentTimeout = Math.max(minTimeout, currentTimeout / 2);
-                } finally {
-                    lock.writeLock().unlock();
-                }
-                throw ex;
-            }
-        }
-
-        private void generateEvent(int attempts) {
-            eventConsumer.accept(
-                    Event.start().endTimestamp()
-                            .status(Event.Status.FAILED)
-                            .name("Message sending attempt successful after " + attempts + " failed attempt(s)")
-                            .type("MessageSendingAttempts")
-            );
-        }
-
-        public long getCurrentTimeout() {
-            lock.readLock().lock();
-            try {
-                return currentTimeout;
-            } finally {
-                lock.readLock().unlock();
-            }
-        }
-
-        public long getDeadline() {
-            lock.readLock().lock();
-            try {
-                return System.currentTimeMillis() + currentTimeout;
-            } finally {
-                lock.readLock().unlock();
-            }
         }
     }
 }
