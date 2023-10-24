@@ -52,8 +52,10 @@ This microservice allows sending and receiving messages via FIX protocol
 + *logoutOnIncorrectServerSequence* - whether to logout session when server send message with sequence number less than expected. If `false` then internal conn sequence will be reset to sequence number from server message.
 + *connectionTimeoutOnSend* - timeout in milliseconds for sending message from queue thread
   (please read about [acknowledgment timeout](https://www.rabbitmq.com/consumers.html#acknowledgement-timeout) to understand the problem).
-  _Default, 30000 mls._
+  _Default, 30000 mls._ Each failed sending attempt decreases the timeout in half (but not less than _minConnectionTimeoutOnSend_).
+  The timeout is reset to the original value after a successful sending attempt.
   If connection is not established within the specified timeout an error will be reported.
++ *minConnectionTimeoutOnSend* - minimum value for the sending message timeout in milliseconds. _Default value is 1000 mls._
 
 ### Security settings
 
@@ -332,6 +334,11 @@ spec:
 ```
 
 # Changelog
+
+## 1.5.0
+
+* `minConnectionTimeoutOnSend` parameter is added.
+* Sending timeout now decreases in half on each failed attempt (but not less than `minConnectionTimeoutOnSend`).
 
 ## 1.4.2
 * Ungraceful session disconnect support.
