@@ -586,7 +586,7 @@ public class FixHandler implements AutoCloseable, IHandler {
         resendRequest.append(BEGIN_SEQ_NO).append(beginSeqNo).append(SOH);
         resendRequest.append(END_SEQ_NO).append(endSeqNo).append(SOH);
         setChecksumAndBodyLength(resendRequest);
-        channel.send(Unpooled.wrappedBuffer(resendRequest.toString().getBytes(StandardCharsets.UTF_8)), Collections.emptyMap(), null, IChannel.SendMode.MANGLE);
+        channel.send(Unpooled.wrappedBuffer(resendRequest.toString().getBytes(StandardCharsets.UTF_8)), createMetadataMap(), null, IChannel.SendMode.MANGLE);
         resetHeartbeatTask();
     }
 
@@ -598,7 +598,7 @@ public class FixHandler implements AutoCloseable, IHandler {
         setChecksumAndBodyLength(resendRequest);
 
         if (enabled.get()) {
-            channel.send(Unpooled.wrappedBuffer(resendRequest.toString().getBytes(StandardCharsets.UTF_8)), Collections.emptyMap(), null, IChannel.SendMode.MANGLE);
+            channel.send(Unpooled.wrappedBuffer(resendRequest.toString().getBytes(StandardCharsets.UTF_8)), createMetadataMap(), null, IChannel.SendMode.MANGLE);
             resetHeartbeatTask();
         } else {
             sendLogon();
@@ -655,7 +655,7 @@ public class FixHandler implements AutoCloseable, IHandler {
                     if(sequence - 1 != lastProcessedSequence.get() ) {
                         StringBuilder sequenceReset =
                                 createSequenceReset(Math.max(beginSeqNo, lastProcessedSequence.get() + 1), sequence);
-                        channel.send(Unpooled.wrappedBuffer(sequenceReset.toString().getBytes(StandardCharsets.UTF_8)), Collections.emptyMap(), null, SendMode.MANGLE);
+                        channel.send(Unpooled.wrappedBuffer(sequenceReset.toString().getBytes(StandardCharsets.UTF_8)), createMetadataMap(), null, SendMode.MANGLE);
                         resetHeartbeatTask();
                     }
 
@@ -663,7 +663,7 @@ public class FixHandler implements AutoCloseable, IHandler {
                     setPossDup(buf);
                     updateLength(buf);
                     updateChecksum(buf);
-                    channel.send(buf, Collections.emptyMap(), null, SendMode.MANGLE);
+                    channel.send(buf, createMetadataMap(), null, SendMode.MANGLE);
 
                     resetHeartbeatTask();
 
@@ -681,7 +681,7 @@ public class FixHandler implements AutoCloseable, IHandler {
                     String seqReset = createSequenceReset(Math.max(lastProcessedSequence.get() + 1, beginSeqNo), msgSeqNum.get() + 1).toString();
                     channel.send(
                         Unpooled.wrappedBuffer(seqReset.getBytes(StandardCharsets.UTF_8)),
-                        Collections.emptyMap(), null, SendMode.MANGLE
+                        createMetadataMap(), null, SendMode.MANGLE
                     );
                 }
             } else {
@@ -689,7 +689,7 @@ public class FixHandler implements AutoCloseable, IHandler {
                     createSequenceReset(beginSeqNo, msgSeqNum.get() + 1).toString();
                 channel.send(
                     Unpooled.wrappedBuffer(seqReset.getBytes(StandardCharsets.UTF_8)),
-                    Collections.emptyMap(), null, SendMode.MANGLE
+                    createMetadataMap(), null, SendMode.MANGLE
                 );
             }
             resetHeartbeatTask();
@@ -700,7 +700,7 @@ public class FixHandler implements AutoCloseable, IHandler {
                 createSequenceReset(Math.max(beginSeqNo, lastProcessedSequence.get() + 1), msgSeqNum.get() + 1).toString();
             channel.send(
                 Unpooled.buffer().writeBytes(seqReset.getBytes(StandardCharsets.UTF_8)),
-                Collections.emptyMap(), null, SendMode.MANGLE
+                createMetadataMap(), null, SendMode.MANGLE
             );
         } finally {
             recoveryLock.unlock();
@@ -716,7 +716,7 @@ public class FixHandler implements AutoCloseable, IHandler {
         setChecksumAndBodyLength(sequenceReset);
 
         if (enabled.get()) {
-            channel.send(Unpooled.wrappedBuffer(sequenceReset.toString().getBytes(StandardCharsets.UTF_8)), Collections.emptyMap(), null, IChannel.SendMode.MANGLE);
+            channel.send(Unpooled.wrappedBuffer(sequenceReset.toString().getBytes(StandardCharsets.UTF_8)), createMetadataMap(), null, IChannel.SendMode.MANGLE);
             resetHeartbeatTask();
         } else {
             sendLogon();
@@ -880,7 +880,7 @@ public class FixHandler implements AutoCloseable, IHandler {
 
         if (enabled.get()) {
             info("Send Heartbeat to server - %s", heartbeat);
-            channel.send(Unpooled.wrappedBuffer(heartbeat.toString().getBytes(StandardCharsets.UTF_8)), Collections.emptyMap(), null, IChannel.SendMode.MANGLE);
+            channel.send(Unpooled.wrappedBuffer(heartbeat.toString().getBytes(StandardCharsets.UTF_8)), createMetadataMap(), null, IChannel.SendMode.MANGLE);
             resetHeartbeatTask();
 
         } else {
@@ -894,7 +894,7 @@ public class FixHandler implements AutoCloseable, IHandler {
         testRequest.append(TEST_REQ_ID).append(testReqID.incrementAndGet());
         setChecksumAndBodyLength(testRequest);
         if (enabled.get()) {
-            channel.send(Unpooled.wrappedBuffer(testRequest.toString().getBytes(StandardCharsets.UTF_8)), Collections.emptyMap(), null, IChannel.SendMode.MANGLE);
+            channel.send(Unpooled.wrappedBuffer(testRequest.toString().getBytes(StandardCharsets.UTF_8)), createMetadataMap(), null, IChannel.SendMode.MANGLE);
             info("Send TestRequest to server - %s", testRequest);
             resetTestRequestTask();
             resetHeartbeatTask();
@@ -942,7 +942,7 @@ public class FixHandler implements AutoCloseable, IHandler {
 
         setChecksumAndBodyLength(logon);
         info("Send logon - %s", logon);
-        channel.send(Unpooled.wrappedBuffer(logon.toString().getBytes(StandardCharsets.UTF_8)), Collections.emptyMap(), null, IChannel.SendMode.MANGLE);
+        channel.send(Unpooled.wrappedBuffer(logon.toString().getBytes(StandardCharsets.UTF_8)), createMetadataMap(), null, IChannel.SendMode.MANGLE);
     }
 
     private void sendLogout() {
@@ -963,7 +963,7 @@ public class FixHandler implements AutoCloseable, IHandler {
             try {
                 channel.send(
                         Unpooled.wrappedBuffer(logout.toString().getBytes(StandardCharsets.UTF_8)),
-                        Collections.emptyMap(),
+                        createMetadataMap(),
                         null,
                         IChannel.SendMode.MANGLE
                 ).get();
@@ -1173,5 +1173,9 @@ public class FixHandler implements AutoCloseable, IHandler {
         if(LOGGER.isDebugEnabled()) {
             LOGGER.debug("{} - {}: {}", channel.getSessionGroup(), channel.getSessionAlias(), String.format(message, args));
         }
+    }
+
+    private Map<String, String> createMetadataMap() {
+        return new HashMap<>(2);
     }
 }

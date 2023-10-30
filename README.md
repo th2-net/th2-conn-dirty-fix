@@ -1,4 +1,4 @@
-# th2-conn-dirty-fix (1.4.2)
+# th2-conn-dirty-fix (1.5.1)
 
 This microservice allows sending and receiving messages via FIX protocol
 
@@ -334,6 +334,12 @@ spec:
 ```
 
 # Changelog
+
+## 1.5.1
+
+* Property `th2.operation_timestamp` is added to metadata to each message
+* Use mutable map for metadata when sending a messages from the handler
+  * Fix error when new property with operation timestamp added to the immutable map
 
 ## 1.5.0
 
