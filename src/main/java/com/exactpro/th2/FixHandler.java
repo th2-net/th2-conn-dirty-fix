@@ -43,7 +43,6 @@ import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -169,7 +168,7 @@ public class FixHandler implements AutoCloseable, IHandler {
     private final AtomicReference<Future<?>> testRequestTimer = new AtomicReference<>(CompletableFuture.completedFuture(null));
 
     private final SendingTimeoutHandler sendingTimeoutHandler;
-    private Future<?> reconnectRequestTimer = CompletableFuture.completedFuture(null);
+    private AtomicReference<Future<?>> reconnectRequestTimer = new AtomicReference<>(CompletableFuture.completedFuture(null));
     private volatile IChannel channel;
     protected FixHandlerSettings settings;
 
@@ -430,7 +429,7 @@ public class FixHandler implements AutoCloseable, IHandler {
             if(settings.isLogoutOnIncorrectServerSequence()) {
                 context.send(CommonUtil.toEvent(String.format("Received server sequence %d but expected %d. Sending logout with text: MsgSeqNum is too low...", receivedMsgSeqNum, serverMsgSeqNum.get())));
                 sendLogout(String.format("MsgSeqNum too low, expecting %d but received %d", serverMsgSeqNum.get() + 1, receivedMsgSeqNum));
-                reconnectRequestTimer = executorService.schedule(this::sendLogon, settings.getReconnectDelay(), TimeUnit.SECONDS);
+                reconnectRequestTimer.set(executorService.schedule(this::sendLogon, settings.getReconnectDelay(), TimeUnit.SECONDS));
                 if (LOGGER.isErrorEnabled()) error("Invalid message. SeqNum is less than expected %d: %s", null, serverMsgSeqNum.get(), message.toString(US_ASCII));
             } else {
                 context.send(CommonUtil.toEvent(String.format("Received server sequence %d but expected %d. Correcting server sequence.", receivedMsgSeqNum, serverMsgSeqNum.get() + 1)));
@@ -456,6 +455,7 @@ public class FixHandler implements AutoCloseable, IHandler {
                 if(LOGGER.isInfoEnabled()) info("Logon received - %s", message.toString(US_ASCII));
                 boolean connectionSuccessful = checkLogon(message);
                 if (connectionSuccessful) {
+                    cancelFuture(reconnectRequestTimer);
                     if(settings.useNextExpectedSeqNum()) {
                         FixField nextExpectedSeqField = findField(message, NEXT_EXPECTED_SEQ_NUMBER_TAG);
                         if(nextExpectedSeqField == null) {
@@ -491,7 +491,7 @@ public class FixHandler implements AutoCloseable, IHandler {
                     resetTestRequestTask();
                 } else {
                     enabled.set(false);
-                    reconnectRequestTimer = executorService.schedule(this::sendLogon, settings.getReconnectDelay(), TimeUnit.SECONDS);
+                    reconnectRequestTimer.set(executorService.schedule(this::sendLogon, settings.getReconnectDelay(), TimeUnit.SECONDS));
                 }
                 break;
             //extract logout reason
@@ -729,7 +729,7 @@ public class FixHandler implements AutoCloseable, IHandler {
 
         if (receivedTestReqID != null) {
             if (Objects.equals(receivedTestReqID.getValue(), Integer.toString(testReqID.get()))) {
-                reconnectRequestTimer.cancel(false);
+                cancelFuture(reconnectRequestTimer);
             }
         }
     }
@@ -901,7 +901,7 @@ public class FixHandler implements AutoCloseable, IHandler {
         } else {
             sendLogon();
         }
-        reconnectRequestTimer = executorService.schedule(this::sendLogon, settings.getReconnectDelay(), TimeUnit.SECONDS);
+        reconnectRequestTimer.set(executorService.schedule(this::sendLogon, settings.getReconnectDelay(), TimeUnit.SECONDS));
     }
 
     public void sendLogon() {
@@ -943,6 +943,7 @@ public class FixHandler implements AutoCloseable, IHandler {
         setChecksumAndBodyLength(logon);
         info("Send logon - %s", logon);
         channel.send(Unpooled.wrappedBuffer(logon.toString().getBytes(StandardCharsets.UTF_8)), createMetadataMap(), null, IChannel.SendMode.MANGLE);
+        reconnectRequestTimer.set(executorService.schedule(this::onMissingLogonAck, settings.getLogonAckTimeout(), TimeUnit.MILLISECONDS));
     }
 
     private void sendLogout() {
@@ -989,6 +990,7 @@ public class FixHandler implements AutoCloseable, IHandler {
         enabled.set(false);
         cancelFuture(heartbeatTimer);
         cancelFuture(testRequestTimer);
+        cancelFuture(reconnectRequestTimer);
     }
 
     @Override
@@ -1017,6 +1019,16 @@ public class FixHandler implements AutoCloseable, IHandler {
         resetHeartbeatTask();
         resetTestRequestTask();
         channel.close().get();
+    }
+
+    private void onMissingLogonAck() {
+        info("Logon was not acknowledged. Reconnecting.");
+        try {
+            disconnect(false);
+            channel.open();
+        } catch (Exception e) {
+            error("Error while disconnecting on missing logon ack", e);
+        }
     }
 
     private void setHeader(StringBuilder stringBuilder, String msgType, Integer seqNum, String time) {
