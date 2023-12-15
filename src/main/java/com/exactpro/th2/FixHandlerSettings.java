@@ -70,6 +70,12 @@ public class FixHandlerSettings implements IHandlerSettings {
     private int disconnectRequestDelay = 5;
 
     /**
+     * Timeout in milliseconds during which the connection should receive logon acknowledgement message.
+     * Otherwise reconnect will be done.
+     */
+    private long logonAckTimeout = 5_000;
+
+    /**
      * Timeout in milliseconds during which the connection should be opened and session is logged in.
      * Otherwise, the send operation will be interrupted
      */
@@ -326,5 +332,13 @@ public class FixHandlerSettings implements IHandlerSettings {
 
     public void setMinConnectionTimeoutOnSend(long minConnectionTimeoutOnSend) {
         this.minConnectionTimeoutOnSend = minConnectionTimeoutOnSend;
+    }
+
+    public long getLogonAckTimeout() {
+        return logonAckTimeout;
+    }
+
+    public void setLogonAckTimeout(long logonTimeout) {
+        this.logonAckTimeout = logonTimeout;
     }
 }
