@@ -226,6 +226,41 @@ class FixHandlerTest {
     }
 
     @Test
+    void reconnectOnMissingLogonAck() throws InterruptedException {
+        FixHandlerSettings settings = createHandlerSettings();
+        Channel channel = new Channel(settings, null);
+        FixHandler fixHandler = channel.getFixHandler();
+        fixHandler.onOpen(channel);
+        assertEquals(channel.getQueue().size(), 1);
+        assertEquals("8=FIXT.1.1\u00019=105\u000135=A\u000134=1\u000149=client\u000156=server\u000150=trader\u000152=2014-12-22T10:15:30Z\u000198=0\u0001108=30\u00011137=9\u0001553=username\u0001554=pass\u000110=203\u0001",
+            new String(channel.getQueue().get(0).array()));
+        channel.getQueue().clear();
+        Thread.sleep(settings.getLogonAckTimeout() + 2000);
+        assertEquals(channel.getQueue().size(), 1);
+        assertEquals("8=FIXT.1.1\u00019=105\u000135=A\u000134=1\u000149=client\u000156=server\u000150=trader\u000152=2014-12-22T10:15:30Z\u000198=0\u0001108=30\u00011137=9\u0001553=username\u0001554=pass\u000110=203\u0001",
+            new String(channel.getQueue().get(0).array()));
+        channel.close();
+    }
+
+    @Test
+    void noReconnectIfAckReceived() throws InterruptedException {
+        FixHandlerSettings settings = createHandlerSettings();
+        settings.setHeartBtInt(1000);
+        settings.setTestRequestDelay(1000);
+        Channel channel = new Channel(settings, null);
+        FixHandler fixHandler = channel.getFixHandler();
+        fixHandler.onOpen(channel);
+        fixHandler.onIncoming(channel, logonResponse);
+        assertEquals(channel.getQueue().size(), 1);
+        assertEquals("8=FIXT.1.1\u00019=107\u000135=A\u000134=1\u000149=client\u000156=server\u000150=trader\u000152=2014-12-22T10:15:30Z\u000198=0\u0001108=1000\u00011137=9\u0001553=username\u0001554=pass\u000110=043\u0001",
+            new String(channel.getQueue().get(0).array()));
+        channel.getQueue().clear();
+        Thread.sleep(settings.getLogonAckTimeout() * 2);
+        assertEquals(channel.getQueue().size(), 0);
+        channel.close();
+    }
+
+    @Test
     void logoutDisconnectTest() {
         channel.clearQueue();
         channel.close();
@@ -427,6 +462,7 @@ class Channel implements IChannel {
 
     @Override
     public CompletableFuture<Unit> open() {
+        fixHandler.onOpen(this);
         return CompletableFuture.completedFuture(Unit.INSTANCE);
     }
 
@@ -444,6 +480,7 @@ class Channel implements IChannel {
 
     @Override
     public CompletableFuture<Unit> close() {
+        fixHandler.onClose(this);
         return CompletableFuture.completedFuture(Unit.INSTANCE);
     }
 

@@ -1,4 +1,4 @@
-# th2-conn-dirty-fix (1.5.1)
+# th2-conn-dirty-fix (1.6.0)
 
 This microservice allows sending and receiving messages via FIX protocol
 
@@ -56,6 +56,7 @@ This microservice allows sending and receiving messages via FIX protocol
   The timeout is reset to the original value after a successful sending attempt.
   If connection is not established within the specified timeout an error will be reported.
 + *minConnectionTimeoutOnSend* - minimum value for the sending message timeout in milliseconds. _Default value is 1000 mls._
++ *logonAckTimeout* - timeout before reconnect will be issued if no logon ack is received.
 
 ### Security settings
 
@@ -334,6 +335,9 @@ spec:
 ```
 
 # Changelog
+
+## 1.6.0
+* Session will be reconnected if logon ack isn't received during user defined timeout.
 
 ## 1.5.1
 
