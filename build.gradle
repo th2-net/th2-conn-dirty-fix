@@ -49,7 +49,7 @@ dependencies {
 
     implementation 'com.exactpro.th2:common:3.44.1'
     implementation 'com.exactpro.th2:netty-bytebuf-utils:0.0.1'
-    implementation('com.exactpro.th2:conn-dirty-tcp-core:2.3.0') {
+    implementation('com.exactpro.th2:conn-dirty-tcp-core:2.3.0-direct-send-to-mq-8080094038-446b015-SNAPSHOT') {
         exclude group: 'org.slf4j', module: 'slf4j-log4j12'
         because 'Projects should use only slf4j-api, without coupling to a certain implementation'
     }
