@@ -6,11 +6,11 @@ import com.github.jk1.license.render.JsonReportRenderer
 plugins {
     id 'java'
     id 'org.jetbrains.kotlin.jvm' version '1.8.22'
-    id 'com.palantir.docker' version '0.25.0'
-    id "org.owasp.dependencycheck" version "8.3.1"
+    id 'com.palantir.docker' version '0.36.0'
+    id "org.owasp.dependencycheck" version "9.0.9"
     id "com.gorylenko.gradle-git-properties" version "2.4.1"
     id 'com.github.jk1.dependency-license-report' version '2.5'
-    id "de.undercouch.download" version "5.4.0"
+    id "de.undercouch.download" version "5.6.0"
 }
 
 apply plugin: 'application'
@@ -45,32 +45,32 @@ repositories {
 }
 
 dependencies {
-    api platform('com.exactpro.th2:bom:4.5.0')
+    api platform('com.exactpro.th2:bom:4.6.1')
 
-    implementation("com.exactpro.th2:common:5.4.0-dev") {
+    implementation("com.exactpro.th2:common:5.10.0-dev") {
         exclude group: 'com.exactpro.th2', module: 'task-utils'
     }
-    implementation "com.exactpro.th2:common-utils:2.2.0-dev"
+    implementation "com.exactpro.th2:common-utils:2.2.3-dev"
     implementation 'com.exactpro.th2:netty-bytebuf-utils:0.0.1'
-    implementation 'com.exactpro.th2:conn-dirty-tcp-core:3.3.0-dev'
-    implementation 'com.exactpro.th2:grpc-lw-data-provider:2.2.0-dev'
+    implementation 'com.exactpro.th2:conn-dirty-tcp-core:3.5.0-dev'
+    implementation 'com.exactpro.th2:grpc-lw-data-provider:2.3.1-dev'
 
     implementation 'org.slf4j:slf4j-api'
-    implementation 'io.github.microutils:kotlin-logging:3.0.0' // The last version bases on kotlin 1.6.0
+    implementation 'io.github.microutils:kotlin-logging:3.0.5'
     implementation 'org.apache.commons:commons-lang3'
 
     implementation 'io.netty:netty-all'
-    implementation 'com.google.auto.service:auto-service:1.0.1'
+    implementation 'com.google.auto.service:auto-service:1.1.1'
 
     implementation 'com.fasterxml.jackson.core:jackson-core'
     implementation 'com.fasterxml.jackson.core:jackson-databind'
     implementation 'com.fasterxml.jackson.module:jackson-module-kotlin'
 
     testImplementation 'org.mockito:mockito-all:1.10.19'
-    testImplementation 'org.jetbrains.kotlin:kotlin-test-junit5:1.7.10'
+    testImplementation 'org.jetbrains.kotlin:kotlin-test-junit5:1.8.22'
 
-    annotationProcessor 'com.google.auto.service:auto-service:1.0.1'
-    kapt 'com.google.auto.service:auto-service:1.0.1'
+    annotationProcessor 'com.google.auto.service:auto-service:1.1.1'
+    kapt 'com.google.auto.service:auto-service:1.1.1'
 }
 
 test {
