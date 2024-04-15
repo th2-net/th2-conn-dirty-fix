@@ -1,4 +1,4 @@
-# th2-conn-dirty-fix (1.6.0)
+# th2-conn-dirty-fix (1.6.1)
 
 This microservice allows sending and receiving messages via FIX protocol
 
@@ -335,7 +335,7 @@ spec:
 
 # Changelog
 
-## 1.6.0
+## 1.6.1
 
 * Channel subscriptions recovery on failure 
 * Updated bom: `4.6.1-dev`
