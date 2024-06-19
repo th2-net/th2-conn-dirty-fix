@@ -1,4 +1,4 @@
-# th2-conn-dirty-fix (1.3.0)
+# th2-conn-dirty-fix (1.7.0)
 
 This microservice allows sending and receiving messages via FIX protocol
 
@@ -49,6 +49,13 @@ This microservice allows sending and receiving messages via FIX protocol
 + *useNextExpectedSeqNum* - session management based on next expected sequence number. (`false` by default)
 + *saveAdminMessages* - defines if admin messages will be saved to internal outgoing buffer. (`false` by default)
 + *resetStateOnServerReset* - whether to reset the server sequence after receiving logout with text `Next Expected MSN too high, MSN to be sent is x but received y`.
++ *logoutOnIncorrectServerSequence* - whether to logout session when server send message with sequence number less than expected. If `false` then internal conn sequence will be reset to sequence number from server message.
++ *connectionTimeoutOnSend* - timeout in milliseconds for sending message from queue thread
+  (please read about [acknowledgment timeout](https://www.rabbitmq.com/consumers.html#acknowledgement-timeout) to understand the problem).
+  _Default, 30000 mls._ Each failed sending attempt decreases the timeout in half (but not less than _minConnectionTimeoutOnSend_).
+  The timeout is reset to the original value after a successful sending attempt.
+  If connection is not established within the specified timeout an error will be reported.
++ *minConnectionTimeoutOnSend* - minimum value for the sending message timeout in milliseconds. _Default value is 1000 mls._
 
 ### Security settings
 
@@ -328,9 +335,61 @@ spec:
 
 # Changelog
 
-## 1.3.0
+## 1.7.0
 * Added support for th2 transport protocol
 * Added configuration option for non-default book per session.
+
+## 1.6.1
+
+* Channel subscriptions recovery on failure 
+* Updated bom: `4.6.1-dev`
+* Updated common: `5.10.0-dev`
+* Updated common-utils: `2.2.3-dev`
+* Updated conn-dirty-tcp-core: `3.5.0-dev`
+
+## 1.5.1
+
+* Property `th2.operation_timestamp` is added to metadata to each message
+* Use mutable map for metadata when sending a messages from the handler
+  * Fix error when new property with operation timestamp added to the immutable map
+
+## 1.5.0
+
+* `minConnectionTimeoutOnSend` parameter is added.
+* Sending timeout now decreases in half on each failed attempt (but not less than `minConnectionTimeoutOnSend`).
+
+## 1.4.2
+* Ungraceful session disconnect support.
+* Removed NPE when session is reset by schedule.
+* Use UTC time zone for sending time tag
+
+## 1.4.1
+* Timeout on send from queue thread
+  * Parameter `connectionTimeoutOnSend` was added
+
+## 1.4.0
+* Updated bom: `4.5.0-dev`
+* Updated common: `5.4.0-dev`
+* Updated common-utils: `2.2.0-dev`
+* Updated grpc-lw-data-provider: `2.1.0-dev`
+* Updated kotlin: `1.8.22`
+* Added support for th2 transport protocol
+
+## 1.3.2
+* Improve logging: log session group and session alias for each log message.
+
+## 1.3.1
+* fix multiple consequent SOH characters
+
+## 1.3.0
+* Added handling for incoming test request messages
+* Fixed resetSeqNum flag handling on incoming logon messages.
+* Added option to automatically reset server sequence when internal conn sequence doesn't match with sequence that server sent.
+
+## 1.2.1
+* fix multiple consequent SOH characters
+
+## 1.2.0
 * loading requested messages from cradle.
 
 ## 1.1.1

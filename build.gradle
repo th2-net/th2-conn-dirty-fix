@@ -1,9 +1,16 @@
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
+import com.github.jk1.license.filter.LicenseBundleNormalizer
+import com.github.jk1.license.render.JsonReportRenderer
+
 plugins {
     id 'java'
-    id 'org.jetbrains.kotlin.jvm' version '1.6.21'
+    id 'org.jetbrains.kotlin.jvm' version '1.8.22'
     id 'com.palantir.docker' version '0.25.0'
-    id "org.owasp.dependencycheck" version "8.2.1"
+    id "org.owasp.dependencycheck" version "9.0.9"
     id "com.gorylenko.gradle-git-properties" version "2.4.1"
+    id 'com.github.jk1.dependency-license-report' version '2.5'
+    id "de.undercouch.download" version "5.6.0"
 }
 
 apply plugin: 'application'
@@ -38,37 +45,35 @@ repositories {
 }
 
 dependencies {
-    api platform('com.exactpro.th2:bom:4.4.0')
+    api platform('com.exactpro.th2:bom:4.6.1')
 
-    implementation('com.exactpro.th2:common:5.3.0-separate-executor-+') {
+    implementation("com.exactpro.th2:common:5.10.0-dev") {
         exclude group: 'com.exactpro.th2', module: 'task-utils'
     }
-
-    implementation "com.exactpro.th2:common-utils:2.1.0-transport-protocol+"
-
+    implementation "com.exactpro.th2:common-utils:2.2.3-dev"
     implementation 'com.exactpro.th2:netty-bytebuf-utils:0.0.1'
-    implementation('com.exactpro.th2:conn-dirty-tcp-core:3.1.0-TH2-4991+') {
+    implementation('com.exactpro.th2:conn-dirty-tcp-core:3.5.1-TH2-4907-+') {
         exclude group: 'org.slf4j', module: 'slf4j-log4j12'
         because 'Projects should use only slf4j-api, without coupling to a certain implementation'
     }
-    implementation 'com.exactpro.th2:grpc-lw-data-provider:2.0.0-dev-version-2+'
+    implementation 'com.exactpro.th2:grpc-lw-data-provider:2.3.1-dev'
 
     implementation 'org.slf4j:slf4j-api'
-    implementation 'io.github.microutils:kotlin-logging:3.0.0' // The last version bases on kotlin 1.6.0
+    implementation 'io.github.microutils:kotlin-logging:3.0.5'
     implementation 'org.apache.commons:commons-lang3'
 
     implementation 'io.netty:netty-all'
-    implementation 'com.google.auto.service:auto-service:1.0.1'
+    implementation 'com.google.auto.service:auto-service:1.1.1'
 
     implementation 'com.fasterxml.jackson.core:jackson-core'
     implementation 'com.fasterxml.jackson.core:jackson-databind'
     implementation 'com.fasterxml.jackson.module:jackson-module-kotlin'
 
     testImplementation 'org.mockito:mockito-all:1.10.19'
-    testImplementation 'org.jetbrains.kotlin:kotlin-test-junit5:1.7.10'
+    testImplementation 'org.jetbrains.kotlin:kotlin-test-junit5:1.8.22'
 
-    annotationProcessor 'com.google.auto.service:auto-service:1.0.1'
-    kapt 'com.google.auto.service:auto-service:1.0.1'
+    annotationProcessor 'com.google.auto.service:auto-service:1.1.1'
+    kapt 'com.google.auto.service:auto-service:1.1.1'
 }
 
 test {
@@ -76,13 +81,13 @@ test {
 }
 
 application {
-    mainClassName 'com.exactpro.th2.conn.dirty.tcp.core.Main'
+    mainClass.set('com.exactpro.th2.conn.dirty.tcp.core.Main')
 }
 
 applicationName = 'service'
 
 distTar {
-    archiveName "${applicationName}.tar"
+    archiveFileName.set("${applicationName}.tar")
 }
 
 dockerPrepare {
@@ -93,15 +98,9 @@ docker {
     copySpec.from(tarTree("$buildDir/distributions/${applicationName}.tar"))
 }
 
-compileKotlin {
-    kotlinOptions {
-        jvmTarget = '11'
-    }
-}
-
-compileTestKotlin {
-    kotlinOptions {
-        jvmTarget = '11'
+tasks.withType(KotlinCompile).configureEach {
+    compilerOptions {
+        jvmTarget.set(JvmTarget.JVM_11)
     }
 }
 
@@ -110,6 +109,8 @@ dependencyCheck {
     failBuildOnCVSS=5
     suppressionFile="suppressions.xml"
 
+    //FIXME: we should check all used dependencies
+    skipConfigurations = ['kapt', 'kaptClasspath_kaptKotlin', 'kaptTest', 'kaptTestFixtures', 'annotationProcessor']
     analyzers {
         assemblyEnabled = false
         nugetconfEnabled = false
@@ -119,4 +120,25 @@ dependencyCheck {
 
 dependencyLocking {
     lockAllConfigurations()
+}
+
+licenseReport {
+    def licenseNormalizerBundlePath = "$buildDir/license-normalizer-bundle.json"
+
+    if (!file(licenseNormalizerBundlePath).exists()) {
+        download.run {
+            src 'https://raw.githubusercontent.com/th2-net/.github/main/license-compliance/gradle-license-report/license-normalizer-bundle.json'
+            dest "$buildDir/license-normalizer-bundle.json"
+            overwrite false
+        }
+    }
+
+    filters = [
+            new LicenseBundleNormalizer(licenseNormalizerBundlePath, false)
+    ]
+    renderers = [
+            new JsonReportRenderer('licenses.json', false),
+    ]
+    excludeOwnGroup = false
+    allowedLicensesFile = new URL("https://raw.githubusercontent.com/th2-net/.github/main/license-compliance/gradle-license-report/allowed-licenses.json")
 }
