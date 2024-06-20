@@ -17,7 +17,6 @@
 package com.exactpro.th2;
 
 import com.exactpro.th2.common.event.Event;
-import com.exactpro.th2.common.grpc.Direction;
 import com.exactpro.th2.common.grpc.EventID;
 import com.exactpro.th2.common.grpc.Direction;
 import com.exactpro.th2.common.grpc.MessageID;
