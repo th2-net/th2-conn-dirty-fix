@@ -1,4 +1,4 @@
-# th2-conn-dirty-fix (1.6.1)
+# th2-conn-dirty-fix (1.7.0)
 
 This microservice allows sending and receiving messages via FIX protocol
 
@@ -334,6 +334,14 @@ spec:
 ```
 
 # Changelog
+
+## 1.7.0
+* Added support for th2 transport protocol
+* Added configuration option for non-default book per session.
+* Migrated to th2 gradle plugin `0.0.8`
+* Updated:
+  * common: `5.13.1-dev`
+  * conn-dirty-tcp-core: `3.6.0-dev`
 
 ## 1.6.1
 
