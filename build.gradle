@@ -41,7 +41,7 @@ dependencies {
     }
     implementation "com.exactpro.th2:common-utils:2.2.3-dev"
     implementation 'com.exactpro.th2:netty-bytebuf-utils:0.0.1'
-    implementation'com.exactpro.th2:conn-dirty-tcp-core:3.6.0-TH2-4991-+'
+    implementation'com.exactpro.th2:conn-dirty-tcp-core:3.6.0-dev'
     implementation 'com.exactpro.th2:grpc-lw-data-provider:2.3.1-dev'
 
     implementation 'org.slf4j:slf4j-api'
