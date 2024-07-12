@@ -335,6 +335,11 @@ spec:
 
 # Changelog
 
+## 1.8.0
+
+* Provided configurable session cache to handle server resend request
+* Updated th2 gradle plugin `0.1.1`
+
 ## 1.7.0
 * Added support for th2 transport protocol
 * Added configuration option for non-default book per session.
