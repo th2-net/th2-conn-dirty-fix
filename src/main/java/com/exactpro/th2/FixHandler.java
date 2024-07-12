@@ -1,5 +1,5 @@
 /*
- * Copyright 2022-2023 Exactpro (Exactpro Systems Limited)
+ * Copyright 2022-2024 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,8 +17,8 @@
 package com.exactpro.th2;
 
 import com.exactpro.th2.common.event.Event;
-import com.exactpro.th2.common.grpc.EventID;
 import com.exactpro.th2.common.grpc.Direction;
+import com.exactpro.th2.common.grpc.EventID;
 import com.exactpro.th2.common.grpc.MessageID;
 import com.exactpro.th2.common.grpc.RawMessage;
 import com.exactpro.th2.common.utils.event.transport.EventUtilsKt;
@@ -31,8 +31,19 @@ import com.exactpro.th2.conn.dirty.tcp.core.api.IHandler;
 import com.exactpro.th2.conn.dirty.tcp.core.api.IHandlerContext;
 import com.exactpro.th2.conn.dirty.tcp.core.util.CommonUtil;
 import com.exactpro.th2.dataprovider.lw.grpc.DataProviderService;
+import com.exactpro.th2.util.EmptyCache;
+import com.google.common.cache.Cache;
+import com.google.common.cache.CacheBuilder;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
+import kotlin.jvm.functions.Function1;
+import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.lang3.exception.ExceptionUtils;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Paths;
@@ -43,7 +54,6 @@ import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -58,14 +68,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.ReentrantLock;
-
-import kotlin.jvm.functions.Function1;
-import org.apache.commons.lang3.StringUtils;
-import org.apache.commons.lang3.exception.ExceptionUtils;
-import org.jetbrains.annotations.NotNull;
-import org.jetbrains.annotations.Nullable;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import static com.exactpro.th2.conn.dirty.fix.FixByteBufUtilKt.findField;
 import static com.exactpro.th2.conn.dirty.fix.FixByteBufUtilKt.findLastField;
@@ -144,6 +146,7 @@ import static java.util.Objects.requireNonNull;
 
 public class FixHandler implements AutoCloseable, IHandler {
     private static final Logger LOGGER = LoggerFactory.getLogger(FixHandler.class);
+    private static final Cache<Integer, ByteBuf> EMPTY_MESSAGE_CACHE = EmptyCache.emptyCache();
 
     private static final int DAY_SECONDS = 24 * 60 * 60;
     private static final String SOH = "\001";
@@ -171,6 +174,7 @@ public class FixHandler implements AutoCloseable, IHandler {
     private final SendingTimeoutHandler sendingTimeoutHandler;
     private Future<?> reconnectRequestTimer = CompletableFuture.completedFuture(null);
     private volatile IChannel channel;
+    private final Cache<Integer, ByteBuf> messageCache;
     protected FixHandlerSettings settings;
 
     public FixHandler(IHandlerContext context) {
@@ -184,6 +188,12 @@ public class FixHandler implements AutoCloseable, IHandler {
             );
         } else {
             this.messageLoader = null;
+        }
+
+        if (settings.getMessageCacheSize() > 0) {
+            this.messageCache = CacheBuilder.newBuilder().maximumSize(settings.getMessageCacheSize()).build();
+        } else {
+            this.messageCache = EMPTY_MESSAGE_CACHE;
         }
 
         if(settings.getSessionStartTime() != null) {
@@ -299,11 +309,11 @@ public class FixHandler implements AutoCloseable, IHandler {
             try {
                 sendingTimeoutHandler.getWithTimeout(channel.open());
             } catch (TimeoutException e) {
-                ExceptionUtils.rethrow(new TimeoutException(
+                ExceptionUtils.asRuntimeException(new TimeoutException(
                         String.format("could not open connection before timeout %d mls elapsed",
                                 currentTimeout)));
             } catch (Exception e) {
-                ExceptionUtils.rethrow(e);
+                ExceptionUtils.asRuntimeException(e);
             }
         }
 
@@ -316,7 +326,7 @@ public class FixHandler implements AutoCloseable, IHandler {
             }
             if (System.currentTimeMillis() > deadline) {
                 // The method should have checked exception in signature...
-                ExceptionUtils.rethrow(new TimeoutException(String.format("session was not established within %d mls",
+                ExceptionUtils.asRuntimeException(new TimeoutException(String.format("session was not established within %d mls",
                         currentTimeout)));
             }
         }
@@ -380,7 +390,7 @@ public class FixHandler implements AutoCloseable, IHandler {
 
     @NotNull
     @Override
-    public Map<String, String> onIncoming(@NotNull IChannel channel, @NotNull ByteBuf message) {
+    public Map<String, String> onIncoming(@NotNull IChannel channel, @NotNull ByteBuf message, @NotNull MessageID messageId) {
         Map<String, String> metadata = new HashMap<>();
 
         int beginString = indexOf(message, "8=FIX");
@@ -516,16 +526,14 @@ public class FixHandler implements AutoCloseable, IHandler {
         return metadata;
     }
 
-    private Map<String, String> handleTestRequest(ByteBuf message, Map<String, String> metadata) {
+    private void handleTestRequest(ByteBuf message, Map<String, String> metadata) {
         FixField testReqId = findField(message, TEST_REQ_ID_TAG);
         if(testReqId == null || testReqId.getValue() == null) {
             metadata.put(REJECT_REASON, "Test Request message hasn't got TestReqId field.");
-            return metadata;
+            return;
         }
 
         sendHeartbeatTestReqId(testReqId.getValue());
-
-        return null;
     }
 
     private void handleLogout(@NotNull ByteBuf message) {
@@ -627,58 +635,79 @@ public class FixHandler implements AutoCloseable, IHandler {
         AtomicInteger lastProcessedSequence = new AtomicInteger(beginSeqNo - 1);
         try {
             recoveryLock.lock();
-
             if (endSeqNo == 0) {
                 endSeqNo = msgSeqNum.get() + 1;
             }
 
+            info("Recovery messages from %d to %d", beginSeqNo, endSeqNo);
+
+            int beginSeq = beginSeqNo;
             int endSeq = endSeqNo;
-            info("Loading messages from %d to %d", beginSeqNo, endSeqNo);
-            if(settings.isLoadMissedMessagesFromCradle()) {
-                Function1<ByteBuf, Boolean> processMessage = (buf) -> {
-                    FixField seqNum = findField(buf, MSG_SEQ_NUM_TAG);
-                    FixField msgTypeField = findField(buf, MSG_TYPE_TAG);
-                    if(seqNum == null || seqNum.getValue() == null
-                            || msgTypeField == null || msgTypeField.getValue() == null) {
-                        return true;
-                    }
-                    int sequence = Integer.parseInt(seqNum.getValue());
-                    String msgType = msgTypeField.getValue();
 
-                    if(sequence < beginSeqNo) return true;
-                    if(sequence > endSeq) return false;
-
-                    if(ADMIN_MESSAGES.contains(msgType)) return true;
-                    FixField possDup = findField(buf, POSS_DUP_TAG);
-                    if(possDup != null && Objects.equals(possDup.getValue(), IS_POSS_DUP)) return true;
-
-                    if(sequence - 1 != lastProcessedSequence.get() ) {
-                        StringBuilder sequenceReset =
-                                createSequenceReset(Math.max(beginSeqNo, lastProcessedSequence.get() + 1), sequence);
-                        channel.send(Unpooled.wrappedBuffer(sequenceReset.toString().getBytes(StandardCharsets.UTF_8)), createMetadataMap(), null, SendMode.MANGLE);
-                        resetHeartbeatTask();
-                    }
-
-                    setTime(buf);
-                    setPossDup(buf);
-                    updateLength(buf);
-                    updateChecksum(buf);
-                    channel.send(buf, createMetadataMap(), null, SendMode.MANGLE);
-
-                    resetHeartbeatTask();
-
-                    lastProcessedSequence.set(sequence);
+            Function1<ByteBuf, Boolean> processMessage = (buf) -> {
+                FixField seqNum = findField(buf, MSG_SEQ_NUM_TAG);
+                FixField msgTypeField = findField(buf, MSG_TYPE_TAG);
+                if(seqNum == null || seqNum.getValue() == null
+                        || msgTypeField == null || msgTypeField.getValue() == null) {
                     return true;
-                };
+                }
+                int sequence = Integer.parseInt(seqNum.getValue());
+                String msgType = msgTypeField.getValue();
 
+                if(sequence < beginSeqNo) return true;
+                if(sequence > endSeq) return false;
+
+                if(ADMIN_MESSAGES.contains(msgType)) return true;
+                FixField possDup = findField(buf, POSS_DUP_TAG);
+                if(possDup != null && Objects.equals(possDup.getValue(), IS_POSS_DUP)) return true;
+
+                if(sequence - 1 != lastProcessedSequence.get() ) {
+                    StringBuilder sequenceReset =
+                            createSequenceReset(Math.max(beginSeqNo, lastProcessedSequence.get() + 1), sequence);
+                    channel.send(Unpooled.wrappedBuffer(sequenceReset.toString().getBytes(StandardCharsets.UTF_8)), createMetadataMap(), null, SendMode.MANGLE);
+                    resetHeartbeatTask();
+                }
+
+                setTime(buf);
+                setPossDup(buf);
+                updateLength(buf);
+                updateChecksum(buf);
+                channel.send(buf, createMetadataMap(), null, SendMode.MANGLE);
+
+                resetHeartbeatTask();
+
+                lastProcessedSequence.set(sequence);
+                return true;
+            };
+
+            if (messageCache != EMPTY_MESSAGE_CACHE) { // check aren't references equal
+                info("Loading messages from %d to %d from message cache", beginSeq, endSeqNo);
+                for (int i = beginSeq; i < endSeqNo; i++) {
+                    ByteBuf message = messageCache.getIfPresent(i);
+                    if (message == null) {
+                        info("Messages from %d included to %d excluded have been recovered from message cache", beginSeq, i);
+                        beginSeq = i;
+                        break;
+                    }
+
+                    if (!processMessage.invoke(message)) {
+                        if (LOGGER.isWarnEnabled()) warn(
+                                "Message from message cache has been rejected by process function, message: %s",
+                                message.toString(US_ASCII));
+                    }
+                }
+            }
+
+            if(settings.isLoadMissedMessagesFromCradle()) {
+                info("Loading messages from %d to %d from cradle", beginSeq, endSeqNo);
                 messageLoader.processMessagesInRange(
                         channel.getSessionGroup(), channel.getSessionAlias(), Direction.SECOND,
-                        beginSeqNo,
+                        beginSeq,
                     processMessage
                 );
 
                 if(lastProcessedSequence.get() < endSeq) {
-                    String seqReset = createSequenceReset(Math.max(lastProcessedSequence.get() + 1, beginSeqNo), msgSeqNum.get() + 1).toString();
+                    String seqReset = createSequenceReset(Math.max(lastProcessedSequence.get() + 1, beginSeq), msgSeqNum.get() + 1).toString();
                     channel.send(
                         Unpooled.wrappedBuffer(seqReset.getBytes(StandardCharsets.UTF_8)),
                         createMetadataMap(), null, SendMode.MANGLE
@@ -686,7 +715,7 @@ public class FixHandler implements AutoCloseable, IHandler {
                 }
             } else {
                 String seqReset =
-                    createSequenceReset(beginSeqNo, msgSeqNum.get() + 1).toString();
+                    createSequenceReset(beginSeq, msgSeqNum.get() + 1).toString();
                 channel.send(
                     Unpooled.wrappedBuffer(seqReset.getBytes(StandardCharsets.UTF_8)),
                     createMetadataMap(), null, SendMode.MANGLE

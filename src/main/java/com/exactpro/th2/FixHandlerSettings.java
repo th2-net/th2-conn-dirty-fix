@@ -51,6 +51,7 @@ public class FixHandlerSettings implements IHandlerSettings {
      * Value from Java Security Standard Algorithm Names
      */
     private String passwordEncryptAlgorithm = "RSA";
+    private int messageCacheSize = 100;
     private Boolean resetSeqNumFlag = false;
     private Boolean resetOnLogon = false;
     private Boolean useNextExpectedSeqNum = false;
@@ -196,6 +197,10 @@ public class FixHandlerSettings implements IHandlerSettings {
         return passwordEncryptAlgorithm;
     }
 
+    public int getMessageCacheSize() {
+        return messageCacheSize;
+    }
+
     public Boolean getResetSeqNumFlag() { return resetSeqNumFlag; }
 
     public Boolean getResetOnLogon() { return resetOnLogon; }
@@ -291,6 +296,8 @@ public class FixHandlerSettings implements IHandlerSettings {
     public void setSessionEndTime(LocalTime sessionEndTime) {
         this.sessionEndTime = sessionEndTime;
     }
+
+    public void setMessageCacheSize(int messageCacheSize) { this.messageCacheSize = messageCacheSize; }
 
     public void setResetSeqNumFlag(Boolean resetSeqNumFlag) { this.resetSeqNumFlag = resetSeqNumFlag; }
 
