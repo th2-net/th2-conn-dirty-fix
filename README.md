@@ -1,4 +1,4 @@
-# th2-conn-dirty-fix (1.7.0)
+# th2-conn-dirty-fix (1.8.0)
 
 This microservice allows sending and receiving messages via FIX protocol
 
@@ -56,6 +56,7 @@ This microservice allows sending and receiving messages via FIX protocol
   The timeout is reset to the original value after a successful sending attempt.
   If connection is not established within the specified timeout an error will be reported.
 + *minConnectionTimeoutOnSend* - minimum value for the sending message timeout in milliseconds. _Default value is 1000 mls._
++ *messageCacheSize* - size of in memory message cache used for fast handling recovery. Cache disabled if value is zero or negative. _Default value is 100_
 
 ### Security settings
 
@@ -264,6 +265,7 @@ spec:
           testRequestDelay: 60
           reconnectDelay": 5
           disconnectRequestDelay: 5
+          messageCacheSize: 100
         mangler:
           rules:
             - name: rule-1
@@ -337,7 +339,7 @@ spec:
 
 ## 1.8.0
 
-* Provided configurable session cache to handle server resend request
+* Provided configurable in memory message cache to handle server resend request
 * Updated th2 gradle plugin `0.1.1`
 
 ## 1.7.0
