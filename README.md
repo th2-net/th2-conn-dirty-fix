@@ -338,8 +338,7 @@ spec:
 # Changelog
 
 ## 1.8.0
-
-* Provided configurable in memory message cache to handle server resend request
+* Provided configurable in-memory message cache to handle server resend request
 * Updated th2 gradle plugin `0.1.1`
 
 ## 1.7.0
