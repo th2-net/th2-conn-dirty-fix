@@ -1,5 +1,5 @@
 /*
- * Copyright 2022-2023 Exactpro (Exactpro Systems Limited)
+ * Copyright 2022-2024 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,6 +24,14 @@ import com.exactpro.th2.dataprovider.lw.grpc.DataProviderService;
 import com.exactpro.th2.util.MessageUtil;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
+import kotlin.Unit;
+import org.jetbrains.annotations.NotNull;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
+
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.time.Clock;
@@ -36,14 +44,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
-import kotlin.Unit;
-import org.jetbrains.annotations.NotNull;
-import org.junit.jupiter.api.AfterAll;
-import org.junit.jupiter.api.BeforeAll;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.mockito.Mockito;
 
+import static com.exactpro.th2.TestUtilsKt.generateMessageID;
 import static com.exactpro.th2.conn.dirty.fix.FixByteBufUtilKt.findField;
 import static com.exactpro.th2.constants.Constants.BEGIN_STRING_TAG;
 import static com.exactpro.th2.constants.Constants.BODY_LENGTH_TAG;
@@ -58,7 +60,6 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
 class FixHandlerTest {
-
     private static final ByteBuf logonResponse = Unpooled.wrappedBuffer("8=FIXT.1.1\0019=105\00135=A\00134=1\00149=server\00156=client\00150=system\00152=2014-12-22T10:15:30Z\00198=0\001108=30\0011137=9\0011409=0\00110=203\001".getBytes(StandardCharsets.US_ASCII));
     private Channel channel;
     private FixHandler fixHandler;
@@ -79,7 +80,7 @@ class FixHandlerTest {
         channel = new Channel(createHandlerSettings(), null);
         fixHandler = channel.getFixHandler();
         fixHandler.onOpen(channel);
-        fixHandler.onIncoming(channel, logonResponse);
+        fixHandler.onIncoming(channel, logonResponse, generateMessageID());
     }
 
     @AfterAll
@@ -148,7 +149,7 @@ class FixHandlerTest {
 
         channel.clearQueue();
         fixHandler.sendLogon();
-        fixHandler.onIncoming(channel, logonResponse);
+        fixHandler.onIncoming(channel, logonResponse, generateMessageID());
         fixHandler.sendResendRequest(1);
         assertEquals(expectedLogon, new String(channel.getQueue().get(0).array()));
         //assertEquals(expectedHeartbeat, new String(client.getQueue().get(1).array()));
@@ -215,7 +216,7 @@ class FixHandlerTest {
         channel.clearQueue();
         fixHandler.onOpen(channel);
         ByteBuf logonResponse = Unpooled.wrappedBuffer("8=FIXT.1.1\0019=105\00135=A\00134=1\00149=server\00156=client\00150=system\00152=2014-12-22T10:15:30Z\00198=0\001108=30\0011137=9\0011409=0\00110=203\001".getBytes(StandardCharsets.US_ASCII));
-        fixHandler.onIncoming(channel, logonResponse);
+        fixHandler.onIncoming(channel, logonResponse, generateMessageID());
         try {
             Thread.sleep(10000);
         } catch (InterruptedException e) {
@@ -325,7 +326,7 @@ class FixHandlerTest {
         }
         ByteBuf resendRequest = Unpooled.wrappedBuffer("8=FIXT.1.1\u00019=70\u000135=2\u000134=2\u00017=1\u000116=0\u000149=client\u000156=server\u000150=trader\u000152=2014-12-22T10:15:30Z\u000110=101\u0001".getBytes(StandardCharsets.US_ASCII));
         channel.clearQueue();
-        fixHandler.onIncoming(channel, resendRequest);
+        fixHandler.onIncoming(channel, resendRequest, generateMessageID());
         ByteBuf sequenceReset = channel.getQueue().get(0);
         assertEquals("8=FIXT.1.1\u00019=105\u000135=4\u000134=1\u000149=client\u000156=server\u000150=trader\u000152=2014-12-22T10:15:30Z\u0001122=2014-12-22T10:15:30Z\u000143=Y\u0001123=Y\u000136=5\u000110=162\u0001", new String(sequenceReset.array()));
         channel.clearQueue();
@@ -434,6 +435,7 @@ class Channel implements IChannel {
     @Override
     public CompletableFuture<MessageID> send(@NotNull ByteBuf byteBuf, @NotNull Map<String, String> map, EventID eventId, @NotNull IChannel.SendMode sendMode) {
         queue.add(byteBuf);
+        this.fixHandler.postOutgoingMqPublish(this, byteBuf, MessageID.getDefaultInstance(), map, eventId);
         return CompletableFuture.completedFuture(MessageID.getDefaultInstance());
     }
 
@@ -443,7 +445,7 @@ class Channel implements IChannel {
     }
 
     @Override
-    public CompletableFuture<Unit> close() {
+    public @NotNull CompletableFuture<Unit> close() {
         return CompletableFuture.completedFuture(Unit.INSTANCE);
     }
 

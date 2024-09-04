@@ -29,9 +29,9 @@ import com.exactpro.th2.conn.dirty.tcp.core.api.IChannel;
 import com.exactpro.th2.conn.dirty.tcp.core.api.IChannel.SendMode;
 import com.exactpro.th2.conn.dirty.tcp.core.api.IHandler;
 import com.exactpro.th2.conn.dirty.tcp.core.api.IHandlerContext;
+import com.exactpro.th2.conn.dirty.tcp.core.api.IChannelListener;
 import com.exactpro.th2.conn.dirty.tcp.core.util.CommonUtil;
 import com.exactpro.th2.dataprovider.lw.grpc.DataProviderService;
-import com.exactpro.th2.util.EmptyCache;
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
 import io.netty.buffer.ByteBuf;
@@ -54,7 +54,10 @@ import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
@@ -144,9 +147,8 @@ import static java.util.Objects.requireNonNull;
 //todo ring buffer as cache
 //todo add events
 
-public class FixHandler implements AutoCloseable, IHandler {
+public class FixHandler implements AutoCloseable, IHandler, IChannelListener {
     private static final Logger LOGGER = LoggerFactory.getLogger(FixHandler.class);
-    private static final Cache<Integer, ByteBuf> EMPTY_MESSAGE_CACHE = EmptyCache.emptyCache();
 
     private static final int DAY_SECONDS = 24 * 60 * 60;
     private static final String SOH = "\001";
@@ -193,7 +195,7 @@ public class FixHandler implements AutoCloseable, IHandler {
         if (settings.getMessageCacheSize() > 0) {
             this.messageCache = CacheBuilder.newBuilder().maximumSize(settings.getMessageCacheSize()).build();
         } else {
-            this.messageCache = EMPTY_MESSAGE_CACHE;
+            this.messageCache = null;
         }
 
         if(settings.getSessionStartTime() != null) {
@@ -403,14 +405,18 @@ public class FixHandler implements AutoCloseable, IHandler {
         FixField msgSeqNumValue = findField(message, MSG_SEQ_NUM_TAG);
         if (msgSeqNumValue == null) {
             metadata.put(REJECT_REASON, "No msgSeqNum Field");
-            if(LOGGER.isErrorEnabled()) error("Invalid message. No MsgSeqNum in message: %s", null, message.toString(US_ASCII));
+            if(LOGGER.isErrorEnabled()) {
+                error("Invalid message. No MsgSeqNum in message: " + message.toString(US_ASCII), null);
+            }
             return metadata;
         }
 
         FixField msgType = findField(message, MSG_TYPE_TAG);
         if (msgType == null) {
             metadata.put(REJECT_REASON, "No msgType Field");
-            if(LOGGER.isErrorEnabled()) error("Invalid message. No MsgType in message: %s", null,  message.toString(US_ASCII));
+            if(LOGGER.isErrorEnabled()) {
+                error("Invalid message. No MsgType in message: " + message.toString(US_ASCII), null);
+            }
             return metadata;
         }
 
@@ -441,7 +447,10 @@ public class FixHandler implements AutoCloseable, IHandler {
                 context.send(CommonUtil.toEvent(String.format("Received server sequence %d but expected %d. Sending logout with text: MsgSeqNum is too low...", receivedMsgSeqNum, serverMsgSeqNum.get())));
                 sendLogout(String.format("MsgSeqNum too low, expecting %d but received %d", serverMsgSeqNum.get() + 1, receivedMsgSeqNum));
                 reconnectRequestTimer = executorService.schedule(this::sendLogon, settings.getReconnectDelay(), TimeUnit.SECONDS);
-                if (LOGGER.isErrorEnabled()) error("Invalid message. SeqNum is less than expected %d: %s", null, serverMsgSeqNum.get(), message.toString(US_ASCII));
+                if (LOGGER.isErrorEnabled()) {
+                    error("Invalid message. SeqNum is less than expected %d: " + message.toString(US_ASCII),
+                            null, serverMsgSeqNum.get());
+                }
             } else {
                 context.send(CommonUtil.toEvent(String.format("Received server sequence %d but expected %d. Correcting server sequence.", receivedMsgSeqNum, serverMsgSeqNum.get() + 1)));
                 serverMsgSeqNum.set(receivedMsgSeqNum - 1);
@@ -459,18 +468,20 @@ public class FixHandler implements AutoCloseable, IHandler {
 
         switch (msgTypeValue) {
             case MSG_TYPE_HEARTBEAT:
-                if(LOGGER.isInfoEnabled()) info("Heartbeat received - %s", message.toString(US_ASCII));
+                if(LOGGER.isInfoEnabled()) info("Heartbeat received - " + message.toString(US_ASCII));
                 checkHeartbeat(message);
                 break;
             case MSG_TYPE_LOGON:
-                if(LOGGER.isInfoEnabled()) info("Logon received - %s", message.toString(US_ASCII));
+                if(LOGGER.isInfoEnabled()) info("Logon received - " + message.toString(US_ASCII));
                 boolean connectionSuccessful = checkLogon(message);
                 if (connectionSuccessful) {
                     if(settings.useNextExpectedSeqNum()) {
                         FixField nextExpectedSeqField = findField(message, NEXT_EXPECTED_SEQ_NUMBER_TAG);
                         if(nextExpectedSeqField == null) {
                             metadata.put(REJECT_REASON, "No NextExpectedSeqNum field");
-                            if(LOGGER.isErrorEnabled()) error("Invalid message. No NextExpectedSeqNum in message: %s", null, message.toString(US_ASCII));
+                            if(LOGGER.isErrorEnabled()) {
+                                error("Invalid message. No NextExpectedSeqNum in message: " + message.toString(US_ASCII), null);
+                            }
                             return metadata;
                         }
 
@@ -506,15 +517,15 @@ public class FixHandler implements AutoCloseable, IHandler {
                 break;
             //extract logout reason
             case MSG_TYPE_RESEND_REQUEST:
-                if(LOGGER.isInfoEnabled()) info("Resend request received - %s", message.toString(US_ASCII));
+                if(LOGGER.isInfoEnabled()) info("Resend request received - " + message.toString(US_ASCII));
                 handleResendRequest(message);
                 break;
             case MSG_TYPE_SEQUENCE_RESET: //gap fill
-                if(LOGGER.isInfoEnabled()) info("Sequence reset received  - %s", message.toString(US_ASCII));
+                if(LOGGER.isInfoEnabled()) info("Sequence reset received  - " + message.toString(US_ASCII));
                 resetSequence(message);
                 break;
             case MSG_TYPE_TEST_REQUEST:
-                if (LOGGER.isInfoEnabled()) LOGGER.info("Test request received - {}", message.toString(US_ASCII));
+                if (LOGGER.isInfoEnabled()) info("Test request received - " + message.toString(US_ASCII));
                 handleTestRequest(message, metadata);
                 break;
         }
@@ -524,6 +535,11 @@ public class FixHandler implements AutoCloseable, IHandler {
         metadata.put(STRING_MSG_TYPE, msgTypeValue);
 
         return metadata;
+    }
+
+    @Override
+    public void postOutgoingMqPublish(@NotNull IChannel channel, @NotNull ByteBuf message, @NotNull MessageID messageId, @NotNull Map<String, String> metadata, @Nullable EventID eventId) {
+        putIntoCache(message);
     }
 
     private void handleTestRequest(ByteBuf message, Map<String, String> metadata) {
@@ -537,7 +553,7 @@ public class FixHandler implements AutoCloseable, IHandler {
     }
 
     private void handleLogout(@NotNull ByteBuf message) {
-        if(LOGGER.isInfoEnabled()) info("Logout received - %s", message.toString(US_ASCII));
+        if(LOGGER.isInfoEnabled()) info("Logout received - " + message.toString(US_ASCII));
         boolean isSequenceChanged = false;
         FixField text = findField(message, TEXT_TAG);
         if (text != null) {
@@ -574,7 +590,9 @@ public class FixHandler implements AutoCloseable, IHandler {
                 serverMsgSeqNum.set(Integer.parseInt(requireNonNull(seqNumValue.getValue())) - 1);
             }
         } else {
-            if(LOGGER.isWarnEnabled()) warn("Failed to reset servers MsgSeqNum. No such tag in message: %s", message.toString(US_ASCII));
+            if(LOGGER.isWarnEnabled()) {
+                warn("Failed to reset servers MsgSeqNum. No such tag in message: " + message.toString(US_ASCII));
+            }
         }
     }
 
@@ -635,79 +653,71 @@ public class FixHandler implements AutoCloseable, IHandler {
         AtomicInteger lastProcessedSequence = new AtomicInteger(beginSeqNo - 1);
         try {
             recoveryLock.lock();
+
             if (endSeqNo == 0) {
                 endSeqNo = msgSeqNum.get() + 1;
             }
 
-            info("Recovery messages from %d to %d", beginSeqNo, endSeqNo);
-
-            int beginSeq = beginSeqNo;
             int endSeq = endSeqNo;
-
-            Function1<ByteBuf, Boolean> processMessage = (buf) -> {
-                FixField seqNum = findField(buf, MSG_SEQ_NUM_TAG);
-                FixField msgTypeField = findField(buf, MSG_TYPE_TAG);
-                if(seqNum == null || seqNum.getValue() == null
-                        || msgTypeField == null || msgTypeField.getValue() == null) {
-                    return true;
-                }
-                int sequence = Integer.parseInt(seqNum.getValue());
-                String msgType = msgTypeField.getValue();
-
-                if(sequence < beginSeqNo) return true;
-                if(sequence > endSeq) return false;
-
-                if(ADMIN_MESSAGES.contains(msgType)) return true;
-                FixField possDup = findField(buf, POSS_DUP_TAG);
-                if(possDup != null && Objects.equals(possDup.getValue(), IS_POSS_DUP)) return true;
-
-                if(sequence - 1 != lastProcessedSequence.get() ) {
-                    StringBuilder sequenceReset =
-                            createSequenceReset(Math.max(beginSeqNo, lastProcessedSequence.get() + 1), sequence);
-                    channel.send(Unpooled.wrappedBuffer(sequenceReset.toString().getBytes(StandardCharsets.UTF_8)), createMetadataMap(), null, SendMode.MANGLE);
-                    resetHeartbeatTask();
-                }
-
-                setTime(buf);
-                setPossDup(buf);
-                updateLength(buf);
-                updateChecksum(buf);
-                channel.send(buf, createMetadataMap(), null, SendMode.MANGLE);
-
-                resetHeartbeatTask();
-
-                lastProcessedSequence.set(sequence);
-                return true;
-            };
-
-            if (messageCache != EMPTY_MESSAGE_CACHE) { // check aren't references equal
-                info("Loading messages from %d to %d from message cache", beginSeq, endSeqNo);
-                for (int i = beginSeq; i < endSeqNo; i++) {
-                    ByteBuf message = messageCache.getIfPresent(i);
-                    if (message == null) {
-                        info("Messages from %d included to %d excluded have been recovered from message cache", beginSeq, i);
-                        beginSeq = i;
-                        break;
-                    }
-
-                    if (!processMessage.invoke(message)) {
-                        if (LOGGER.isWarnEnabled()) warn(
-                                "Message from message cache has been rejected by process function, message: %s",
-                                message.toString(US_ASCII));
-                    }
-                }
-            }
-
+            info("Recovery messages from %d to %d", beginSeqNo, endSeqNo);
             if(settings.isLoadMissedMessagesFromCradle()) {
-                info("Loading messages from %d to %d from cradle", beginSeq, endSeqNo);
-                messageLoader.processMessagesInRange(
-                        channel.getSessionGroup(), channel.getSessionAlias(), Direction.SECOND,
-                        beginSeq,
-                    processMessage
-                );
+                Function1<ByteBuf, Boolean> processMessage = (buf) -> {
+                    FixField seqNum = findField(buf, MSG_SEQ_NUM_TAG);
+                    FixField msgTypeField = findField(buf, MSG_TYPE_TAG);
+                    if(seqNum == null || seqNum.getValue() == null
+                            || msgTypeField == null || msgTypeField.getValue() == null) {
+                        return true;
+                    }
+                    int sequence = Integer.parseInt(seqNum.getValue());
+                    String msgType = msgTypeField.getValue();
+
+                    if(sequence < beginSeqNo) return true;
+                    if(sequence > endSeq) return false;
+
+                    if(ADMIN_MESSAGES.contains(msgType)) return true;
+                    FixField possDup = findField(buf, POSS_DUP_TAG);
+                    if(possDup != null && Objects.equals(possDup.getValue(), IS_POSS_DUP)) return true;
+
+                    if(sequence - 1 != lastProcessedSequence.get() ) {
+                        StringBuilder sequenceReset =
+                                createSequenceReset(Math.max(beginSeqNo, lastProcessedSequence.get() + 1), sequence);
+                        channel.send(Unpooled.wrappedBuffer(sequenceReset.toString().getBytes(StandardCharsets.UTF_8)), createMetadataMap(), null, SendMode.MANGLE);
+                        resetHeartbeatTask();
+                    }
+
+                    setTime(buf);
+                    setPossDup(buf);
+                    updateLength(buf);
+                    updateChecksum(buf);
+                    channel.send(buf, createMetadataMap(), null, SendMode.MANGLE);
+
+                    resetHeartbeatTask();
+
+                    lastProcessedSequence.set(sequence);
+                    return true;
+                };
+
+                List<ByteBuf> cachedMessages = getFromCache(beginSeqNo, endSeq);
+
+                if (cachedMessages.isEmpty()) {
+                    info("Loading messages from %d to %d from cradle", beginSeqNo, endSeqNo);
+                    messageLoader.processMessagesInRange(
+                            channel.getSessionGroup(), channel.getSessionAlias(), Direction.SECOND,
+                            beginSeqNo,
+                            processMessage
+                    );
+                } else {
+                    for (ByteBuf message : cachedMessages) {
+                        if (!processMessage.invoke(message)) {
+                            if (LOGGER.isWarnEnabled()) warn(
+                                    "Message from message cache has been rejected by process function, message: " +
+                                            message.toString(US_ASCII));
+                        }
+                    }
+                }
 
                 if(lastProcessedSequence.get() < endSeq) {
-                    String seqReset = createSequenceReset(Math.max(lastProcessedSequence.get() + 1, beginSeq), msgSeqNum.get() + 1).toString();
+                    String seqReset = createSequenceReset(Math.max(lastProcessedSequence.get() + 1, beginSeqNo), msgSeqNum.get() + 1).toString();
                     channel.send(
                         Unpooled.wrappedBuffer(seqReset.getBytes(StandardCharsets.UTF_8)),
                         createMetadataMap(), null, SendMode.MANGLE
@@ -715,7 +725,7 @@ public class FixHandler implements AutoCloseable, IHandler {
                 }
             } else {
                 String seqReset =
-                    createSequenceReset(beginSeq, msgSeqNum.get() + 1).toString();
+                    createSequenceReset(beginSeqNo, msgSeqNum.get() + 1).toString();
                 channel.send(
                     Unpooled.wrappedBuffer(seqReset.getBytes(StandardCharsets.UTF_8)),
                     createMetadataMap(), null, SendMode.MANGLE
@@ -734,6 +744,44 @@ public class FixHandler implements AutoCloseable, IHandler {
         } finally {
             recoveryLock.unlock();
         }
+    }
+
+    private void putIntoCache(@NotNull ByteBuf message) {
+        if (messageCache != null) {
+            FixField possDupField = findField(message, POSS_DUP_TAG);
+            if (possDupField == null || !IS_POSS_DUP.equals(possDupField.getValue())) {
+                FixField msgSeqNumField = findField(message, MSG_SEQ_NUM_TAG);
+                if (msgSeqNumField != null && msgSeqNumField.getValue() != null) {
+                    try {
+                        Integer seqNum = Integer.valueOf(msgSeqNumField.getValue());
+                        messageCache.put(seqNum, message.copy());
+                    } catch (NumberFormatException e) {
+                        if (LOGGER.isWarnEnabled()) {
+                            warn("Message can't be put into messages cache " +
+                                    "because MsgSeqNum isn't integer, message: " + message.toString(US_ASCII));
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    @NotNull
+    private List<ByteBuf> getFromCache(int beginSeqNo, int endSeq) {
+        if (messageCache != null) {
+            info("Try to get messages from %d to %d from message cache", beginSeqNo, endSeq);
+            List<ByteBuf> cachedMessages = new ArrayList<>(endSeq - beginSeqNo);
+            for (int i = beginSeqNo; i <= endSeq; i++) {
+                ByteBuf message = messageCache.getIfPresent(i);
+                if (message == null) {
+                    info("Messages from %d included to %d excluded have been recovered from message cache", beginSeqNo, i);
+                    return Collections.emptyList();
+                }
+                cachedMessages.add(message);
+            }
+            return cachedMessages;
+        }
+        return Collections.emptyList();
     }
 
     private void sendSequenceReset() {
@@ -781,7 +829,7 @@ public class FixHandler implements AutoCloseable, IHandler {
     public void onOutgoing(@NotNull IChannel channel, @NotNull ByteBuf message, @NotNull Map<String, String> metadata) {
         onOutgoingUpdateTag(message, metadata);
 
-        if(LOGGER.isDebugEnabled()) debug("Outgoing message: %s", message.toString(US_ASCII));
+        if(LOGGER.isDebugEnabled()) debug("Outgoing message: " + message.toString(US_ASCII));
 
         if(enabled.get()) resetHeartbeatTask();
     }
@@ -807,7 +855,9 @@ public class FixHandler implements AutoCloseable, IHandler {
         FixField msgType = findField(message, MSG_TYPE_TAG, US_ASCII, bodyLength);
 
         if (msgType == null) {                                                        //should we interrupt sending message?
-            if(LOGGER.isErrorEnabled()) error("No msgType in message %s", null, message.toString(US_ASCII));
+            if(LOGGER.isErrorEnabled()) {
+                error("No msgType in message " + message.toString(US_ASCII), null);
+            }
 
             if (metadata.get("MsgType") != null) {
                 msgType = bodyLength.insertNext(MSG_TYPE_TAG, metadata.get("MsgType"));
@@ -1182,25 +1232,29 @@ public class FixHandler implements AutoCloseable, IHandler {
 
     private void info(String message, Object... args) {
         if(LOGGER.isInfoEnabled()) {
-            LOGGER.info("{} - {}: {}", channel.getSessionGroup(), channel.getSessionAlias(), String.format(message, args));
+            String comment = args.length == 0 ? message : String.format(message, args);
+            LOGGER.info("{} - {}: {}", channel.getSessionGroup(), channel.getSessionAlias(), comment);
         }
     }
 
     private void error(String message, Throwable throwable, Object... args) {
         if(LOGGER.isErrorEnabled()) {
-            LOGGER.error("{} - {}: {}", channel.getSessionGroup(), channel.getSessionAlias(), String.format(message, args), throwable);
+            String comment = args.length == 0 ? message : String.format(message, args);
+            LOGGER.error("{} - {}: {}", channel.getSessionGroup(), channel.getSessionAlias(), comment, throwable);
         }
     }
 
     private void warn(String message, Object... args) {
         if(LOGGER.isWarnEnabled()) {
-            LOGGER.warn("{} - {}: {}", channel.getSessionGroup(), channel.getSessionAlias(), String.format(message, args));
+            String comment = args.length == 0 ? message : String.format(message, args);
+            LOGGER.warn("{} - {}: {}", channel.getSessionGroup(), channel.getSessionAlias(), comment);
         }
     }
 
     private void debug(String message, Object... args) {
         if(LOGGER.isDebugEnabled()) {
-            LOGGER.debug("{} - {}: {}", channel.getSessionGroup(), channel.getSessionAlias(), String.format(message, args));
+            String comment = args.length == 0 ? message : String.format(message, args);
+            LOGGER.debug("{} - {}: {}", channel.getSessionGroup(), channel.getSessionAlias(), comment);
         }
     }
 
