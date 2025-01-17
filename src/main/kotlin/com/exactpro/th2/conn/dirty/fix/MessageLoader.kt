@@ -1,5 +1,5 @@
 /*
- * Copyright 2023 Exactpro (Exactpro Systems Limited)
+ * Copyright 2023-2025 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -29,7 +29,6 @@ import com.exactpro.th2.dataprovider.grpc.MessageSearchRequest
 import com.exactpro.th2.dataprovider.grpc.MessageSearchResponse
 import com.exactpro.th2.dataprovider.grpc.MessageStream
 import com.exactpro.th2.dataprovider.grpc.TimeRelation
-***REMOVED***
 import com.google.protobuf.Int32Value
 import com.google.protobuf.Timestamp
 import com.google.protobuf.util.Timestamps.compare
