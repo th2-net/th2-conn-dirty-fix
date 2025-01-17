@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2023, Exactpro Systems LLC
+ * Copyright (c) 2023-2025, Exactpro Systems LLC
  * www.exactpro.com
  * Build Software to Test Software
  *
@@ -7,8 +7,6 @@
  * This is unpublished, licensed software, confidential and proprietary
  * information which is the property of Exactpro Systems LLC or its licensors.
  ******************************************************************************/
-***REMOVED***
-
 import io.grpc.Context
 
 class ProviderCall {
