@@ -1,5 +1,5 @@
 /*
- * Copyright 2022-2023 Exactpro (Exactpro Systems Limited)
+ * Copyright 2022-2024 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,8 +17,6 @@
 package com.exactpro.th2.constants;
 
 
-import java.time.format.DateTimeFormatter;
-import java.util.Collections;
 import java.util.Set;
 
 public class Constants {
@@ -92,12 +90,10 @@ public class Constants {
     public static final String MSG_TYPE_RESEND_REQUEST = "2";
     public static final String MSG_TYPE_SEQUENCE_RESET = "4";
 
-    public static final Set<String> ADMIN_MESSAGES = Collections.unmodifiableSet(
-            Set.of(
-                    MSG_TYPE_LOGON, MSG_TYPE_LOGOUT,
-                    MSG_TYPE_HEARTBEAT, MSG_TYPE_RESEND_REQUEST,
-                    MSG_TYPE_SEQUENCE_RESET, MSG_TYPE_TEST_REQUEST
-            )
+    public static final Set<String> ADMIN_MESSAGES = Set.of(
+            MSG_TYPE_LOGON, MSG_TYPE_LOGOUT,
+            MSG_TYPE_HEARTBEAT, MSG_TYPE_RESEND_REQUEST,
+            MSG_TYPE_SEQUENCE_RESET, MSG_TYPE_TEST_REQUEST
     );
 
     public static final String IS_POSS_DUP = "Y";
