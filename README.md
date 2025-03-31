@@ -225,15 +225,16 @@ mangler:
 Here's an example of `infra-mgr` config required to deploy this service
 
 ```yaml
-apiVersion: th2.exactpro.com/v1
+apiVersion: th2.exactpro.com/v2
 kind: Th2Box
 metadata:
   name: fix-client
 spec:
-  image-name: ghcr.io/th2-net/th2-conn-dirty-fix
-  image-version: 1.0.0
+  imageName: ghcr.io/th2-net/th2-conn-dirty-fix
+  imageVersion: 1.0.0
   type: th2-conn
-  custom-config:
+  customConfig:
+    useTransport: true
     maxBatchSize: 1000
     maxFlushTime: 1000
     batchByGroup: true
@@ -285,40 +286,27 @@ spec:
                     - remove: { tag: 110, matches: (.*) }
                   update-checksum: false
   pins:
-    - name: to_data_provider
-      connection-type: grpc-client
-      service-class: com.exactpro.th2.dataprovider.grpc.DataProviderService
-    - name: to_send
-      connection-type: mq
-      attributes:
-        - subscribe
-        - send
-        - raw
-      settings:
-        storageOnDemand: false
-        queueLength: 1000
-    - name: incoming_messages
-      connection-type: mq
-      attributes:
-        - publish
-        - store
-        - raw
-      filters:
-        - metadata:
-            - field-name: direction
-              expected-value: FIRST
-              operation: EQUAL
-    - name: outgoing_messages
-      connection-type: mq
-      attributes:
-        - publish
-        - store
-        - raw
-      filters:
-        - metadata:
-            - field-name: direction
-              expected-value: SECOND
-              operation: EQUAL
+    mq:
+      subscribers:
+        - name: to_send 
+          attributes:
+            - transport-group
+            - subscribe
+            - send
+          filters:
+            - metadata:
+                - fieldName: direction
+                  expectedValue: FIRST
+                  operation: EQUAL
+      publishers:
+        - name: to_mstore
+          attributes:
+            - transport-group
+            - publish
+    grpc:
+      client:
+        - name: to_data_provider
+          serviceClass: com.exactpro.th2.dataprovider.grpc.DataProviderService
   extended-settings:
     externalBox:
       enabled: false
