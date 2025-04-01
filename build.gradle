@@ -34,7 +34,6 @@ dependencies {
     implementation 'org.apache.commons:commons-lang3'
 
     implementation 'io.netty:netty-all'
-    implementation(libs.auto.service)
 
     implementation 'com.fasterxml.jackson.core:jackson-core'
     implementation 'com.fasterxml.jackson.core:jackson-databind'
@@ -43,6 +42,7 @@ dependencies {
     testImplementation(libs.mockito.core)
     testImplementation 'org.jetbrains.kotlin:kotlin-test-junit5'
 
+    compileOnly(libs.auto.service)
     annotationProcessor(libs.auto.service)
     kapt(libs.auto.service)
 }
