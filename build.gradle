@@ -1,8 +1,6 @@
-import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
-
 plugins {
     id "application"
-    id "com.exactpro.th2.gradle.component" version "0.0.8"
+    id "com.exactpro.th2.gradle.component" version "0.1.1"
     id 'org.jetbrains.kotlin.jvm' version '1.8.22'
     id "org.jetbrains.kotlin.kapt" version "1.8.22"
 }
@@ -41,7 +39,7 @@ dependencies {
     }
     implementation "com.exactpro.th2:common-utils:2.2.3-dev"
     implementation 'com.exactpro.th2:netty-bytebuf-utils:0.0.1'
-    implementation'com.exactpro.th2:conn-dirty-tcp-core:3.6.0-dev'
+    implementation'com.exactpro.th2:conn-dirty-tcp-core:3.7.0-TS-1928-+'
     implementation 'com.exactpro.th2:grpc-lw-data-provider:2.3.1-dev'
 
     implementation 'org.slf4j:slf4j-api'
@@ -55,8 +53,11 @@ dependencies {
     implementation 'com.fasterxml.jackson.core:jackson-databind'
     implementation 'com.fasterxml.jackson.module:jackson-module-kotlin'
 
-    testImplementation 'org.mockito:mockito-core:5.12.0'
-    testImplementation 'org.jetbrains.kotlin:kotlin-test-junit5:1.8.22'
+    testImplementation 'org.mockito:mockito-core:5.13.0'
+    testImplementation 'org.mockito.kotlin:mockito-kotlin:5.4.0'
+    testImplementation 'org.jetbrains.kotlin:kotlin-test-junit5'
+    testImplementation 'org.junit.jupiter:junit-jupiter-params:5.11.0'
+
 
     annotationProcessor 'com.google.auto.service:auto-service:1.1.1'
     kapt 'com.google.auto.service:auto-service:1.1.1'
