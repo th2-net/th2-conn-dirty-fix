@@ -1,4 +1,4 @@
-# th2-conn-dirty-fix (1.7.0)
+# th2-conn-dirty-fix (1.8.0)
 
 This microservice allows sending and receiving messages via FIX protocol
 
@@ -322,6 +322,17 @@ spec:
 ```
 
 # Changelog
+
+## 1.8.0
+* Migrated:
+  * io.github.microutils -> io.github.oshai
+* Updated:
+  * common: `5.15.0-dev`
+  * common-utils: `2.3.1-dev`
+  * grpc-lw-data-provider: `2.3.4-dev`
+  * kotlin: `2.1.10`
+* Updated gradle plugins:
+  * th2 gradle: `0.2.4` (bom: `4.11.0`)
 
 ## 1.7.0
 * Added support for th2 transport protocol

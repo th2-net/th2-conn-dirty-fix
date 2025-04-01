@@ -1,5 +1,5 @@
 /*
- * Copyright 2022-2022 Exactpro (Exactpro Systems Limited)
+ * Copyright 2022-2025 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,8 +18,8 @@ package com.exactpro.th2.conn.dirty.fix
 
 import com.fasterxml.jackson.annotation.JsonAlias
 import com.fasterxml.jackson.annotation.JsonIgnore
+import io.github.oshai.kotlinlogging.KotlinLogging
 import io.netty.buffer.ByteBuf
-import mu.KotlinLogging
 import java.util.regex.Pattern
 
 typealias RuleID = String
@@ -42,7 +42,7 @@ object MessageTransformer {
         }
 
         if (results.isEmpty()) {
-            logger.debug("No transformations were applied")
+            logger.debug { "No transformations were applied" }
             return null
         }
 
