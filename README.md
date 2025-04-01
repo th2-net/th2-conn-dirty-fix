@@ -330,7 +330,7 @@ spec:
   * common: `5.15.0-dev`
   * common-utils: `2.3.1-dev`
   * grpc-lw-data-provider: `2.3.4-dev`
-  * kotlin: `2.1.10`
+  * kotlin: `2.1.20`
 * Updated gradle plugins:
   * th2 gradle: `0.2.4` (bom: `4.11.0`)
 
