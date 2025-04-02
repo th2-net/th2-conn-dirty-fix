@@ -331,6 +331,7 @@ spec:
   * common-utils: `2.3.1-dev`
   * grpc-lw-data-provider: `2.3.4-dev`
   * kotlin: `2.1.20`
+  * netty-bytebuf-utils: `0.3.0`
 * Updated gradle plugins:
   * th2 gradle: `0.2.4` (bom: `4.11.0`)
 
