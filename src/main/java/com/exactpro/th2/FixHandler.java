@@ -1,5 +1,5 @@
 /*
- * Copyright 2022-2023 Exactpro (Exactpro Systems Limited)
+ * Copyright 2022-2025 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -43,7 +43,6 @@ import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -173,9 +172,18 @@ public class FixHandler implements AutoCloseable, IHandler {
     private volatile IChannel channel;
     protected FixHandlerSettings settings;
 
+    private final String logFormat;
+    private final String reportPrefix;
+
     public FixHandler(IHandlerContext context) {
         this.context = context;
         this.settings = (FixHandlerSettings) context.getSettings();
+
+        String sessionName = formatSession(settings.getSenderCompID(), settings.getSenderSubID(),
+                settings.getTargetCompID(), settings.getHost(), settings.getPort());
+        reportPrefix = sessionName + ": ";
+        logFormat = reportPrefix + "{}";
+
         if(settings.isLoadSequencesFromCradle() || settings.isLoadMissedMessagesFromCradle()) {
             this.messageLoader = new MessageLoader(
                 context.getGrpcService(DataProviderService.class),
@@ -228,17 +236,17 @@ public class FixHandler implements AutoCloseable, IHandler {
         }
 
         String host = settings.getHost();
-        if (host == null || host.isBlank()) throw new IllegalArgumentException("host cannot be blank");
+        if (host == null || host.isBlank()) throw new IllegalArgumentException(format("host cannot be blank"));
         int port = settings.getPort();
-        if (port < 1 || port > 65535) throw new IllegalArgumentException("port must be in 1..65535 range");
+        if (port < 1 || port > 65535) throw new IllegalArgumentException(format("port must be in 1..65535 range"));
         address = new InetSocketAddress(host, port);
         Objects.requireNonNull(settings.getSecurity(), "security cannot be null");
         Objects.requireNonNull(settings.getBeginString(), "BeginString can not be null");
         Objects.requireNonNull(settings.getResetSeqNumFlag(), "ResetSeqNumFlag can not be null");
         Objects.requireNonNull(settings.getResetOnLogon(), "ResetOnLogon can not be null");
-        if (settings.getHeartBtInt() <= 0) throw new IllegalArgumentException("HeartBtInt cannot be negative or zero");
-        if (settings.getTestRequestDelay() <= 0) throw new IllegalArgumentException("TestRequestDelay cannot be negative or zero");
-        if (settings.getDisconnectRequestDelay() <= 0) throw new IllegalArgumentException("DisconnectRequestDelay cannot be negative or zero");
+        if (settings.getHeartBtInt() <= 0) throw new IllegalArgumentException(format("HeartBtInt cannot be negative or zero"));
+        if (settings.getTestRequestDelay() <= 0) throw new IllegalArgumentException(format("TestRequestDelay cannot be negative or zero"));
+        if (settings.getDisconnectRequestDelay() <= 0) throw new IllegalArgumentException(format("DisconnectRequestDelay cannot be negative or zero"));
         this.sendingTimeoutHandler = SendingTimeoutHandler.create(
                 settings.getMinConnectionTimeoutOnSend(),
                 settings.getConnectionTimeoutOnSend(),
@@ -264,27 +272,28 @@ public class FixHandler implements AutoCloseable, IHandler {
     @NotNull
     private CompletableFuture<MessageID> send(@NotNull ByteBuf body, @NotNull Map<String, String> properties, @Nullable EventID eventID) {
         if (!sessionActive.get()) {
-            throw new IllegalStateException("Session is not active. It is not possible to send messages.");
+            throw new IllegalStateException(format("Session is not active. It is not possible to send messages."));
         }
 
         FixField msgType = findField(body, MSG_TYPE_TAG);
         boolean isLogout = msgType != null && Objects.equals(msgType.getValue(), MSG_TYPE_LOGOUT);
         if(isLogout && !channel.isOpen()) {
-            String message = String.format("%s - %s: Logout ignored as channel is already closed.", channel.getSessionGroup(), channel.getSessionAlias());
-            LOGGER.warn(message);
+            String message = warnAndFormat("Logout ignored as channel is already closed.");
             context.send(CommonUtil.toEvent(message));
             return CompletableFuture.completedFuture(null);
         }
 
         boolean isUngracefulDisconnect = Boolean.parseBoolean(properties.get(UNGRACEFUL_DISCONNECT_PROPERTY));
         if(isLogout) {
-            context.send(CommonUtil.toEvent(String.format("Closing session %s. Is graceful disconnect: %b", channel.getSessionAlias(), !isUngracefulDisconnect)));
+            String text = debugAndFormat("Closing session %s. Is graceful disconnect: %b", channel.getSessionAlias(), !isUngracefulDisconnect);
+            context.send(CommonUtil.toEvent(text));
             try {
                 disconnect(!isUngracefulDisconnect);
                 enabled.set(false);
                 sendingTimeoutHandler.getWithTimeout(channel.open());
             } catch (Exception e) {
-                context.send(CommonUtil.toErrorEvent(String.format("Error while ending session %s by user logout. Is graceful disconnect: %b", channel.getSessionAlias(), !isUngracefulDisconnect), e));
+                String error = errorAndFormat("Error while ending session %s by user logout. Is graceful disconnect: %b", e, channel.getSessionAlias(), !isUngracefulDisconnect);
+                context.send(CommonUtil.toErrorEvent(error, e));
             }
             return CompletableFuture.completedFuture(null);
         }
@@ -298,12 +307,14 @@ public class FixHandler implements AutoCloseable, IHandler {
         if (!channel.isOpen()) {
             try {
                 sendingTimeoutHandler.getWithTimeout(channel.open());
-            } catch (TimeoutException e) {
-                ExceptionUtils.rethrow(new TimeoutException(
-                        String.format("could not open connection before timeout %d mls elapsed",
-                                currentTimeout)));
             } catch (Exception e) {
-                ExceptionUtils.rethrow(e);
+                String message = format("could not open connection before timeout %d mls elapsed", currentTimeout);
+                if (e instanceof TimeoutException) {
+                    TimeoutException exception = new TimeoutException(message);
+                    exception.addSuppressed(e);
+                    ExceptionUtils.rethrow(exception);
+                }
+                throw new RuntimeException(format(message), e);
             }
         }
 
@@ -316,7 +327,7 @@ public class FixHandler implements AutoCloseable, IHandler {
             }
             if (System.currentTimeMillis() > deadline) {
                 // The method should have checked exception in signature...
-                ExceptionUtils.rethrow(new TimeoutException(String.format("session was not established within %d mls",
+                ExceptionUtils.rethrow(new TimeoutException(format("session was not established within %d mls",
                         currentTimeout)));
             }
         }
@@ -363,7 +374,11 @@ public class FixHandler implements AutoCloseable, IHandler {
 
         try {
             if (checksum == -1 || endOfMessageIdx == -1 || endOfMessageIdx - checksum != 7) {
-                throw new IllegalStateException("Failed to parse message: " + buffer.toString(US_ASCII) + ". No Checksum or no tag separator at the end of the message with index: " + beginStringIdx);
+                throw new IllegalStateException(format(
+                        "Failed to parse message: "
+                                + buffer.toString(US_ASCII)
+                                + ". No Checksum or no tag separator at the end of the message with index: "
+                                + beginStringIdx));
             }
         } catch (Exception e) {
             if (nextBeginString > 0) {
@@ -428,12 +443,14 @@ public class FixHandler implements AutoCloseable, IHandler {
 
         if(receivedMsgSeqNum < serverMsgSeqNum.get() && !isDup) {
             if(settings.isLogoutOnIncorrectServerSequence()) {
-                context.send(CommonUtil.toEvent(String.format("Received server sequence %d but expected %d. Sending logout with text: MsgSeqNum is too low...", receivedMsgSeqNum, serverMsgSeqNum.get())));
+                String text = debugAndFormat("Received server sequence %d but expected %d. Sending logout with text: MsgSeqNum is too low...", receivedMsgSeqNum, serverMsgSeqNum.get());
+                context.send(CommonUtil.toEvent(text));
                 sendLogout(String.format("MsgSeqNum too low, expecting %d but received %d", serverMsgSeqNum.get() + 1, receivedMsgSeqNum));
                 reconnectRequestTimer = executorService.schedule(this::sendLogon, settings.getReconnectDelay(), TimeUnit.SECONDS);
                 if (LOGGER.isErrorEnabled()) error("Invalid message. SeqNum is less than expected %d: %s", null, serverMsgSeqNum.get(), message.toString(US_ASCII));
             } else {
-                context.send(CommonUtil.toEvent(String.format("Received server sequence %d but expected %d. Correcting server sequence.", receivedMsgSeqNum, serverMsgSeqNum.get() + 1)));
+                String text = debugAndFormat("Received server sequence %d but expected %d. Correcting server sequence.", receivedMsgSeqNum, serverMsgSeqNum.get() + 1);
+                context.send(CommonUtil.toEvent(text));
                 serverMsgSeqNum.set(receivedMsgSeqNum - 1);
             }
             metadata.put(REJECT_REASON, "SeqNum is less than expected.");
@@ -471,7 +488,7 @@ public class FixHandler implements AutoCloseable, IHandler {
                         } else if (nextExpectedSeqNumber > seqNum) {
                             context.send(
                                     Event.start()
-                                            .name(String.format("Corrected next client seq num from %s to %s", seqNum, nextExpectedSeqNumber))
+                                            .name(format("Corrected next client seq num from %s to %s", seqNum, nextExpectedSeqNumber))
                                             .type("Logon")
                             );
                             msgSeqNum.set(nextExpectedSeqNumber - 1);
@@ -504,7 +521,7 @@ public class FixHandler implements AutoCloseable, IHandler {
                 resetSequence(message);
                 break;
             case MSG_TYPE_TEST_REQUEST:
-                if (LOGGER.isInfoEnabled()) LOGGER.info("Test request received - {}", message.toString(US_ASCII));
+                if (LOGGER.isInfoEnabled()) info("Test request received - %s", message.toString(US_ASCII));
                 handleTestRequest(message, metadata);
                 break;
         }
@@ -533,7 +550,7 @@ public class FixHandler implements AutoCloseable, IHandler {
         boolean isSequenceChanged = false;
         FixField text = findField(message, TEXT_TAG);
         if (text != null) {
-            LOGGER.warn("Received Logout has text (58) tag: {}", text.getValue());
+            warn("Received Logout has text (58) tag: %s", text.getValue());
             String wrongClientSequence = StringUtils.substringBetween(text.getValue(), "expecting ", " but received");
             if (wrongClientSequence != null) {
                 msgSeqNum.set(Integer.parseInt(wrongClientSequence) - 1);
@@ -1151,31 +1168,70 @@ public class FixHandler implements AutoCloseable, IHandler {
         future.get().cancel(false);
     }
 
+    // </editor-fold">
+
+    private Map<String, String> createMetadataMap() {
+        return new HashMap<>(2);
+    }
+
     private void info(String message, Object... args) {
         if(LOGGER.isInfoEnabled()) {
-            LOGGER.info("{} - {}: {}", channel.getSessionGroup(), channel.getSessionAlias(), String.format(message, args));
+            LOGGER.info(logFormat, String.format(message, args));
         }
     }
 
-    private void error(String message, Throwable throwable, Object... args) {
-        if(LOGGER.isErrorEnabled()) {
-            LOGGER.error("{} - {}: {}", channel.getSessionGroup(), channel.getSessionAlias(), String.format(message, args), throwable);
+
+
+    @SuppressWarnings("SameParameterValue")
+    private void debug(String message, Object... args) {
+        if(LOGGER.isDebugEnabled()) {
+            LOGGER.debug(logFormat, String.format(message, args));
         }
+    }
+
+    private String debugAndFormat(String message, Object... args) {
+        String result = format(message, args);
+        LOGGER.debug(result);
+        return result;
     }
 
     private void warn(String message, Object... args) {
         if(LOGGER.isWarnEnabled()) {
-            LOGGER.warn("{} - {}: {}", channel.getSessionGroup(), channel.getSessionAlias(), String.format(message, args));
+            LOGGER.warn(logFormat, String.format(message, args));
         }
     }
 
-    private void debug(String message, Object... args) {
-        if(LOGGER.isDebugEnabled()) {
-            LOGGER.debug("{} - {}: {}", channel.getSessionGroup(), channel.getSessionAlias(), String.format(message, args));
+    private String warnAndFormat(String message, Object... args) {
+        String result = format(message, args);
+        LOGGER.warn(result);
+        return result;
+    }
+
+    private void error(String message, Throwable throwable, Object... args) {
+        if(LOGGER.isErrorEnabled()) {
+            LOGGER.error(logFormat, String.format(message, args), throwable);
         }
     }
 
-    private Map<String, String> createMetadataMap() {
-        return new HashMap<>(2);
+    private String errorAndFormat(String message, Throwable throwable, Object... args) {
+        String result = format(message, args);
+        LOGGER.error(result, throwable);
+        return result;
+    }
+
+    private @NotNull String format(String message, Object... args) {
+        return reportPrefix + String.format(message, args);
+    }
+
+    private static String formatSession(@NotNull String senderCompId, @Nullable String senderSubId,
+                                        @NotNull String targetCompId, @NotNull String host, int port) {
+        StringBuilder builder = new StringBuilder(senderCompId);
+        if (senderSubId != null) {
+            builder.append('/').append(senderSubId);
+        }
+        return builder.append(" > ")
+                .append(targetCompId)
+                .append('[').append(host).append(':').append(port).append(']')
+                .toString();
     }
 }
