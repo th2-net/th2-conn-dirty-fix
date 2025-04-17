@@ -1,4 +1,4 @@
-# th2-conn-dirty-fix (1.8.0)
+# th2-conn-dirty-fix (1.8.1)
 
 This microservice allows sending and receiving messages via FIX protocol
 
@@ -322,6 +322,12 @@ spec:
 ```
 
 # Changelog
+
+## 1.8.1
+
+* Improved log messages (`SenderCompId>/SenderSubId > TargetCompId[host:port]` prefix is printed)
+* Updated:
+  * grpc-lw-data-provider: `2.4.0-dev`
 
 ## 1.8.0
 * Migrated:
