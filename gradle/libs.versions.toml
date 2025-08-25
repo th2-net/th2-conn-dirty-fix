@@ -1,6 +1,6 @@
 [versions]
 kotlin = "2.2.10"
-th2-plugin = "0.3.4"
+th2-plugin = "0.3.5"
 
 [libraries]
 th2-common = { group = "com.exactpro.th2", name = "common", version = "5.16.0-dev" }
@@ -12,7 +12,7 @@ th2-grpc-lw-data-provider = { group = "com.exactpro.th2", name = "grpc-lw-data-p
 kotlin-logging = { group = "io.github.oshai", name = "kotlin-logging", version = "7.0.13" }
 
 auto-service = { group = "com.google.auto.service", name = "auto-service", version = "1.1.1" }
-mockito-core = { group = "org.mockito", name = "mockito-core", version = "5.18.0" }
+mockito-core = { group = "org.mockito", name = "mockito-core", version = "5.19.0" }
 
 [plugins]
 th2-component = { id = "com.exactpro.th2.gradle.component", version.ref = "th2-plugin" }
