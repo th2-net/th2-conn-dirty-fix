@@ -1,4 +1,4 @@
-# th2-conn-dirty-fix (1.8.1)
+# th2-conn-dirty-fix (1.8.2)
 
 This microservice allows sending and receiving messages via FIX protocol
 
@@ -322,6 +322,19 @@ spec:
 ```
 
 # Changelog
+
+## 1.8.2
+
++ Produce multi-platform docker image
+  + migrated to [amazoncorretto:11-alpine-jdk](https://hub.docker.com/layers/library/amazoncorretto/11-alpine-jdk) docker image as base
++ Updated:
+  + th2 gradle plugin: `0.3.10` (bom: `4.14.2`)
+  + kotlin: `2.2.21`
+  + common: `5.16.1-dev`
+  + common-utils: `2.4.0-dev`
+  + grpc-lw-data-provider: `2.6.0-dev`
+  + kotlin-logging: `7.0.13`
+  + 
 
 ## 1.8.1
 
